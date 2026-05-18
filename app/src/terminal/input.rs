@@ -39,7 +39,8 @@ use crate::ai::blocklist::agent_view::{AgentViewEntryOrigin, EphemeralMessageMod
 use crate::ai::blocklist::block::cli_controller::CLISubagentController;
 use crate::ai::blocklist::block::status_bar::BlocklistAIStatusBar;
 use crate::ai::blocklist::{
-    ai_brand_color, ai_indicator_height, BlocklistAIActionModel, SlashCommandRequest,
+    ai_brand_color, ai_indicator_height, BlocklistAIActionModel, QueuedQuery, QueuedQueryOrigin,
+    SlashCommandRequest,
 };
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentVersion};
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
@@ -1720,6 +1721,9 @@ pub struct Input {
 
     buy_credits_banner: ViewHandle<BuyCreditsBanner>,
     agent_status_view: ViewHandle<BlocklistAIStatusBar>,
+    /// Optional queued-prompts panel rendered between `agent_status_view` and the input editor.
+    /// Set lazily by [`TerminalView`] after construction via [`Input::set_queued_prompts_panel`].
+    queued_prompts_panel: Option<ViewHandle<crate::ai::blocklist::QueuedPromptsPanelView>>,
     agent_view_controller: ModelHandle<AgentViewController>,
     agent_shortcut_view_model: ModelHandle<AgentShortcutViewModel>,
     ambient_agent_view_state: Option<AmbientAgentViewState>,
@@ -3617,6 +3621,7 @@ impl Input {
             weak_view_handle: ctx.handle(),
             buy_credits_banner,
             agent_status_view,
+            queued_prompts_panel: None,
             agent_view_controller,
             agent_input_footer,
             agent_shortcut_view_model,
@@ -3687,6 +3692,22 @@ impl Input {
 
     pub fn agent_status_bar(&self) -> &ViewHandle<BlocklistAIStatusBar> {
         &self.agent_status_view
+    }
+
+    /// Sets the queued-prompts panel handle so it can be rendered between the warping indicator
+    /// (`agent_status_view`) and the input editor.
+    pub fn set_queued_prompts_panel(
+        &mut self,
+        panel: ViewHandle<crate::ai::blocklist::QueuedPromptsPanelView>,
+    ) {
+        self.queued_prompts_panel = Some(panel);
+    }
+
+    /// Returns the queued-prompts panel handle, if one was set.
+    pub fn queued_prompts_panel(
+        &self,
+    ) -> Option<&ViewHandle<crate::ai::blocklist::QueuedPromptsPanelView>> {
+        self.queued_prompts_panel.as_ref()
     }
 
     pub fn agent_input_footer(&self) -> &ViewHandle<AgentInputFooter> {
@@ -13225,7 +13246,21 @@ impl Input {
         self.editor.update(ctx, |editor, ctx| {
             editor.clear_buffer(ctx);
         });
-        ctx.dispatch_typed_action(&WorkspaceAction::QueuePromptForConversation { prompt });
+
+        // Append directly to the per-conversation queued-query model (`PRODUCT.md` (5)).
+        // The auto-queue toggle origin powers telemetry; queue ordering is FIFO across origins.
+        let queued_query_model = self
+            .ai_context_model
+            .as_ref(ctx)
+            .queued_query_model()
+            .clone();
+        queued_query_model.update(ctx, |model, ctx| {
+            model.append(
+                conversation_id,
+                QueuedQuery::new(prompt, QueuedQueryOrigin::AutoQueueToggle),
+                ctx,
+            );
+        });
 
         true
     }

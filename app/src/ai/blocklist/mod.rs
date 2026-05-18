@@ -11,6 +11,8 @@ pub(crate) mod orchestration_event_streamer;
 pub(crate) mod orchestration_events;
 pub(crate) mod orchestration_topology;
 mod passive_suggestions;
+pub(crate) mod queued_prompts_panel;
+pub(crate) mod queued_query;
 pub(crate) mod task_status_sync_model;
 pub(super) use controller::RequestInput;
 pub mod history_model;
@@ -64,6 +66,11 @@ pub(crate) use passive_suggestions::{
 #[cfg_attr(target_family = "wasm", allow(unused))]
 pub(crate) use persistence::PersistedAIInputType;
 pub(crate) use persistence::{PersistedAIInput, SerializedBlockListItem};
+pub(crate) use queued_prompts_panel::{QueuedPromptsPanelEvent, QueuedPromptsPanelView};
+pub(crate) use queued_query::{
+    AutofireAction, QueuedQuery, QueuedQueryEvent, QueuedQueryId, QueuedQueryModel,
+    QueuedQueryOrigin,
+};
 pub(crate) use view_util::{
     ai_brand_color, ai_indicator_height, get_ai_block_overflow_menu_element_position_id,
     get_attached_blocks_chip_element_position_id, render_ai_agent_mode_icon,

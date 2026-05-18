@@ -62,11 +62,12 @@ fn build_test_context_model(app: &mut App) -> ModelHandle<BlocklistAIContextMode
         )
     });
 
-    app.add_model(|_| {
+    app.add_model(|ctx| {
         BlocklistAIContextModel::new_for_test(
             terminal_model,
             terminal_view_id,
             agent_view_controller,
+            ctx,
         )
     })
 }

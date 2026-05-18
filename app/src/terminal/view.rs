@@ -9,6 +9,9 @@ mod context_menu;
 pub mod init;
 pub mod inline_banner;
 pub mod load_ai_conversation;
+#[cfg(test)]
+#[path = "view/queued_prompts_test.rs"]
+mod queued_prompts_test;
 use ai::agent::action::InsertReviewComment;
 pub use load_ai_conversation::ConversationRestorationInNewPaneType;
 // TODO(advait): if we align on prompt suggestions banner in Input, move code out of inline_banner mod.
@@ -29,7 +32,6 @@ mod link_detection;
 mod open_in_warp;
 mod pane_impl;
 mod passive_suggestions;
-mod pending_user_query;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod plugin_instructions_block;
 pub mod rich_content;
@@ -118,7 +120,8 @@ use crate::ai::blocklist::block::{AIBlockAction, FinishReason};
 use crate::ai::blocklist::codebase_index_speedbump_banner::{
     CodebaseIndexSpeedbumpBannerAction, CodebaseIndexSpeedbumpBannerState, VisibilityState,
 };
-use crate::ai::blocklist::model::{AIBlockModel, AIBlockModelHelper, AIBlockOutputStatus};
+use crate::ai::blocklist::model::AIBlockOutputStatus;
+use crate::ai::blocklist::AutofireAction;
 #[cfg(feature = "local_fs")]
 use crate::ai::persisted_workspace::PersistedWorkspace;
 use crate::code_review::comments::{
@@ -2455,12 +2458,6 @@ type TerminalViewCallback = Box<dyn FnOnce(&mut TerminalView, &mut ViewContext<T
 type ConversationFinishedCallback =
     Box<dyn FnOnce(&mut TerminalView, FinishReason, &mut ViewContext<TerminalView>)>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::terminal::view) enum PendingUserQueryKind {
-    QueuedPrompt,
-    CloudMode,
-}
-
 #[derive(Debug, Clone)]
 pub struct TerminalDropTargetData {
     pub terminal_view: WeakViewHandle<TerminalView>,
@@ -2894,16 +2891,6 @@ pub struct TerminalView {
     manual_pty_shutdown_requested: bool,
 
     ephemeral_message_model: ModelHandle<EphemeralMessageModel>,
-
-    /// Tracks the view ID of an inserted pending user query block, if any.
-    /// Used to remove the block when summarization completes or is cancelled.
-    pending_user_query_view_id: Option<EntityId>,
-    pending_user_query_kind: Option<PendingUserQueryKind>,
-
-    /// Callback for the queued prompt that fires when the current conversation finishes.
-    /// Stored separately from `conversation_completed_callbacks` so that queuing a prompt
-    /// (via `/queue`, `/compact-and`, etc.) does not wipe unrelated callbacks.
-    queued_prompt_callback: Option<ConversationFinishedCallback>,
 
     /// Per-session PTY recorder for writing PTY bytes to a file.
     pty_recorder: ModelHandle<PtyRecorder>,
@@ -3389,21 +3376,6 @@ impl TerminalView {
                         );
                     }
 
-                    let active_conversation_id = me
-                        .agent_view_controller
-                        .as_ref(ctx)
-                        .agent_view_state()
-                        .active_conversation_id();
-                    let pending_user_query_conversation_id =
-                        me.pending_user_query_conversation_id();
-                    let should_keep_pending_user_query = active_conversation_id.is_some()
-                        && active_conversation_id == pending_user_query_conversation_id;
-
-                    // Keep the pending query only when the user is still viewing the conversation
-                    // targeted by that pending query; otherwise cancel it.
-                    if !should_keep_pending_user_query {
-                        me.remove_pending_user_query_block(ctx);
-                    }
                     me.maybe_run_pending_cloud_mode_start_callback(ctx);
 
                     ctx.notify();
@@ -4337,14 +4309,32 @@ impl TerminalView {
             pending_cloud_mode_start_callback: None,
             pending_cloud_mode_start_abort_handle: None,
             ephemeral_message_model,
-            pending_user_query_view_id: None,
-            pending_user_query_kind: None,
-            queued_prompt_callback: None,
             pty_recorder: ctx
                 .add_model(|ctx| PtyRecorder::new(inactive_pty_reads_rx, window_id, ctx)),
             active_viewer_driven_size: None,
         };
         terminal_view.register_subscriptions_for_use_agent_footer(ctx);
+
+        // Construct the queued prompts panel and wire it into the input view so it renders
+        // between the warping indicator and the input editor.
+        let queued_query_model = terminal_view
+            .ai_context_model
+            .as_ref(ctx)
+            .queued_query_model()
+            .clone();
+        let queued_prompts_panel = ctx.add_typed_action_view(|ctx| {
+            crate::ai::blocklist::QueuedPromptsPanelView::new(
+                queued_query_model,
+                terminal_view.ai_context_model.clone(),
+                ctx,
+            )
+        });
+        ctx.subscribe_to_view(&queued_prompts_panel, |me, _, event, ctx| {
+            me.handle_queued_prompts_panel_event(event, ctx);
+        });
+        terminal_view.input.update(ctx, |input, _| {
+            input.set_queued_prompts_panel(queued_prompts_panel)
+        });
 
         // Forward RemoteServerManager setup events into the terminal event stream
         // so the ModelEventDispatcher can gate session initialization on them.
@@ -4971,22 +4961,6 @@ impl TerminalView {
                 // Focus the block so that the user can interact
                 // with any blocking actions (if any).
                 self.focus_ai_block_if_self_focused(active_ai_block, ctx);
-
-                // A new exchange is already active, so callbacks for the
-                // just-finished exchange will be skipped. Clear any pending
-                // user query now to prevent its callback from firing when
-                // the new exchange eventually completes.
-                //
-                // However, if the active block belongs to the same conversation
-                // that has the queued prompt (e.g. a blocked tool-call approval),
-                // keep the pending query — the conversation hasn't truly moved on.
-                let active_block_conversation_id = active_ai_block.as_ref(ctx).conversation_id();
-                let pending_query_conversation_id = self.pending_user_query_conversation_id();
-                let is_same_conversation = pending_query_conversation_id
-                    .is_some_and(|id| id == active_block_conversation_id);
-                if self.pending_user_query_view_id.is_some() && !is_same_conversation {
-                    self.remove_pending_user_query_block(ctx);
-                }
             } else if !has_active_subagent() {
                 if let Some(last_ai_block) = self.last_ai_block() {
                     finish_reason = last_ai_block.as_ref(ctx).finish_reason();
@@ -4994,15 +4968,13 @@ impl TerminalView {
             }
 
             if let Some(reason) = finish_reason {
-                let queued_prompt = self.queued_prompt_callback.take();
+                self.drain_queued_prompts(*conversation_id, reason, ctx);
+
                 let callbacks = self
                     .conversation_completed_callbacks
                     .drain(..)
                     .collect_vec();
                 for callback in callbacks {
-                    callback(self, reason, ctx);
-                }
-                if let Some(callback) = queued_prompt {
                     callback(self, reason, ctx);
                 }
             }
@@ -5058,6 +5030,158 @@ impl TerminalView {
 
             self.update_input_prompt_suggestions_banner_state(ctx);
             ctx.notify();
+        }
+    }
+
+    /// Append a prompt to the per-conversation queued-query model owned by this terminal view's
+    /// `BlocklistAIContextModel`. Used by trigger surfaces (auto-queue toggle, `/queue`,
+    /// `/compact-and`, `/fork-and-compact`, Cloud Mode initial prompt) to enqueue a follow-up
+    /// prompt that fires after the current exchange completes (`PRODUCT.md` (5)–(8)).
+    pub fn enqueue_prompt(
+        &mut self,
+        prompt: String,
+        origin: crate::ai::blocklist::QueuedQueryOrigin,
+        ctx: &mut ViewContext<Self>,
+    ) -> Option<crate::ai::blocklist::QueuedQueryId> {
+        let conversation_id = self
+            .ai_context_model
+            .as_ref(ctx)
+            .selected_conversation_id(ctx)?;
+        let queued_query_model = self
+            .ai_context_model
+            .as_ref(ctx)
+            .queued_query_model()
+            .clone();
+        let id = queued_query_model.update(ctx, |model, ctx| {
+            model.append(
+                conversation_id,
+                crate::ai::blocklist::QueuedQuery::new(prompt, origin),
+                ctx,
+            )
+        });
+        Some(id)
+    }
+
+    /// Handles events emitted by `QueuedPromptsPanelView`. Implements the input-placement side
+    /// effects (`PRODUCT.md` (16) for delete-with-empty-input, (21) for cancel/Escape refocus)
+    /// that the panel itself doesn't own because the input editor lives on `Input`.
+    fn handle_queued_prompts_panel_event(
+        &mut self,
+        event: &crate::ai::blocklist::QueuedPromptsPanelEvent,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        use crate::ai::blocklist::QueuedPromptsPanelEvent;
+        match event {
+            QueuedPromptsPanelEvent::RowDeletedForInputPlacement { text } => {
+                let text = text.clone();
+                self.input.update(ctx, |input, ctx| {
+                    if input.buffer_text(ctx).is_empty() {
+                        input.replace_buffer_content(&text, ctx);
+                        input.focus_input_box(ctx);
+                    }
+                });
+            }
+            QueuedPromptsPanelEvent::EditCancelled { .. }
+            | QueuedPromptsPanelEvent::RowEdited { .. }
+            | QueuedPromptsPanelEvent::RowRemoved { .. } => {
+                self.input
+                    .update(ctx, |input, ctx| input.focus_input_box(ctx));
+            }
+            QueuedPromptsPanelEvent::RowEditEntered { .. }
+            | QueuedPromptsPanelEvent::CollapseToggled { .. }
+            | QueuedPromptsPanelEvent::RowReordered { .. } => {}
+        }
+    }
+
+    /// Removes the cloud-mode queued-query row owned by the active ambient-agent view model, if
+    /// one is currently appended. Idempotent: a no-op when no row id is recorded.
+    pub fn remove_cloud_mode_queued_query(&mut self, ctx: &mut ViewContext<Self>) {
+        let Some(ambient_agent_view_model) = self.ambient_agent_view_model.clone() else {
+            return;
+        };
+        let Some(query_id) = ambient_agent_view_model
+            .as_ref(ctx)
+            .cloud_mode_queued_query_id()
+        else {
+            return;
+        };
+        let Some(conversation_id) = self
+            .ai_context_model
+            .as_ref(ctx)
+            .selected_conversation_id(ctx)
+        else {
+            return;
+        };
+        let queued_query_model = self
+            .ai_context_model
+            .as_ref(ctx)
+            .queued_query_model()
+            .clone();
+        queued_query_model.update(ctx, |model, ctx| {
+            model.remove_by_id(conversation_id, query_id, ctx);
+        });
+        ambient_agent_view_model.update(ctx, |model, _| {
+            model.set_cloud_mode_queued_query_id(None);
+        });
+    }
+
+    /// Drains one prompt from the per-conversation queued-query model when the active conversation
+    /// finishes.
+    /// - On `Complete`: pop the first row and route via `submit_queued_prompt` (or, when the popped
+    ///   row was in edit mode, place its in-progress edit text into the input only when the input
+    ///   is empty per `PRODUCT.md` (21)).
+    /// - On `Error` / `Cancelled` / `CancelledDuringRequestedCommandExecution`: pop the first row
+    ///   and place its text in the input only if the input is empty; otherwise leave the queue
+    ///   intact (`PRODUCT.md` (35)).
+    fn drain_queued_prompts(
+        &mut self,
+        conversation_id: AIConversationId,
+        finish_reason: FinishReason,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let queued_query_model = self
+            .ai_context_model
+            .as_ref(ctx)
+            .queued_query_model()
+            .clone();
+
+        match finish_reason {
+            FinishReason::Complete => {
+                let action = queued_query_model.update(ctx, |model, ctx| {
+                    model.pop_for_autofire(conversation_id, None, ctx)
+                });
+                match action {
+                    Some(AutofireAction::Submit { text }) => {
+                        self.input.update(ctx, |input, ctx| {
+                            input.submit_queued_prompt(text, ctx);
+                        });
+                    }
+                    Some(AutofireAction::PopFromEditMode { text }) => {
+                        self.input.update(ctx, |input, ctx| {
+                            if input.buffer_text(ctx).is_empty() {
+                                input.replace_buffer_content(&text, ctx);
+                                input.focus_input_box(ctx);
+                            }
+                        });
+                    }
+                    None => {}
+                }
+            }
+            FinishReason::Error
+            | FinishReason::Cancelled
+            | FinishReason::CancelledDuringRequestedCommandExecution => {
+                let input_is_empty = self.input.as_ref(ctx).buffer_text(ctx).is_empty();
+                if !input_is_empty {
+                    return;
+                }
+                let popped = queued_query_model
+                    .update(ctx, |model, ctx| model.pop_front(conversation_id, ctx));
+                if let Some(query) = popped {
+                    self.input.update(ctx, |input, ctx| {
+                        input.replace_buffer_content(query.text(), ctx);
+                    });
+                }
+            }
         }
     }
 
@@ -5354,28 +5478,6 @@ impl TerminalView {
         }
     }
 
-    fn remove_pending_cloud_mode_query_if_exchange_has_renderable_user_query(
-        &mut self,
-        ai_block_model: &AIBlockModelImpl<AIBlock>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if self.pending_user_query_kind != Some(PendingUserQueryKind::CloudMode) {
-            return;
-        }
-
-        let initial_conversation_query = ai_block_model
-            .conversation(ctx)
-            .and_then(|conversation| conversation.initial_user_query());
-        let has_renderable_user_query = ai_block_model.inputs_to_render(ctx).iter().any(|input| {
-            input
-                .display_user_query(initial_conversation_query.as_ref())
-                .is_some()
-        });
-        if has_renderable_user_query {
-            self.remove_pending_user_query_block(ctx);
-        }
-    }
-
     fn render_owner_for_ai_history_event(
         &self,
         history_model: &BlocklistAIHistoryModel,
@@ -5512,13 +5614,13 @@ impl TerminalView {
 
                 // For an oz local-to-cloud handoff, the first `AppendedExchange` is the
                 // analogue of `HarnessCommandStarted` for non-oz harnesses: the moment we
-                // tear down the queued-prompt block in favor of the live agent UI.
+                // tear down the queued-prompt row in favor of the live agent UI.
                 if self
                     .ambient_agent_view_model
                     .as_ref()
                     .is_some_and(|model| model.as_ref(ctx).is_local_to_cloud_handoff())
                 {
-                    self.remove_pending_user_query_block(ctx);
+                    self.remove_cloud_mode_queued_query(ctx);
                 }
 
                 let should_add_ai_block = history_model
@@ -5547,10 +5649,6 @@ impl TerminalView {
                         return;
                     }
                 };
-                self.remove_pending_cloud_mode_query_if_exchange_has_renderable_user_query(
-                    &ai_block_model,
-                    ctx,
-                );
                 let ai_block = ctx.add_typed_action_view(|ctx| {
                     AIBlock::new(
                         Rc::new(ai_block_model),
@@ -5696,7 +5794,7 @@ impl TerminalView {
                 conversation_id,
                 ..
             } => {
-                let ai_block_model = match AIBlockModelImpl::<AIBlock>::new(
+                let _ai_block_model = match AIBlockModelImpl::<AIBlock>::new(
                     *exchange_id,
                     *conversation_id,
                     false,
@@ -5712,10 +5810,6 @@ impl TerminalView {
                         return;
                     }
                 };
-                self.remove_pending_cloud_mode_query_if_exchange_has_renderable_user_query(
-                    &ai_block_model,
-                    ctx,
-                );
                 self.update_context_blocks_and_exchanges(ctx);
             }
             BlocklistAIHistoryEvent::SetActiveConversation { .. } => {
@@ -13898,28 +13992,9 @@ impl TerminalView {
             .input_mode
             .value();
         let inverted = input_mode.is_inverted_blocklist();
-        let blocklist_selected_text =
-            self.model
-                .lock()
-                .selection_to_string(semantic_selection, inverted, ctx);
-        blocklist_selected_text.or_else(|| self.pending_user_query_selected_text(ctx))
-    }
-
-    /// Returns selected text from the pending user query block, if any.
-    fn pending_user_query_selected_text(&self, ctx: &AppContext) -> Option<String> {
-        let view_id = self.pending_user_query_view_id?;
-        self.rich_content_views
-            .iter()
-            .find_map(|rc| match rc.metadata() {
-                Some(RichContentMetadata::PendingUserQuery {
-                    pending_user_query_block_handle,
-                }) if pending_user_query_block_handle.id() == view_id => {
-                    pending_user_query_block_handle
-                        .as_ref(ctx)
-                        .selected_text(ctx)
-                }
-                _ => None,
-            })
+        self.model
+            .lock()
+            .selection_to_string(semantic_selection, inverted, ctx)
     }
 
     /// Gets the selected text from the terminal input editor, if any.
@@ -15825,12 +15900,6 @@ impl TerminalView {
             }
         }
 
-        if let Some(selected_text) = self.pending_user_query_selected_text(ctx) {
-            ctx.clipboard()
-                .write(ClipboardContent::plain_text(selected_text));
-            return;
-        }
-
         let semantic_selection = SemanticSelection::as_ref(ctx);
         if let Some(selected) = self.model.lock().selection_to_string(
             semantic_selection,
@@ -17575,9 +17644,8 @@ impl TerminalView {
         let selection_settings = SelectionSettings::handle(ctx);
         let semantic_selection = SemanticSelection::as_ref(ctx);
         let model = self.model.lock();
-        let selected_text = model
-            .selection_to_string(semantic_selection, self.is_inverted_blocklist(ctx), ctx)
-            .or_else(|| self.pending_user_query_selected_text(ctx));
+        let selected_text =
+            model.selection_to_string(semantic_selection, self.is_inverted_blocklist(ctx), ctx);
         if let Some(selected) = selected_text {
             selection_settings.update(ctx, |selection_settings, ctx| {
                 selection_settings
@@ -19283,18 +19351,6 @@ impl TerminalView {
                         env_var_collection_block.clear_selection(ctx);
                     });
                 }
-                Some(RichContentMetadata::PendingUserQuery {
-                    pending_user_query_block_handle,
-                }) => {
-                    if exempt_rich_content_view_id
-                        .is_some_and(|view_id| pending_user_query_block_handle.id() == view_id)
-                    {
-                        continue;
-                    }
-                    pending_user_query_block_handle.update(ctx, |block, ctx| {
-                        block.clear_selection(ctx);
-                    });
-                }
                 Some(RichContentMetadata::WarpifySuccessBlock { .. }) => {
                     // TODO(Simon): We should be checking for WarpifySuccessBlocks here as well.
                     // The `WarpifySuccessBlock` implements a `SelectableArea`.
@@ -19787,13 +19843,12 @@ impl TerminalView {
     }
 
     fn active_ai_block(&self, ctx: &AppContext) -> Option<&ViewHandle<AIBlock>> {
-        // Skip trailing non-AI items (usage footers, pending user query blocks)
-        // as they don't impact the conversation state.
+        // Skip trailing non-AI items (usage footers) as they don't impact the conversation state.
         let candidate = self
             .rich_content_views
             .iter()
             .rev()
-            .find(|rc| !rc.is_usage_footer() && !rc.is_pending_user_query());
+            .find(|rc| !rc.is_usage_footer());
 
         candidate.and_then(|rich_content| {
             let ai_metadata = rich_content.ai_block_metadata()?;
@@ -20230,9 +20285,8 @@ impl TerminalView {
             send_telemetry_from_ctx!(TelemetryEvent::ContextMenuCopySelectedText, ctx);
             let semantic_selection = SemanticSelection::as_ref(ctx);
             let model = self.model.lock();
-            let selected_text = model
-                .selection_to_string(semantic_selection, self.is_inverted_blocklist(ctx), ctx)
-                .or_else(|| self.pending_user_query_selected_text(ctx));
+            let selected_text =
+                model.selection_to_string(semantic_selection, self.is_inverted_blocklist(ctx), ctx);
             if let Some(selected_text) = selected_text {
                 ctx.clipboard()
                     .write(ClipboardContent::plain_text(selected_text));
@@ -21845,7 +21899,7 @@ impl TerminalView {
         self.rich_content_views
             .iter()
             .rev()
-            .find(|rc| !rc.is_usage_footer() && !rc.is_pending_user_query())
+            .find(|rc| !rc.is_usage_footer())
             .and_then(|rich_content| rich_content.ai_block_metadata())
             .map(|ai_metadata| ai_metadata.ai_block_handle.clone())
     }

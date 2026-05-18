@@ -1067,8 +1067,20 @@ impl Input {
                     .is_some_and(|c| c.status().is_in_progress() || c.status().is_blocked());
 
                 if is_in_progress {
-                    ctx.dispatch_typed_action(&WorkspaceAction::QueuePromptForConversation {
-                        prompt,
+                    let queued_query_model = self
+                        .ai_context_model
+                        .as_ref(ctx)
+                        .queued_query_model()
+                        .clone();
+                    queued_query_model.update(ctx, |model, ctx| {
+                        model.append(
+                            conversation_id,
+                            crate::ai::blocklist::QueuedQuery::new(
+                                prompt,
+                                crate::ai::blocklist::QueuedQueryOrigin::QueueSlashCommand,
+                            ),
+                            ctx,
+                        );
                     });
                 } else {
                     self.submit_queued_prompt(prompt, ctx);

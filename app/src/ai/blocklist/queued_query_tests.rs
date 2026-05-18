@@ -1,0 +1,439 @@
+//! Unit tests for [`super::QueuedQueryModel`].
+//!
+//! Covers `PRODUCT.md` invariants (5)–(11) (FIFO ordering, append from each origin),
+//! (16)–(20) (edit semantics), (22)–(25) (per-conversation isolation, clear), and (26)–(30)
+//! (reorder semantics, Cloud Mode immutability).
+use super::{
+    AutofireAction, QueuedQuery, QueuedQueryEvent, QueuedQueryId, QueuedQueryModel,
+    QueuedQueryOrigin,
+};
+use crate::ai::agent::conversation::AIConversationId;
+use std::cell::RefCell;
+use std::rc::Rc;
+use warpui::App;
+
+/// Helper to drive a `QueuedQueryModel` inside a test app and capture emitted events.
+fn with_model<F>(test: F)
+where
+    F: FnOnce(App, warpui::ModelHandle<QueuedQueryModel>, Rc<RefCell<Vec<QueuedQueryEvent>>>)
+        + 'static,
+{
+    App::test((), |mut app| async move {
+        let model = app.add_model(|_| QueuedQueryModel::new());
+        let events: Rc<RefCell<Vec<QueuedQueryEvent>>> = Rc::new(RefCell::new(Vec::new()));
+        let events_clone = events.clone();
+        app.update(|ctx| {
+            ctx.subscribe_to_model(&model, move |_, event: &QueuedQueryEvent, _| {
+                events_clone.borrow_mut().push(event.clone());
+            });
+        });
+        test(app, model, events);
+    });
+}
+
+fn user_query(text: &str) -> QueuedQuery {
+    QueuedQuery::new(text.to_owned(), QueuedQueryOrigin::QueueSlashCommand)
+}
+
+fn cloud_query(text: &str) -> QueuedQuery {
+    QueuedQuery::new(text.to_owned(), QueuedQueryOrigin::InitialCloudMode)
+}
+
+fn append_user(
+    model: &warpui::ModelHandle<QueuedQueryModel>,
+    app: &mut App,
+    conversation_id: AIConversationId,
+    text: &str,
+) -> QueuedQueryId {
+    model.update(app, |model, ctx| {
+        model.append(conversation_id, user_query(text), ctx)
+    })
+}
+
+#[test]
+fn append_preserves_fifo_order_within_a_conversation() {
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "first");
+        let id_b = append_user(&model, &mut app, conv, "second");
+        let id_c = append_user(&model, &mut app, conv, "third");
+
+        model.read(&app, |model, _| {
+            let queue = model.queue_for(conv);
+            assert_eq!(queue.len(), 3);
+            assert_eq!(queue[0].id(), id_a);
+            assert_eq!(queue[0].text(), "first");
+            assert_eq!(queue[1].id(), id_b);
+            assert_eq!(queue[1].text(), "second");
+            assert_eq!(queue[2].id(), id_c);
+            assert_eq!(queue[2].text(), "third");
+            assert_eq!(model.first_text(conv), Some("first"));
+        });
+    });
+}
+
+#[test]
+fn append_from_each_user_origin_lands_in_the_queue() {
+    // Validates `PRODUCT.md` (5)–(8): /queue, auto-queue toggle, /compact-and, /fork-and-compact.
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let origins = [
+            QueuedQueryOrigin::QueueSlashCommand,
+            QueuedQueryOrigin::AutoQueueToggle,
+            QueuedQueryOrigin::CompactAnd,
+            QueuedQueryOrigin::ForkAndCompact,
+        ];
+        for (i, origin) in origins.iter().enumerate() {
+            let text = format!("p{i}");
+            model.update(&mut app, |m, ctx| {
+                m.append(conv, QueuedQuery::new(text, *origin), ctx)
+            });
+        }
+        model.read(&app, |model, _| {
+            let queue = model.queue_for(conv);
+            assert_eq!(queue.len(), 4);
+            for (i, origin) in origins.iter().enumerate() {
+                assert_eq!(queue[i].origin(), *origin);
+            }
+        });
+    });
+}
+
+#[test]
+fn pop_front_removes_head_and_emits_removed() {
+    with_model(|mut app, model, events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "first");
+        let _id_b = append_user(&model, &mut app, conv, "second");
+        events.borrow_mut().clear();
+
+        let popped = model.update(&mut app, |m, ctx| m.pop_front(conv, ctx));
+        let popped = popped.expect("queue had a head");
+        assert_eq!(popped.id(), id_a);
+        assert_eq!(popped.text(), "first");
+
+        model.read(&app, |model, _| {
+            assert_eq!(model.queue_for(conv).len(), 1);
+        });
+
+        let evts = events.borrow();
+        assert!(matches!(
+            evts.as_slice(),
+            [QueuedQueryEvent::Removed { query_id, .. }] if *query_id == id_a
+        ));
+    });
+}
+
+#[test]
+fn pop_for_autofire_skips_cloud_mode_head() {
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        // Cloud Mode row at head; user-managed row behind it.
+        model.update(&mut app, |m, ctx| {
+            m.append(conv, cloud_query("cloud"), ctx);
+            m.append(conv, user_query("user"), ctx);
+        });
+
+        let action = model.update(&mut app, |m, ctx| m.pop_for_autofire(conv, None, ctx));
+        assert!(action.is_none(), "Cloud Mode head must not auto-fire");
+
+        // The Cloud Mode row is still present; the queue is untouched.
+        model.read(&app, |model, _| {
+            let queue = model.queue_for(conv);
+            assert_eq!(queue.len(), 2);
+            assert_eq!(queue[0].origin(), QueuedQueryOrigin::InitialCloudMode);
+        });
+    });
+}
+
+#[test]
+fn pop_for_autofire_returns_submit_for_user_managed_head() {
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        append_user(&model, &mut app, conv, "first");
+        append_user(&model, &mut app, conv, "second");
+
+        let action = model.update(&mut app, |m, ctx| m.pop_for_autofire(conv, None, ctx));
+        match action {
+            Some(AutofireAction::Submit { text }) => assert_eq!(text, "first"),
+            other => panic!("expected Submit, got {other:?}"),
+        }
+
+        model.read(&app, |model, _| {
+            assert_eq!(model.queue_for(conv).len(), 1);
+        });
+    });
+}
+
+#[test]
+fn pop_for_autofire_uses_edit_text_override_when_first_row_is_in_edit_mode() {
+    // Validates `PRODUCT.md` (21).
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "first");
+        append_user(&model, &mut app, conv, "second");
+        model.update(&mut app, |m, ctx| m.enter_edit_mode(conv, id_a, ctx));
+
+        let action = model.update(&mut app, |m, ctx| {
+            m.pop_for_autofire(conv, Some("edited".to_owned()), ctx)
+        });
+        match action {
+            Some(AutofireAction::PopFromEditMode { text }) => assert_eq!(text, "edited"),
+            other => panic!("expected PopFromEditMode, got {other:?}"),
+        }
+        // Edit mode is cleared after pop.
+        model.read(&app, |model, _| {
+            assert_eq!(model.editing_row(conv), None);
+        });
+    });
+}
+
+#[test]
+fn enter_edit_mode_locks_to_one_row_at_a_time() {
+    // Validates `PRODUCT.md` (18), (20).
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "first");
+        let id_b = append_user(&model, &mut app, conv, "second");
+
+        model.update(&mut app, |m, ctx| m.enter_edit_mode(conv, id_a, ctx));
+        model.read(&app, |m, _| assert_eq!(m.editing_row(conv), Some(id_a)));
+
+        // Entering edit mode on a different row replaces the prior edit.
+        model.update(&mut app, |m, ctx| m.enter_edit_mode(conv, id_b, ctx));
+        model.read(&app, |m, _| assert_eq!(m.editing_row(conv), Some(id_b)));
+    });
+}
+
+#[test]
+fn commit_edit_with_text_replaces_row_and_clears_edit_state() {
+    // Validates `PRODUCT.md` (16).
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "first");
+        model.update(&mut app, |m, ctx| m.enter_edit_mode(conv, id_a, ctx));
+
+        model.update(&mut app, |m, ctx| {
+            m.commit_edit("first updated".to_owned(), ctx)
+        });
+
+        model.read(&app, |m, _| {
+            let queue = m.queue_for(conv);
+            assert_eq!(queue.len(), 1);
+            assert_eq!(queue[0].id(), id_a);
+            assert_eq!(queue[0].text(), "first updated");
+            assert_eq!(m.editing_row(conv), None);
+        });
+    });
+}
+
+#[test]
+fn commit_edit_with_empty_text_removes_the_row() {
+    // Validates `PRODUCT.md` (17).
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "first");
+        let _id_b = append_user(&model, &mut app, conv, "second");
+        model.update(&mut app, |m, ctx| m.enter_edit_mode(conv, id_a, ctx));
+
+        model.update(&mut app, |m, ctx| m.commit_edit(String::new(), ctx));
+
+        model.read(&app, |m, _| {
+            let queue = m.queue_for(conv);
+            assert_eq!(queue.len(), 1);
+            assert_eq!(queue[0].text(), "second");
+            assert_eq!(m.editing_row(conv), None);
+        });
+    });
+}
+
+#[test]
+fn cancel_edit_leaves_row_unchanged_and_clears_edit_state() {
+    // Validates `PRODUCT.md` (18).
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "first");
+        model.update(&mut app, |m, ctx| m.enter_edit_mode(conv, id_a, ctx));
+
+        model.update(&mut app, |m, ctx| m.cancel_edit(ctx));
+
+        model.read(&app, |m, _| {
+            let queue = m.queue_for(conv);
+            assert_eq!(queue.len(), 1);
+            assert_eq!(queue[0].text(), "first");
+            assert_eq!(m.editing_row(conv), None);
+        });
+    });
+}
+
+#[test]
+fn remove_by_id_removes_only_the_targeted_row() {
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "first");
+        let _id_b = append_user(&model, &mut app, conv, "second");
+        let _id_c = append_user(&model, &mut app, conv, "third");
+
+        let removed = model.update(&mut app, |m, ctx| m.remove_by_id(conv, id_a, ctx));
+        assert_eq!(removed.map(|r| r.into_text()), Some("first".to_owned()));
+        model.read(&app, |m, _| {
+            let queue = m.queue_for(conv);
+            assert_eq!(queue.len(), 2);
+            assert_eq!(queue[0].text(), "second");
+            assert_eq!(queue[1].text(), "third");
+        });
+    });
+}
+
+#[test]
+fn reorder_moves_user_managed_rows_to_target_index() {
+    // Validates `PRODUCT.md` (26)–(28).
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "a");
+        let id_b = append_user(&model, &mut app, conv, "b");
+        let id_c = append_user(&model, &mut app, conv, "c");
+
+        // Move a (index 0) to the end (post-removal index 2).
+        model.update(&mut app, |m, ctx| m.reorder(conv, id_a, 2, ctx));
+
+        model.read(&app, |m, _| {
+            let queue = m.queue_for(conv);
+            assert_eq!(queue[0].id(), id_b);
+            assert_eq!(queue[1].id(), id_c);
+            assert_eq!(queue[2].id(), id_a);
+        });
+    });
+}
+
+#[test]
+fn reorder_clamps_target_index_to_queue_len() {
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv, "a");
+        let id_b = append_user(&model, &mut app, conv, "b");
+
+        // Target index >= len after removal should clamp to the end.
+        model.update(&mut app, |m, ctx| m.reorder(conv, id_a, 99, ctx));
+        model.read(&app, |m, _| {
+            let queue = m.queue_for(conv);
+            assert_eq!(queue[0].id(), id_b);
+            assert_eq!(queue[1].id(), id_a);
+        });
+    });
+}
+
+#[test]
+fn cloud_mode_rows_reject_reorder_and_replace_text() {
+    // Validates `PRODUCT.md` (30): the harness owns Cloud Mode row state.
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let cloud_id = model.update(&mut app, |m, ctx| m.append(conv, cloud_query("cloud"), ctx));
+        let user_id = append_user(&model, &mut app, conv, "user");
+
+        // reorder is a no-op when the source is a Cloud Mode row.
+        model.update(&mut app, |m, ctx| m.reorder(conv, cloud_id, 1, ctx));
+        model.read(&app, |m, _| {
+            let queue = m.queue_for(conv);
+            assert_eq!(queue[0].id(), cloud_id);
+            assert_eq!(queue[1].id(), user_id);
+        });
+
+        // replace_text_by_id is a no-op for Cloud Mode rows.
+        model.update(&mut app, |m, ctx| {
+            m.replace_text_by_id(conv, cloud_id, "tampered".to_owned(), ctx);
+        });
+        model.read(&app, |m, _| {
+            assert_eq!(m.queue_for(conv)[0].text(), "cloud");
+        });
+    });
+}
+
+#[test]
+fn cloud_mode_rows_reject_enter_edit_mode() {
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let cloud_id = model.update(&mut app, |m, ctx| m.append(conv, cloud_query("cloud"), ctx));
+        model.update(&mut app, |m, ctx| m.enter_edit_mode(conv, cloud_id, ctx));
+        model.read(&app, |m, _| assert_eq!(m.editing_row(conv), None));
+    });
+}
+
+#[test]
+fn queues_are_per_conversation_isolated() {
+    // Validates `PRODUCT.md` (22)–(24).
+    with_model(|mut app, model, _events| {
+        let conv_a = AIConversationId::new();
+        let conv_b = AIConversationId::new();
+        append_user(&model, &mut app, conv_a, "a1");
+        append_user(&model, &mut app, conv_a, "a2");
+        append_user(&model, &mut app, conv_b, "b1");
+
+        model.read(&app, |m, _| {
+            assert_eq!(m.queue_for(conv_a).len(), 2);
+            assert_eq!(m.queue_for(conv_b).len(), 1);
+            assert!(m.has_queue(conv_a));
+            assert!(m.has_queue(conv_b));
+        });
+    });
+}
+
+#[test]
+fn clear_for_conversation_clears_queue_edit_and_collapse_state() {
+    // Validates `PRODUCT.md` (25), (39)–(40).
+    with_model(|mut app, model, _events| {
+        let conv_a = AIConversationId::new();
+        let conv_b = AIConversationId::new();
+        let id_a = append_user(&model, &mut app, conv_a, "a1");
+        append_user(&model, &mut app, conv_b, "b1");
+        model.update(&mut app, |m, ctx| {
+            m.enter_edit_mode(conv_a, id_a, ctx);
+            m.set_collapsed(conv_a, true, ctx);
+        });
+
+        model.update(&mut app, |m, ctx| m.clear_for_conversation(conv_a, ctx));
+
+        model.read(&app, |m, _| {
+            assert!(!m.has_queue(conv_a));
+            assert_eq!(m.editing_row(conv_a), None);
+            assert!(!m.is_collapsed(conv_a));
+            // Other conversations are untouched.
+            assert_eq!(m.queue_for(conv_b).len(), 1);
+        });
+    });
+}
+
+#[test]
+fn clear_all_wipes_every_conversation() {
+    // Validates `PRODUCT.md` (38) — agent-view exit clears all queues.
+    with_model(|mut app, model, _events| {
+        let conv_a = AIConversationId::new();
+        let conv_b = AIConversationId::new();
+        append_user(&model, &mut app, conv_a, "a1");
+        append_user(&model, &mut app, conv_b, "b1");
+        model.update(&mut app, |m, ctx| m.set_collapsed(conv_a, true, ctx));
+
+        model.update(&mut app, |m, ctx| m.clear_all(ctx));
+
+        model.read(&app, |m, _| {
+            assert!(!m.has_queue(conv_a));
+            assert!(!m.has_queue(conv_b));
+            assert!(!m.is_collapsed(conv_a));
+        });
+    });
+}
+
+#[test]
+fn collapse_state_is_per_conversation() {
+    with_model(|mut app, model, _events| {
+        let conv_a = AIConversationId::new();
+        let conv_b = AIConversationId::new();
+        model.update(&mut app, |m, ctx| {
+            m.set_collapsed(conv_a, true, ctx);
+        });
+        model.read(&app, |m, _| {
+            assert!(m.is_collapsed(conv_a));
+            assert!(!m.is_collapsed(conv_b));
+        });
+    });
+}
