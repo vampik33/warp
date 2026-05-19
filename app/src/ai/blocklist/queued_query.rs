@@ -86,7 +86,7 @@ pub enum AutofireAction {
     Submit { text: String },
     /// The popped row was in edit mode at the time of pop.
     /// The caller should place `text` in the input box only if the input is empty;
-    /// otherwise discard, per `PRODUCT.md` (21).
+    /// otherwise discard it.
     PopFromEditMode { text: String },
 }
 
@@ -218,11 +218,13 @@ impl QueuedQueryModel {
         conversation_id: AIConversationId,
         ctx: &mut ModelContext<Self>,
     ) -> Option<QueuedQuery> {
-        let queue = self.queues.get_mut(&conversation_id)?;
-        if queue.is_empty() {
-            return None;
-        }
-        let popped = queue.remove(0);
+        let popped = {
+            let queue = self.queues.get_mut(&conversation_id)?;
+            if queue.is_empty() {
+                return None;
+            }
+            queue.remove(0)
+        };
         // Clear edit mode if the popped row was the one being edited.
         if self
             .editing
@@ -231,11 +233,24 @@ impl QueuedQueryModel {
         {
             self.editing = None;
         }
+        self.clear_empty_queue_state(conversation_id);
         ctx.emit(QueuedQueryEvent::Removed {
             conversation_id,
             query_id: popped.id,
         });
         Some(popped)
+    }
+    /// Pops the first row only when the row is user-managed.
+    pub fn pop_front_user_managed(
+        &mut self,
+        conversation_id: AIConversationId,
+        ctx: &mut ModelContext<Self>,
+    ) -> Option<QueuedQuery> {
+        let first = self.queues.get(&conversation_id)?.first()?;
+        if !first.origin.is_user_managed() {
+            return None;
+        }
+        self.pop_front(conversation_id, ctx)
     }
 
     /// Auto-fire drain entry point.
@@ -251,18 +266,20 @@ impl QueuedQueryModel {
         edit_text_override: Option<String>,
         ctx: &mut ModelContext<Self>,
     ) -> Option<AutofireAction> {
-        let queue = self.queues.get_mut(&conversation_id)?;
-        let first = queue.first()?;
-        if !first.origin.is_user_managed() {
-            return None;
-        }
+        let (mut popped, first_in_edit_mode) = {
+            let queue = self.queues.get_mut(&conversation_id)?;
+            let first = queue.first()?;
+            if !first.origin.is_user_managed() {
+                return None;
+            }
 
-        let first_in_edit_mode = self
-            .editing
-            .as_ref()
-            .is_some_and(|e| e.conversation_id == conversation_id && e.query_id == first.id);
+            let first_in_edit_mode = self
+                .editing
+                .as_ref()
+                .is_some_and(|e| e.conversation_id == conversation_id && e.query_id == first.id);
 
-        let mut popped = queue.remove(0);
+            (queue.remove(0), first_in_edit_mode)
+        };
         if first_in_edit_mode {
             if let Some(text) = edit_text_override {
                 popped.text = text;
@@ -271,6 +288,7 @@ impl QueuedQueryModel {
         }
         let removed_id = popped.id;
         let text = popped.text;
+        self.clear_empty_queue_state(conversation_id);
         ctx.emit(QueuedQueryEvent::Removed {
             conversation_id,
             query_id: removed_id,
@@ -290,9 +308,11 @@ impl QueuedQueryModel {
         query_id: QueuedQueryId,
         ctx: &mut ModelContext<Self>,
     ) -> Option<QueuedQuery> {
-        let queue = self.queues.get_mut(&conversation_id)?;
-        let idx = queue.iter().position(|q| q.id == query_id)?;
-        let removed = queue.remove(idx);
+        let removed = {
+            let queue = self.queues.get_mut(&conversation_id)?;
+            let idx = queue.iter().position(|q| q.id == query_id)?;
+            queue.remove(idx)
+        };
         if self
             .editing
             .as_ref()
@@ -300,6 +320,7 @@ impl QueuedQueryModel {
         {
             self.editing = None;
         }
+        self.clear_empty_queue_state(conversation_id);
         ctx.emit(QueuedQueryEvent::Removed {
             conversation_id,
             query_id,
@@ -355,7 +376,11 @@ impl QueuedQueryModel {
             return;
         }
         let row = queue.remove(source_idx);
-        let clamped = target_index.min(queue.len());
+        let first_user_managed_index = queue
+            .iter()
+            .take_while(|row| !row.origin.is_user_managed())
+            .count();
+        let clamped = target_index.max(first_user_managed_index).min(queue.len());
         queue.insert(clamped, row);
         ctx.emit(QueuedQueryEvent::Reordered { conversation_id });
     }
@@ -399,8 +424,7 @@ impl QueuedQueryModel {
     }
 
     /// Commits the in-progress edit by replacing the row's text with `new_text` and clearing
-    /// edit state. If `new_text` is empty, the row is removed instead, mirroring `PRODUCT.md`
-    /// (17).
+    /// edit state. If `new_text` is empty, the edit is cancelled and the original row text stays.
     pub fn commit_edit(&mut self, new_text: String, ctx: &mut ModelContext<Self>) {
         let Some(EditingRow {
             conversation_id,
@@ -411,7 +435,10 @@ impl QueuedQueryModel {
         };
 
         if new_text.is_empty() {
-            self.remove_by_id(conversation_id, query_id, ctx);
+            ctx.emit(QueuedQueryEvent::EditCancelled {
+                conversation_id,
+                query_id,
+            });
             return;
         }
 
@@ -488,6 +515,17 @@ impl QueuedQueryModel {
         // `clear_for_conversation` already handles editing for known queues; clear any stragglers.
         self.editing = None;
         self.collapsed.clear();
+    }
+
+    fn clear_empty_queue_state(&mut self, conversation_id: AIConversationId) {
+        if self
+            .queues
+            .get(&conversation_id)
+            .is_some_and(|queue| queue.is_empty())
+        {
+            self.queues.remove(&conversation_id);
+            self.collapsed.remove(&conversation_id);
+        }
     }
 }
 

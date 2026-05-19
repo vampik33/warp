@@ -16,6 +16,7 @@ use warpui::elements::{
 };
 use warpui::fonts::{Properties, Style, Weight};
 use warpui::platform::Cursor;
+use warpui::text_layout::ClipConfig;
 use warpui::{
     AppContext, BlurContext, Element, Entity, EntityId, EventContext, FocusContext, ModelHandle,
     SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
@@ -33,22 +34,6 @@ use crate::send_telemetry_from_ctx;
 use crate::server::telemetry::TelemetryEvent;
 use crate::ui_components::icons::Icon;
 
-/// Horizontal padding applied to the header banner.
-const HEADER_HORIZONTAL_PADDING: f32 = 16.;
-/// Vertical padding applied to the header banner.
-const HEADER_VERTICAL_PADDING: f32 = 8.;
-/// Horizontal padding applied around the body row container.
-const BODY_HORIZONTAL_PADDING: f32 = 4.;
-/// Vertical padding applied above and below the body row container.
-const BODY_VERTICAL_PADDING: f32 = 8.;
-/// Horizontal padding applied inside each row.
-const ROW_HORIZONTAL_PADDING: f32 = 8.;
-/// Vertical padding applied above and below each row's contents.
-const ROW_VERTICAL_PADDING: f32 = 4.;
-/// Minimum height of each row.
-const ROW_MIN_HEIGHT: f32 = 32.;
-/// Padding applied around hover-revealed action buttons.
-const ACTION_BUTTON_PADDING: f32 = 2.;
 /// Icon size used for the chevron in the header and for row action icons.
 const ICON_SIZE: f32 = 16.;
 /// Size of the drag-handle icon wrapper rendered on the left of each row.
@@ -84,8 +69,7 @@ pub struct QueuedPromptsPanelView {
     row_draggable_states: HashMap<QueuedQueryId, DraggableState>,
     /// The id of the row currently being dragged, if any.
     dragging_query_id: Option<QueuedQueryId>,
-    /// The from_index where the current drag started, captured at `StartDrag` so we can emit
-    /// telemetry/events with the right "original" index even after live swaps.
+    /// The index where the current drag started, used for telemetry after live swaps.
     drag_start_index: Option<usize>,
 }
 
@@ -101,8 +85,7 @@ pub enum QueuedPromptsPanelAction {
     /// Cancels any in-progress edit on that row.
     StartDrag(QueuedQueryId),
     /// Fired as the dragged row moves; carries the dragged row's bounding rect so the handler
-    /// can compare its midpoint against neighbor rows and live-swap rows in the queue (mirroring
-    /// `app/src/workspace/view/vertical_tabs.rs`'s tab-drag pattern).
+    /// can compare its midpoint against neighbor rows and live-swap rows in the queue.
     DragMoved {
         rect: RectF,
     },
@@ -113,7 +96,7 @@ pub enum QueuedPromptsPanelAction {
 /// Events emitted to the parent view ([`TerminalView`]).
 #[derive(Clone, Debug)]
 pub enum QueuedPromptsPanelEvent {
-    /// A row was removed (delete or commit-empty).
+    /// A row was removed.
     RowRemoved {
         query_id: QueuedQueryId,
         was_via_edit_commit: bool,
@@ -127,7 +110,7 @@ pub enum QueuedPromptsPanelEvent {
     /// A row entered edit mode.
     RowEditEntered { query_id: QueuedQueryId },
     /// The user requested to delete a row whose text should be placed in the input
-    /// editor when the editor is empty (`PRODUCT.md` (16)).
+    /// editor when the editor is empty.
     /// The host owns the input editor so it performs the placement.
     RowDeletedForInputPlacement { text: String },
     /// A row was reordered via drag-and-drop.
@@ -247,9 +230,7 @@ impl QueuedPromptsPanelView {
         match event {
             EditorEvent::Enter => self.commit_edit(ctx),
             EditorEvent::Escape => self.cancel_edit(ctx),
-            // `PRODUCT.md` (18): clicking outside the inline editor commits the edit. The editor
-            // emits `Blurred` whenever it loses focus (any click landing outside the editor view
-            // triggers a focus change away from it).
+            // Losing focus commits the edit.
             EditorEvent::Blurred => self.commit_edit(ctx),
             _ => {}
         }
@@ -344,14 +325,7 @@ impl QueuedPromptsPanelView {
             model.commit_edit(new_text, ctx);
         });
         if let Some(origin) = origin {
-            if was_empty {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::QueuedPromptDeleted {
-                        origin: origin.into(),
-                    },
-                    ctx
-                );
-            } else {
+            if !was_empty {
                 send_telemetry_from_ctx!(
                     TelemetryEvent::QueuedPromptEdited {
                         origin: origin.into(),
@@ -361,10 +335,7 @@ impl QueuedPromptsPanelView {
             }
         }
         if was_empty {
-            ctx.emit(QueuedPromptsPanelEvent::RowRemoved {
-                query_id,
-                was_via_edit_commit: true,
-            });
+            ctx.emit(QueuedPromptsPanelEvent::EditCancelled { query_id });
         } else {
             ctx.emit(QueuedPromptsPanelEvent::RowEdited { query_id });
         }
@@ -381,8 +352,7 @@ impl QueuedPromptsPanelView {
     }
 
     fn start_drag(&mut self, query_id: QueuedQueryId, ctx: &mut ViewContext<Self>) {
-        // If the row is in edit mode, cancel that edit so dragging is unambiguous
-        // (`PRODUCT.md` (19)).
+        // If the row is in edit mode, cancel that edit so dragging is unambiguous.
         let Some(conversation_id) = self.selected_conversation_id(ctx) else {
             return;
         };
@@ -406,9 +376,8 @@ impl QueuedPromptsPanelView {
         ctx.notify();
     }
 
-    /// Mirrors `Workspace::on_tab_drag` (`app/src/workspace/view.rs`): on every `on_drag` tick,
-    /// compare the dragged row's midpoint against neighbor row midpoints and swap with the
-    /// neighbor when the threshold is crossed. This produces live, single-step reordering as the
+    /// On every `on_drag` tick, compare the dragged row's midpoint against neighbor row midpoints
+    /// and swap with the neighbor when the threshold is crossed. This produces live, single-step reordering as the
     /// user drags so the queue visibly reflows under the cursor.
     fn drag_moved(&mut self, rect: RectF, ctx: &mut ViewContext<Self>) {
         let Some(source_id) = self.dragging_query_id else {
@@ -479,7 +448,7 @@ impl QueuedPromptsPanelView {
         ctx.notify();
     }
 
-    /// Visibility predicate used by the host to decide whether to render the panel at all.
+    /// Visibility predicate used by the host to decide whether to render the panel.
     pub fn should_render(&self, ctx: &AppContext) -> bool {
         if !FeatureFlag::QueueSlashCommand.is_enabled()
             || !FeatureFlag::PendingUserQueryIndicator.is_enabled()
@@ -523,10 +492,7 @@ impl View for QueuedPromptsPanelView {
         }
     }
 
-    /// `PRODUCT.md` (18): commit any in-progress edit when focus leaves the panel entirely
-    /// (user clicked outside the panel/editor). This is a safety-net in addition to the
-    /// `EditorEvent::Blurred` handler so the edit commits even if the editor view's blur signal
-    /// doesn't propagate up before the parent loses focus.
+    /// Commits an in-progress edit when focus leaves the panel.
     fn on_blur(&mut self, blur_ctx: &BlurContext, ctx: &mut ViewContext<Self>) {
         if blur_ctx.is_self_blurred() && self.editing_row_id(ctx).is_some() {
             self.commit_edit(ctx);
@@ -549,8 +515,6 @@ impl View for QueuedPromptsPanelView {
 
         let panel_view_id = self.view_id;
         let header = render_header(queue.len(), collapsed, &self.header_mouse_state, appearance);
-        // Stretch makes the header banner and body span the full available width, matching the
-        // Figma `suggestionBanner` (node 6736:27435) which uses `w-full`.
         let mut panel = Flex::column()
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
             .with_child(header);
@@ -601,8 +565,8 @@ impl View for QueuedPromptsPanelView {
 
             panel.add_child(
                 Container::new(body.finish())
-                    .with_horizontal_padding(BODY_HORIZONTAL_PADDING)
-                    .with_vertical_padding(BODY_VERTICAL_PADDING)
+                    .with_horizontal_padding(4.)
+                    .with_vertical_padding(8.)
                     .finish(),
             );
         }
@@ -612,16 +576,7 @@ impl View for QueuedPromptsPanelView {
 }
 
 fn build_edit_editor(ctx: &mut ViewContext<QueuedPromptsPanelView>) -> ViewHandle<EditorView> {
-    // Use the same single-line editor builder that the workspace tab-rename UI uses
-    // (`Workspace::tab_rename_editor` in `app/src/workspace/view.rs`). It produces a non-autogrow,
-    // single-line editor whose size matches the surrounding UI text so the row stays the same
-    // height when entering edit mode and the editor's text stays center-aligned with the drag
-    // handle.
-    //
-    // `add_typed_action_view` (rather than `add_view`) registers the editor as a child of the
-    // panel view. That parent linkage is what lets focus events bubble correctly: when the user
-    // clicks outside the panel, the editor's `Event::Blurred` propagates up so our subscriber
-    // can commit the in-progress edit (`PRODUCT.md` (18)).
+    // Register the editor as a child so focus events bubble through the panel.
     let appearance = Appearance::as_ref(ctx);
     let text_options = TextOptions::ui_text(Some(appearance.ui_font_size()), appearance);
     ctx.add_typed_action_view(|ctx| {
@@ -637,10 +592,7 @@ fn build_edit_editor(ctx: &mut ViewContext<QueuedPromptsPanelView>) -> ViewHandl
 }
 
 /// Computes the dragged row's new index based on its current rect and the rects of its immediate
-/// neighbors, mirroring [`Workspace::calculate_updated_tab_index_vertical`]
-/// (`app/src/workspace/view.rs`). Returns `current_index` when the drag hasn't yet crossed a
-/// neighbor's midpoint, producing single-step swaps that match the visual feedback the user
-/// expects from a vertically-stacked draggable list.
+/// neighbors.
 fn calculate_updated_row_index(
     panel_view_id: EntityId,
     current_index: usize,
@@ -684,8 +636,6 @@ fn render_header(
     let theme = appearance.theme();
     let label_text = header_label_text(count);
     let sub_text_color: ColorU = theme.sub_text_color(theme.surface_1()).into();
-    // Background is the same `fg_overlay_1` overlay the Figma design uses for the suggestion
-    // banner, which renders as a subtle highlight over the conversation surface.
     let banner_background: Fill = theme.surface_overlay_1().into();
     let border_color: Fill = theme.split_pane_border_color().into();
     let chevron_icon = if collapsed {
@@ -718,8 +668,8 @@ fn render_header(
             .with_child(label)
             .finish();
         Container::new(row)
-            .with_horizontal_padding(HEADER_HORIZONTAL_PADDING)
-            .with_vertical_padding(HEADER_VERTICAL_PADDING)
+            .with_horizontal_padding(16.)
+            .with_vertical_padding(8.)
             .with_background(banner_background)
             .with_border(Border::top(1.).with_border_fill(border_color))
             .finish()
@@ -780,14 +730,13 @@ fn render_row(props: RenderRowProps<'_>) -> Box<dyn Element> {
                 .with_height(editor_line_height)
                 .finish()
         } else {
-            Text::new(text.clone(), ui_font_family, ui_font_size)
+            Text::new_inline(text.clone(), ui_font_family, ui_font_size)
                 .with_color(foreground_color)
                 .with_selectable(false)
+                .with_clip(ClipConfig::ellipsis())
                 .finish()
         };
 
-        // The drag handle is always visible per the Figma design (node 6736:27440 / 6736:27441),
-        // but Cloud Mode rows render an empty placeholder so the handle column still aligns.
         let drag_handle: Box<dyn Element> = if user_managed {
             ConstrainedBox::new(
                 Icon::DragIndicator
@@ -840,11 +789,11 @@ fn render_row(props: RenderRowProps<'_>) -> Box<dyn Element> {
         }
 
         let row_content = ConstrainedBox::new(row.finish())
-            .with_min_height(ROW_MIN_HEIGHT)
+            .with_min_height(32.)
             .finish();
         let mut container = Container::new(row_content)
-            .with_horizontal_padding(ROW_HORIZONTAL_PADDING)
-            .with_vertical_padding(ROW_VERTICAL_PADDING)
+            .with_horizontal_padding(8.)
+            .with_vertical_padding(4.)
             .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)));
         if is_being_dragged || (state.is_hovered() && user_managed) {
             container = container.with_background(row_hover_background);
@@ -855,9 +804,8 @@ fn render_row(props: RenderRowProps<'_>) -> Box<dyn Element> {
 
     let position_id = queue_row_position_id(panel_view_id, index);
 
-    // Cloud Mode rows are not draggable (`PRODUCT.md` (30)) and rows in edit mode have their drag
-    // handle inert (`PRODUCT.md` (19)). Both still register a `SavePosition` so live-reorder can
-    // measure their bounds when neighbors are dragged across them.
+    // Non-draggable rows still register a `SavePosition` so live-reorder can measure their bounds
+    // when neighbors are dragged across them.
     if !user_managed || is_in_edit_mode {
         return SavePosition::new(row_inner, &position_id).finish();
     }
@@ -879,8 +827,6 @@ fn render_row(props: RenderRowProps<'_>) -> Box<dyn Element> {
 }
 
 /// Returns the user-visible header label for `count` queued prompts.
-/// Format mirrors the Figma design (node 6736:27438) which renders just `"<N> queued"`
-/// regardless of count.
 fn header_label_text(count: usize) -> String {
     format!("{count} queued")
 }
@@ -908,7 +854,7 @@ where
         .with_width(ICON_SIZE)
         .finish();
         Container::new(icon_element)
-            .with_padding(Padding::uniform(ACTION_BUTTON_PADDING))
+            .with_padding(Padding::uniform(2.))
             .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.)))
             .finish()
     })

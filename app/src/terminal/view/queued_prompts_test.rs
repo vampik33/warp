@@ -109,7 +109,7 @@ fn error_or_cancel_drain_pops_front_when_input_is_empty() {
             m.append(conv, user_query("second"), ctx);
         });
 
-        let popped = model.update(&mut app, |m, ctx| m.pop_front(conv, ctx));
+        let popped = model.update(&mut app, |m, ctx| m.pop_front_user_managed(conv, ctx));
         let popped = popped.expect("queue had a head");
         assert_eq!(popped.text(), "first");
         model.read(&app, |m, _| {
@@ -120,13 +120,35 @@ fn error_or_cancel_drain_pops_front_when_input_is_empty() {
 }
 
 #[test]
+fn error_or_cancel_drain_skips_initial_cloud_mode_head() {
+    App::test((), |mut app| async move {
+        let model = app.add_model(|_| QueuedQueryModel::new());
+        let conv = AIConversationId::new();
+        model.update(&mut app, |m, ctx| {
+            m.append(conv, cloud_query("cloud"), ctx);
+            m.append(conv, user_query("user"), ctx);
+        });
+
+        let popped = model.update(&mut app, |m, ctx| m.pop_front_user_managed(conv, ctx));
+        assert!(popped.is_none(), "Cloud Mode head must stay harness-owned");
+        model.read(&app, |m, _| {
+            assert_eq!(m.queue_for(conv).len(), 2);
+            assert_eq!(
+                m.queue_for(conv)[0].origin(),
+                QueuedQueryOrigin::InitialCloudMode
+            );
+            assert_eq!(m.queue_for(conv)[1].text(), "user");
+        });
+    });
+}
+
+#[test]
 fn error_or_cancel_drain_leaves_queue_intact_when_input_is_non_empty() {
     // Validates `PRODUCT.md` (35): when the input is non-empty, the drain skips popping so the
     // queue remains intact for the user to deal with later.
     //
-    // The host (`TerminalView`) gates the call to `pop_front` on input-empty. We model that here
-    // by simply not calling `pop_front` when the simulated input is non-empty, and asserting the
-    // queue remains unchanged.
+    // The host (`TerminalView`) gates the pop on input-empty. We model that here by simply not
+    // popping when the simulated input is non-empty, and asserting the queue remains unchanged.
     App::test((), |mut app| async move {
         let model = app.add_model(|_| QueuedQueryModel::new());
         let conv = AIConversationId::new();
@@ -137,7 +159,7 @@ fn error_or_cancel_drain_leaves_queue_intact_when_input_is_non_empty() {
 
         let simulated_input_is_non_empty = true;
         if !simulated_input_is_non_empty {
-            model.update(&mut app, |m, ctx| m.pop_front(conv, ctx));
+            model.update(&mut app, |m, ctx| m.pop_front_user_managed(conv, ctx));
         }
 
         model.read(&app, |m, _| {
@@ -161,7 +183,7 @@ fn complete_drain_after_error_drain_continues_with_next_row() {
         });
 
         // Error: input is empty, pop "first" and restore to input.
-        let popped = model.update(&mut app, |m, ctx| m.pop_front(conv, ctx));
+        let popped = model.update(&mut app, |m, ctx| m.pop_front_user_managed(conv, ctx));
         assert_eq!(popped.map(|q| q.into_text()), Some("first".to_owned()));
 
         // Complete: pop "second".

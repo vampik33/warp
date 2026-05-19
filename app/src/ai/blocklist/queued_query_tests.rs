@@ -125,6 +125,26 @@ fn pop_front_removes_head_and_emits_removed() {
 }
 
 #[test]
+fn pop_front_user_managed_skips_cloud_mode_head() {
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        model.update(&mut app, |m, ctx| {
+            m.append(conv, cloud_query("cloud"), ctx);
+            m.append(conv, user_query("user"), ctx);
+        });
+
+        let popped = model.update(&mut app, |m, ctx| m.pop_front_user_managed(conv, ctx));
+        assert!(popped.is_none());
+
+        model.read(&app, |model, _| {
+            let queue = model.queue_for(conv);
+            assert_eq!(queue.len(), 2);
+            assert_eq!(queue[0].text(), "cloud");
+            assert_eq!(queue[1].text(), "user");
+        });
+    });
+}
+#[test]
 fn pop_for_autofire_skips_cloud_mode_head() {
     with_model(|mut app, model, _events| {
         let conv = AIConversationId::new();
@@ -228,20 +248,22 @@ fn commit_edit_with_text_replaces_row_and_clears_edit_state() {
 }
 
 #[test]
-fn commit_edit_with_empty_text_removes_the_row() {
+fn commit_edit_with_empty_text_restores_original_text() {
     // Validates `PRODUCT.md` (17).
     with_model(|mut app, model, _events| {
         let conv = AIConversationId::new();
         let id_a = append_user(&model, &mut app, conv, "first");
-        let _id_b = append_user(&model, &mut app, conv, "second");
+        append_user(&model, &mut app, conv, "second");
         model.update(&mut app, |m, ctx| m.enter_edit_mode(conv, id_a, ctx));
 
         model.update(&mut app, |m, ctx| m.commit_edit(String::new(), ctx));
 
         model.read(&app, |m, _| {
             let queue = m.queue_for(conv);
-            assert_eq!(queue.len(), 1);
-            assert_eq!(queue[0].text(), "second");
+            assert_eq!(queue.len(), 2);
+            assert_eq!(queue[0].id(), id_a);
+            assert_eq!(queue[0].text(), "first");
+            assert_eq!(queue[1].text(), "second");
             assert_eq!(m.editing_row(conv), None);
         });
     });
@@ -367,6 +389,23 @@ fn cloud_mode_rows_reject_reorder_and_replace_text() {
 }
 
 #[test]
+fn user_managed_rows_cannot_reorder_above_cloud_mode_prefix() {
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let cloud_id = model.update(&mut app, |m, ctx| m.append(conv, cloud_query("cloud"), ctx));
+        let user_id_a = append_user(&model, &mut app, conv, "a");
+        let user_id_b = append_user(&model, &mut app, conv, "b");
+
+        model.update(&mut app, |m, ctx| m.reorder(conv, user_id_b, 0, ctx));
+
+        model.read(&app, |m, _| {
+            let ids: Vec<_> = m.queue_for(conv).iter().map(|q| q.id()).collect();
+            assert_eq!(ids, vec![cloud_id, user_id_b, user_id_a]);
+        });
+    });
+}
+
+#[test]
 fn cloud_mode_rows_reject_enter_edit_mode() {
     with_model(|mut app, model, _events| {
         let conv = AIConversationId::new();
@@ -416,6 +455,22 @@ fn clear_for_conversation_clears_queue_edit_and_collapse_state() {
             assert!(!m.is_collapsed(conv_a));
             // Other conversations are untouched.
             assert_eq!(m.queue_for(conv_b).len(), 1);
+        });
+    });
+}
+
+#[test]
+fn removing_last_row_resets_collapse_state() {
+    with_model(|mut app, model, _events| {
+        let conv = AIConversationId::new();
+        let id = append_user(&model, &mut app, conv, "only");
+        model.update(&mut app, |m, ctx| m.set_collapsed(conv, true, ctx));
+
+        model.update(&mut app, |m, ctx| m.remove_by_id(conv, id, ctx));
+
+        model.read(&app, |m, _| {
+            assert!(!m.has_queue(conv));
+            assert!(!m.is_collapsed(conv));
         });
     });
 }

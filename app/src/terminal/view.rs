@@ -5096,19 +5096,27 @@ impl TerminalView {
     /// Removes the cloud-mode queued-query row owned by the active ambient-agent view model, if
     /// one is currently appended. Idempotent: a no-op when no row id is recorded.
     pub fn remove_cloud_mode_queued_query(&mut self, ctx: &mut ViewContext<Self>) {
+        let Some(conversation_id) = self
+            .ai_context_model
+            .as_ref(ctx)
+            .selected_conversation_id(ctx)
+        else {
+            return;
+        };
+        self.remove_cloud_mode_queued_query_for_conversation(conversation_id, ctx);
+    }
+
+    fn remove_cloud_mode_queued_query_for_conversation(
+        &mut self,
+        conversation_id: AIConversationId,
+        ctx: &mut ViewContext<Self>,
+    ) {
         let Some(ambient_agent_view_model) = self.ambient_agent_view_model.clone() else {
             return;
         };
         let Some(query_id) = ambient_agent_view_model
             .as_ref(ctx)
             .cloud_mode_queued_query_id()
-        else {
-            return;
-        };
-        let Some(conversation_id) = self
-            .ai_context_model
-            .as_ref(ctx)
-            .selected_conversation_id(ctx)
         else {
             return;
         };
@@ -5130,9 +5138,9 @@ impl TerminalView {
     /// - On `Complete`: pop the first row and route via `submit_queued_prompt` (or, when the popped
     ///   row was in edit mode, place its in-progress edit text into the input only when the input
     ///   is empty per `PRODUCT.md` (21)).
-    /// - On `Error` / `Cancelled` / `CancelledDuringRequestedCommandExecution`: pop the first row
-    ///   and place its text in the input only if the input is empty; otherwise leave the queue
-    ///   intact (`PRODUCT.md` (35)).
+    /// - On `Error` / `Cancelled` / `CancelledDuringRequestedCommandExecution`: pop the first
+    ///   user-managed row and place its text in the input only if it is at the head and the input
+    ///   is empty; otherwise leave the queue intact (`PRODUCT.md` (35)).
     fn drain_queued_prompts(
         &mut self,
         conversation_id: AIConversationId,
@@ -5174,8 +5182,9 @@ impl TerminalView {
                 if !input_is_empty {
                     return;
                 }
-                let popped = queued_query_model
-                    .update(ctx, |model, ctx| model.pop_front(conversation_id, ctx));
+                let popped = queued_query_model.update(ctx, |model, ctx| {
+                    model.pop_front_user_managed(conversation_id, ctx)
+                });
                 if let Some(query) = popped {
                     self.input.update(ctx, |input, ctx| {
                         input.replace_buffer_content(query.text(), ctx);
@@ -5612,16 +5621,7 @@ impl TerminalView {
                         .set_is_executing_oz_environment_startup_commands(false);
                 }
 
-                // For an oz local-to-cloud handoff, the first `AppendedExchange` is the
-                // analogue of `HarnessCommandStarted` for non-oz harnesses: the moment we
-                // tear down the queued-prompt row in favor of the live agent UI.
-                if self
-                    .ambient_agent_view_model
-                    .as_ref()
-                    .is_some_and(|model| model.as_ref(ctx).is_local_to_cloud_handoff())
-                {
-                    self.remove_cloud_mode_queued_query(ctx);
-                }
+                self.remove_cloud_mode_queued_query_for_conversation(*conversation_id, ctx);
 
                 let should_add_ai_block = history_model
                     .as_ref(ctx)
