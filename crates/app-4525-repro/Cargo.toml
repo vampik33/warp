@@ -1,0 +1,21 @@
+[package]
+name = "app-4525-repro"
+edition = "2021"
+authors.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+diesel = { workspace = true, features = ["sqlite", "chrono"] }
+dirs.workspace = true
+instant.workspace = true
+libc.workspace = true
+prost.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+warp_multi_agent_api.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

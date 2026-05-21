@@ -549,6 +549,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
 
 [[package]]
+name = "app-4525-repro"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "diesel",
+ "dirs 6.0.0",
+ "instant",
+ "libc",
+ "prost 0.14.3",
+ "serde_json",
+ "tempfile",
+ "uuid",
+ "warp_multi_agent_api",
+]
+
+[[package]]
 name = "app-installation-detection"
 version = "0.1.0"
 dependencies = [
