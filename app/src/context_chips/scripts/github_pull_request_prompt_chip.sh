@@ -3,14 +3,14 @@ git symbolic-ref --quiet --short HEAD >/dev/null 2>&1 || exit 0
 
 remote_url=$(git remote get-url origin 2>/dev/null) || exit 0
 case "$remote_url" in
-    git@github.com:*|https://github.com/*|http://github.com/*|ssh://git@github.com/*)
+    *github.com*)
         ;;
     *)
         exit 0
         ;;
 esac
 
-output=$(gh pr view --state all --json url,state,isDraft,mergeable,mergeStateStatus \
+output=$(gh pr view --json url,state,isDraft,mergeable,mergeStateStatus \
     --jq '{url,state,isDraft,mergeable,mergeStateStatus}' 2>&1)
 exit_code=$?
 

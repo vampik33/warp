@@ -2,9 +2,9 @@ git rev-parse --is-inside-work-tree >/dev/null 2>/dev/null; or exit 0
 git symbolic-ref --quiet --short HEAD >/dev/null 2>/dev/null; or exit 0
 
 set remote_url (git remote get-url origin 2>/dev/null); or exit 0
-string match -rq '^(git@github\.com:|https?://github\.com/|ssh://git@github\.com/)' -- $remote_url; or exit 0
+string match -rq 'github\.com' -- $remote_url; or exit 0
 
-set output (gh pr view --state all --json url,state,isDraft,mergeable,mergeStateStatus \
+set output (gh pr view --json url,state,isDraft,mergeable,mergeStateStatus \
     --jq '{url,state,isDraft,mergeable,mergeStateStatus}' 2>&1)
 set exit_code $status
 
