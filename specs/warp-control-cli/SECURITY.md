@@ -9,11 +9,12 @@ The action-tier model is primarily a safety and intent mechanism, not a hard sec
 - Prevent browser-origin JavaScript from becoming an ambient localhost control client.
 - Support multiple running Warp processes without a shared global mutating port or global credential.
 - Separate discovery metadata from control authority so enumerating an instance does not automatically grant full control.
-- Require explicit in-app user enablement before local control scripting can issue credentials or accept control requests.
-- Store the authoritative enablement state in protected local storage so external apps cannot enable local control by editing ordinary settings.
+- Require explicit in-app user enablement before local control scripting from outside Warp can issue credentials or accept control requests.
+- Allow local control scripting from verified Warp-managed terminal sessions by default, subject to granular permission settings.
+- Store the authoritative enablement states in protected local storage so external apps cannot enable outside-Warp control by editing ordinary settings.
 - Keep raw credential material out of plaintext discovery records and protect it with platform secure storage where available.
 - Distinguish verified `warpctrl` invocations that originate from a Warp-managed terminal session from external same-user invocations.
-- Allow external invocations by default only for a smaller local-only action set that does not touch user-authenticated data.
+- When outside-Warp control is enabled, allow external invocations only for a smaller local-only action set by default that does not touch user-authenticated data.
 - Allow in-Warp invocations to receive authenticated-user grants when the selected Warp app has a true logged-in user and the user's local-control settings permit that grant.
 - Support least-privilege safety modes for automation and interactive use without relying on an unenforceable identity label.
 - Classify every action by risk tier and enforce the required tier in the local app bridge, not in the CLI frontend.
@@ -86,32 +87,36 @@ Compared with these systems, `warpctrl` should combine:
 - VS Code's preference for typed public commands and separate treatment of remote control.
 The resulting architecture should not claim to solve arbitrary same-user malicious-app isolation. Its real value is preventing web-origin and other-user access, preventing unauthenticated direct localhost calls, keeping raw credentials out of plaintext discovery, giving honest scripts and agents narrow safety grants, and routing high-risk operations through local Warp app validation and user/policy approval.
 ## Authoritative enablement model
-Local control scripting must be explicitly enabled by the user inside the Warp app before `warpctrl` can control a running instance. The setting should be visible in Warp's settings UI as something like “Allow local control scripting,” and it should default to off.
-The visible UI setting is not enough by itself. The authoritative enablement state must be stored in protected local storage that ordinary same-user apps cannot update by writing a plist, settings database row, registry key, JSON file, or synced cloud preference. This avoids turning local control into a feature that any process can silently enable before invoking `warpctrl`.
+Warp control has two top-level enablement states based on invocation context:
+- **Allow scripting from inside Warp:** controls `warpctrl` invocations from verified Warp-managed terminal sessions. This should default to on so commands run inside Warp can use local control subject to granular permissions.
+- **Allow scripting from outside Warp:** controls `warpctrl` invocations from external terminals, scripts, launch agents, IDEs, or other same-user processes. This must default to off.
+Both controls should live in a new top-level Settings pane page named **Scripting**. The Scripting page owns the user-facing controls for local scripting surfaces, including Warp control, and should explain the difference between commands run inside Warp and commands run from other apps.
+The visible UI settings are not enough by themselves. The authoritative enablement states must be stored in protected local storage that ordinary same-user apps cannot update by writing a plist, settings database row, registry key, JSON file, or synced cloud preference. This avoids turning outside-Warp control into a feature that any process can silently enable before invoking `warpctrl`.
 Enablement requirements:
-- The setting is local-only and must not sync through Settings Sync, Warp Drive, or server-backed user preferences.
-- Only the running Warp app, through an in-app user action, should be able to enable or disable the authoritative state.
-- `warpctrl`, shell scripts, config files, command-line flags, registry edits, defaults writes, and direct local-control protocol requests must not be able to enable the setting.
-- The app should require an intentional user gesture before enabling the setting, and the UI should explain that it allows local scripts and approved automation to control Warp.
-- The UI should expose granular local-control permission settings rather than a single all-powerful switch.
-- The setting should be easy to disable from the same UI, and disabling it should revoke or invalidate active local-control credentials.
-- If enterprise or managed-device policy is added later, policy may force-disable local control or allow an administrator-controlled default, but policy should be separate from user-editable local settings.
+- The settings are local-only and must not sync through Settings Sync, Warp Drive, or server-backed user preferences.
+- Only the running Warp app, through the Settings > Scripting UI, should be able to enable or disable the authoritative states.
+- `warpctrl`, shell scripts, config files, command-line flags, registry edits, defaults writes, and direct local-control protocol requests must not be able to enable either setting.
+- The in-Warp setting may default to enabled, but turning it off should prevent verified Warp-terminal invocations from receiving local-control grants.
+- The outside-Warp setting defaults to disabled and should require an intentional user gesture before enabling; the UI should explain that it allows scripts and automation from other apps to control Warp.
+- The Scripting page should expose granular local-control permission settings rather than a single all-powerful switch.
+- Each setting should be easy to disable from the same UI, and disabling either setting should revoke or invalidate active local-control credentials for that invocation context.
+- If enterprise or managed-device policy is added later, policy may force-disable either setting or allow an administrator-controlled default, but policy should be separate from user-editable local settings.
 Disabled-state behavior:
-- Warp should not mint scoped local-control credentials while local control scripting is disabled.
-- The control listener should either not start or should reject all sensitive requests with a structured disabled-state error before authentication, selector resolution, or handler dispatch.
-- Discovery records should avoid publishing actionable endpoint or credential-reference metadata while disabled. If a minimal record is needed for UX, it should expose only non-sensitive status such as `local_control_enabled: false`.
-- `warpctrl` may detect the disabled state and print instructions to enable local control in Warp settings, but it must not offer a command that flips the setting.
-- Previously issued credentials must become unusable when local control is disabled, even if their original expiry has not elapsed.
-This enablement gate does not create perfect same-user malicious-app isolation. A hostile process with Accessibility or Screen Recording permission might still try to automate the Warp UI. The gate is still important because it closes the much easier paths where external apps silently edit local preferences, call a config CLI, or write synced settings to enable a powerful control surface.
+- Warp should not mint scoped local-control credentials for a request whose invocation context is disabled.
+- The control listener should reject requests from disabled contexts with a structured disabled-state error before authentication, selector resolution, or handler dispatch.
+- Discovery records should avoid publishing actionable endpoint or credential-reference metadata for disabled outside-Warp control. If a minimal record is needed for UX, it should expose only non-sensitive status such as `outside_warp_control_enabled: false`.
+- `warpctrl` may detect a disabled context and print instructions to enable it in Settings > Scripting, but it must not offer a command that flips the setting.
+- Previously issued credentials must become unusable when their invocation context is disabled, even if their original expiry has not elapsed.
+These enablement gates do not create perfect same-user malicious-app isolation. A hostile process with Accessibility or Screen Recording permission might still try to automate the Warp UI. The outside-Warp gate is still important because it closes the much easier paths where external apps silently edit local preferences, call a config CLI, or write synced settings to enable a powerful control surface.
 ### Granular permission settings
-Once local control scripting is enabled, users should control which categories of `warpctrl` authority can be granted. Recommended independent permissions:
+Once the relevant inside-Warp or outside-Warp enablement setting allows a request context, users should control which categories of `warpctrl` authority can be granted. These permissions should appear under Settings > Scripting. Recommended independent permissions:
 - **Local read-only metadata:** permit external and in-Warp clients to inspect non-sensitive local app structure such as instances, windows, tabs, panes, app version, and theme names.
 - **Terminal data reads:** permit reads of terminal output, scrollback, input buffers, command history, and session traces.
 - **Non-destructive local mutations:** permit reversible app-state changes such as creating tabs, focusing panes, changing theme, or opening panels.
 - **Destructive and execution actions:** permit closing targets, injecting input, running commands, executing workflows, or other high-risk operations.
 - **Authenticated-user actions from Warp terminals:** permit `warpctrl` invocations that originate from a verified Warp-managed terminal session to receive grants backed by the currently logged-in Warp user, enabling actions that read or mutate Warp Drive, AI conversation traces, synced settings, or other user-authenticated state.
 - **Authenticated-user actions from external clients:** default off. If supported, this must be a separate explicit permission from in-Warp authenticated actions because external same-user processes are a weaker context than a Warp-managed terminal session.
-Disabling any category should invalidate active credentials that include that category. The broker and app bridge must enforce these settings locally for every credential request and every presented credential.
+Granular permissions should be independently configurable for inside-Warp and outside-Warp contexts where the distinction matters. Disabling any category should invalidate active credentials that include that category. The broker and app bridge must enforce these settings locally for every credential request and every presented credential.
 ## Trust boundaries
 `warpctrl` has several distinct trust boundaries.
 ### Operating-system user boundary
@@ -155,11 +160,11 @@ A valid credential for one instance or target must not imply authority over anot
 - Security semantics for remote URL control endpoints. Remote control requires a separate transport and identity design before it can ship.
 ## Architecture overview
 The security model has eight layers:
-1. **Protected enablement:** Require explicit in-app opt-in backed by protected local storage before local control is available.
+1. **Protected enablement:** Use protected local storage for separate inside-Warp and outside-Warp enablement states, with inside-Warp on by default and outside-Warp off by default.
 2. **Discovery:** Find compatible live Warp instances without granting broad authority.
 3. **Secure credential storage:** Store raw secrets outside plaintext discovery records and restrict access to trusted Warp-owned code where the platform supports it.
 4. **Execution context verification:** Distinguish verified Warp-terminal invocations from external same-user invocations without trusting caller-declared labels.
-5. **Credential issuance:** Issue scope-specific credentials with explicit grants and lifetimes only when local control is enabled and the user's granular permissions allow the requested category.
+5. **Credential issuance:** Issue scope-specific credentials with explicit grants and lifetimes only when the request's invocation context is enabled and the user's granular permissions allow the requested category.
 6. **Transport authentication:** Reject disabled or unauthenticated requests before reading or mutating app state.
 7. **Safety and user-auth policy:** Enforce action tiers, target scopes, execution-context requirements, and authenticated-user requirements locally in the app bridge.
 8. **Deterministic dispatch:** Resolve targets exactly and invoke only allowlisted typed handlers.
@@ -180,10 +185,10 @@ sequenceDiagram
     Invoker->>CLI: Invoke allowlisted command
     CLI->>Registry: Read instance metadata
     Registry-->>CLI: instance_id, endpoint, protocol version, credential reference
-    CLI->>Enablement: Check local control enabled status
+    CLI->>Enablement: Check inside/outside context enablement
     Enablement-->>CLI: Enabled or disabled
     alt Disabled
-        CLI-->>Invoker: local control disabled; enable in Warp settings
+        CLI-->>Invoker: context disabled; enable in Settings > Scripting
     else Enabled
     CLI->>Broker: Request scoped credential for action
     Broker->>Enablement: Verify protected enablement state
@@ -220,7 +225,7 @@ Discovery rules:
 - Records must be readable only by the owning user.
 - POSIX records must use owner-only permissions such as `0600` for files and a non-world-readable directory.
 - Windows records must live under the current user's app data directory with ACLs limited to the current user, Administrators, and SYSTEM.
-- When local control scripting is disabled, records must not publish actionable control endpoints or credential references. A minimal disabled-status record is acceptable only if it contains no authority.
+- When outside-Warp control is disabled, records must not publish actionable control endpoints or credential references for external clients. A minimal disabled-status record is acceptable only if it contains no authority.
 - The CLI must prune or ignore stale records whose PID is gone or whose health/protocol check fails.
 - If multiple compatible instances are ambiguous, the CLI must require explicit `--instance` selection.
 - Discovery metadata must not expose terminal contents, environment variables, auth tokens for cloud services, raw local-control credentials, or mutating capability grants.
@@ -243,7 +248,7 @@ A control credential should encode or reference:
 ### Credential issuance
 Warp should issue credentials through an app-owned local broker or equivalent trusted path. The broker decides which grants to issue based on the requested action tier, target scope, user configuration, execution context, and any explicit user approval.
 Recommended defaults:
-- Credential issuance is unavailable unless the protected in-app enablement state says local control scripting is enabled.
+- Credential issuance is unavailable unless the protected enablement state allows the request's invocation context: inside Warp or outside Warp.
 - Commands should start from least privilege and request only the grant needed for the requested action.
 - External same-user invocations should default to the smaller logged-out-safe local action set unless policy or explicit approval grants more.
 - Verified Warp-terminal invocations may receive broader local-control grants when the user's granular settings allow them.
@@ -264,7 +269,7 @@ This model does not make untrusted same-user software safe. A malicious local pr
 ### Credential storage
 Credential storage should be platform-appropriate:
 - Local discovery may store a credential reference rather than the credential itself.
-- The authoritative local-control enablement state should use the same class of protected local storage as raw credential material, but it should be accessible to the Warp app for in-app settings UI and not writable by `warpctrl` or arbitrary external apps.
+- The authoritative local-control enablement states for inside-Warp and outside-Warp scripting should use the same class of protected local storage as raw credential material, but they should be accessible to the Warp app for the Settings > Scripting UI and not writable by `warpctrl` or arbitrary external apps.
 - Raw long-lived credentials should prefer platform-secure storage such as macOS Keychain or Windows Credential Manager when practical.
 - On macOS, raw control secrets should be stored in Keychain and restricted to trusted Warp-signed code using a designated requirement, Keychain access group, trusted-application ACL, or equivalent code-signing based mechanism. Restricting by filesystem path alone is insufficient because paths can be replaced or wrapped.
 - Keychain item access should include the Warp app, the signed `warpctrl` binary, and any signed Warp-owned local broker/helper that needs to unwrap raw secrets. It should exclude arbitrary same-user applications.
@@ -287,7 +292,7 @@ The default transport is an instance-local loopback listener bound to `127.0.0.1
 Transport requirements:
 - Bind only to loopback for local control.
 - Do not set permissive CORS headers.
-- Reject control requests while local control scripting is disabled, even if the request presents an otherwise valid credential.
+- Reject control requests when their inside-Warp or outside-Warp invocation context is disabled, even if the request presents an otherwise valid credential.
 - Authenticate every control request locally in the selected Warp app process before selector resolution or action dispatch.
 - Reject missing, malformed, expired, revoked, or invalid credentials with structured authentication errors.
 - Keep unauthenticated health metadata minimal and non-sensitive.
@@ -413,7 +418,7 @@ Error-level logs should be used only for conditions that need developer attentio
 ## Security- and safety-relevant errors
 Structured errors are part of the security contract.
 Important errors include:
-- `local_control_disabled` when the user has not enabled local control scripting in Warp settings or has disabled it after credentials were issued;
+- `local_control_disabled` when the relevant inside-Warp or outside-Warp scripting context is disabled in Settings > Scripting or has been disabled after credentials were issued;
 - `unauthorized_local_client` for missing, malformed, expired, revoked, or invalid credentials;
 - `insufficient_permissions` for valid credentials that lack the requested safety tier or target scope;
 - `authenticated_user_required` when an action requires a logged-in Warp user but the credential lacks an authenticated-user grant;
@@ -430,8 +435,8 @@ Important errors include:
 The app must not downgrade these failures into broader default actions, and the CLI must preserve structured server errors in both human-readable and JSON output.
 ## Required controls before full catalog expansion
 Before shipping each action family, verify that these controls are implemented for that family:
-- Local control scripting must be explicitly enabled in Warp's app UI before the action family can run.
-- The authoritative enablement state is protected from external writes and is local-only rather than synced.
+- Local control scripting must be enabled for the request's invocation context before the action family can run; inside-Warp control defaults on and outside-Warp control defaults off.
+- The authoritative enablement states live under Settings > Scripting, are protected from external writes, and are local-only rather than synced.
 - The action has a documented tier.
 - The action has a documented `requires_authenticated_user` value. New actions default to `true` unless explicitly reviewed as logged-out-safe.
 - The action documents allowed execution contexts and whether external clients may run it.
@@ -448,13 +453,13 @@ Before shipping each action family, verify that these controls are implemented f
 ## Platform requirements
 ### macOS and Linux
 Discovery files must be stored in a per-user directory with owner-only permissions.
-On macOS, raw credential material and the authoritative local-control enablement state should live in Keychain, not in the discovery record or an ordinary preferences file. Keychain access should be constrained to Warp-owned signed binaries or helpers using code-signing based access control. The enablement state should be writable by the Warp app's in-app settings flow and not writable by `warpctrl`. The discovery record should hold only metadata and a credential reference when local control is enabled.
-On Linux, raw credentials and the authoritative enablement state should prefer platform-secure storage where available; otherwise short-lived scoped credentials may live in owner-only local state with strict file and directory permissions. If the enablement state falls back to owner-only local state, the weaker same-user protection should be documented.
+On macOS, raw credential material and the authoritative local-control enablement states should live in Keychain, not in the discovery record or an ordinary preferences file. Keychain access should be constrained to Warp-owned signed binaries or helpers using code-signing based access control. The enablement states should be writable by the Warp app's Settings > Scripting flow and not writable by `warpctrl`. The discovery record should hold only metadata and a credential reference when the relevant inside-Warp or outside-Warp context is enabled.
+On Linux, raw credentials and the authoritative enablement states should prefer platform-secure storage where available; otherwise short-lived scoped credentials may live in owner-only local state with strict file and directory permissions. If an enablement state falls back to owner-only local state, the weaker same-user protection should be documented.
 Unix domain sockets with peer credential checks may be considered for stronger same-machine identity than bearer tokens alone.
 ### Windows
 Discovery records and credential material must live under the current user's app data directory with ACLs restricted to the current user, Administrators, and SYSTEM.
-The authoritative enablement state should use Credential Manager, DPAPI-backed protected storage, or an equivalent app-controlled protected store rather than a normal registry setting that arbitrary same-user processes can write.
-Windows support for authenticated local control should not be considered complete until the implementation creates, validates, and tests those ACLs and the protected enablement-state behavior.
+The authoritative enablement states should use Credential Manager, DPAPI-backed protected storage, or an equivalent app-controlled protected store rather than normal registry settings that arbitrary same-user processes can write.
+Windows support for authenticated local control should not be considered complete until the implementation creates, validates, and tests those ACLs and the protected enablement-state behavior for both inside-Warp and outside-Warp settings.
 ## Remote control is separate
 The local architecture intentionally assumes same-machine, same-user control over a loopback listener. Future remote URLs must use a different security design that includes:
 - transport encryption;

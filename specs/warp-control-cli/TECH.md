@@ -1,6 +1,6 @@
 # Context
 `PRODUCT.md` defines a standalone local Warp control CLI binary, provisionally named `warpctrl`, with an allowlisted action catalog, deterministic addressing across multiple running Warp app processes, and an incremental implementation plan.
-`SECURITY.md` is the normative security architecture for this feature. Implementation work must follow it for explicit in-app enablement, protected enablement storage, granular permissions, discovery metadata, credential storage, scoped safety grants, verified execution context, authenticated-user requirements, localhost/browser protections, action-tier enforcement, deterministic target resolution, and local app-side validation. If this technical plan and `SECURITY.md` disagree, update the plan before implementing rather than treating the security architecture as optional follow-up work.
+`SECURITY.md` is the normative security architecture for this feature. Implementation work must follow it for separate inside-Warp and outside-Warp enablement, the top-level Settings > Scripting surface, protected enablement storage, granular permissions, discovery metadata, credential storage, scoped safety grants, verified execution context, authenticated-user requirements, localhost/browser protections, action-tier enforcement, deterministic target resolution, and local app-side validation. If this technical plan and `SECURITY.md` disagree, update the plan before implementing rather than treating the security architecture as optional follow-up work.
 The existing app already has three relevant building blocks:
 - `crates/http_server/src/lib.rs (7-61)` runs a native-only loopback Axum server on fixed port `9277`.
 - `app/src/lib.rs (1993-2001)` registers that HTTP server in the native app and currently merges only installation-detection and profiling routers.
@@ -26,11 +26,12 @@ The most important constraint surfaced by this code is that the current fixed-po
 ### 0. Security architecture dependency
 Before implementing any local-control listener, CLI command, credential path, or action handler, the implementation must be checked against `SECURITY.md`.
 Required security gates:
-- Local control scripting is disabled by default and can only be enabled by an in-app Warp settings flow.
-- The authoritative enablement state is local-only, not Settings Sync'd, and stored in protected local storage rather than ordinary user-editable settings.
-- `warpctrl`, direct protocol requests, shell scripts, config files, registry/plist edits, and server-backed preferences must not be able to enable local control scripting.
-- Discovery records do not publish actionable endpoints or credential references while local control scripting is disabled.
-- Credential issuance is unavailable while local control scripting is disabled.
+- Local control scripting has separate inside-Warp and outside-Warp enablement states. Inside-Warp control for verified Warp-managed terminal sessions defaults on; outside-Warp control for external terminals, scripts, IDEs, launch agents, and other same-user processes defaults off.
+- Both controls live under a new top-level Settings pane page named **Scripting**.
+- The authoritative enablement states are local-only, not Settings Sync'd, and stored in protected local storage rather than ordinary user-editable settings.
+- `warpctrl`, direct protocol requests, shell scripts, config files, registry/plist edits, defaults writes, and server-backed preferences must not be able to enable either setting.
+- Discovery records do not publish actionable endpoints or credential references for disabled outside-Warp control.
+- Credential issuance is unavailable when the request's invocation context is disabled.
 - Raw credential material is kept out of plaintext discovery records and stored in platform secure storage where available.
 - The broker distinguishes verified Warp-terminal invocations from external invocations using an app-issued execution-context proof, not a caller-declared label.
 - External invocations default to a smaller logged-out-safe action set that does not touch user-authenticated data.
@@ -38,7 +39,7 @@ Required security gates:
 - The app rejects disabled, unauthenticated, expired, revoked, insufficient-scope, unsupported, malformed, ambiguous, missing-target, and stale-target requests with structured errors.
 - Every action has a documented risk tier and the app bridge enforces the required tier locally before selector resolution or handler dispatch.
 - Every action has a documented `requires_authenticated_user` value and allowed execution contexts. New actions default to requiring an authenticated user unless explicitly reviewed as logged-out-safe.
-- Granular local-control settings gate the maximum grants for metadata reads, terminal-data reads, non-destructive mutations, destructive/execution actions, authenticated-user actions from Warp terminals, and authenticated-user actions from external clients.
+- Granular local-control settings under Settings > Scripting gate the maximum grants for metadata reads, terminal-data reads, non-destructive mutations, destructive/execution actions, authenticated-user actions from Warp terminals, and authenticated-user actions from external clients.
 - Safety tiers are treated as user-intent and accident-prevention guardrails, not as strong same-user malicious-app isolation.
 - Remote control remains out of scope for the local same-machine credential model.
 The first implementation slice should include the protected enablement gate, credential issuance checks, and app-side tier enforcement even if the only mutating action initially implemented is `tab.create`. Shipping `tab.create` without the enablement and validation architecture would create the wrong foundation for the full catalog.
@@ -97,16 +98,16 @@ Recommended design:
   - control-listener endpoint
   - protocol version
   - start timestamp
-  - credential metadata or secure-storage references only when local control scripting is enabled
+  - credential metadata or secure-storage references only when the relevant inside-Warp or outside-Warp context is enabled
 - The CLI loads discovery records, removes or ignores stale records after health checks, and chooses an instance using the product selector rules.
 - `warpctrl instance list` is a CLI-first projection of this discovery registry plus health responses.
-When local control scripting is disabled, discovery must follow `SECURITY.md`: either publish no actionable local-control record or publish only a minimal disabled-status record with no endpoint authority or credential reference.
+When outside-Warp control is disabled, discovery must follow `SECURITY.md`: either publish no actionable local-control record for external clients or publish only a minimal disabled-status record with no endpoint authority or credential reference.
 This design preserves the current `9277` behavior while avoiding cross-process port contention for the new control API.
 ### 3. Local authentication, enablement, and safety boundary
 Mutating localhost routes should not copy the permissive CORS posture of `/install_detection`.
 Recommended local trust model:
 - No browser-readable CORS allowance on control endpoints.
-- Local control scripting must be explicitly enabled in the Warp app before credentials are minted or sensitive control requests are accepted.
+- The relevant inside-Warp or outside-Warp Scripting setting must allow the request context before credentials are minted or sensitive control requests are accepted.
 - The authoritative enablement bit must live in protected local storage and must not be writable by `warpctrl` or ordinary same-user preference/config edits.
 - Per-instance raw credential material must be kept out of plaintext discovery records and stored in platform secure storage where practical.
 - The CLI may load or request scoped credentials through an app-owned broker/helper, but it must not mint authority itself.
@@ -138,7 +139,7 @@ The bridge uses WarpUI's `ModelSpawner<T>` mechanism, which is the standard way 
 ```
 HTTP handler (Tokio thread)
   │
-  ├─ verify local control scripting is enabled
+  ├─ verify inside-Warp or outside-Warp context is enabled
   ├─ verify credential, execution context, safety grant, and authenticated-user grant
   ├─ deserialize RequestEnvelope
   ├─ call bridge_spawner.spawn(move |bridge, ctx| {
@@ -149,7 +150,7 @@ HTTP handler (Tokio thread)
 
 LocalControlBridge::handle_request (main thread)
   │
-  ├─ verify protected enablement state is still enabled
+  ├─ verify protected context-specific enablement state is still enabled
   ├─ map action to required risk tier
   ├─ map action to authenticated-user and execution-context requirements
   ├─ verify presented credential grants that tier, target family, execution context, and authenticated-user access
@@ -220,11 +221,12 @@ Do not use a generic “dispatch action by string” endpoint. Every handler sho
 ### 7. First slice: prove discovery and `tab.create`
 The first `warpctrl` implementation slice should land the minimum cross-cutting architecture plus a single representative tab mutation:
 - Shared protocol types and error envelopes.
-- Protected in-app enablement setting and protected local-only enablement storage.
-- Granular local-control permission storage for at least metadata, non-destructive local mutations, and authenticated-user-action categories.
+- New top-level Settings > Scripting page with separate protected inside-Warp and outside-Warp enablement states.
+- Protected local-only enablement storage where inside-Warp control defaults on and outside-Warp control defaults off.
+- Granular local-control permission storage under Settings > Scripting for at least metadata, non-destructive local mutations, and authenticated-user-action categories.
 - Discovery registry and CLI instance selection.
 - A standalone `warpctrl` binary or artifact path that runs control commands without starting the GUI app runtime.
-- Per-process authenticated local-control server that refuses sensitive work when local control scripting is disabled.
+- Per-process authenticated local-control server that refuses sensitive work when the request's inside-Warp or outside-Warp context is disabled.
 - Scoped credential issuance/storage with no raw credentials in plaintext discovery records, including execution-context fields and authenticated-user grant fields.
 - App-side request bridge and selector resolver.
 - Action-tier mapping and app-side safety-grant enforcement.
@@ -289,7 +291,7 @@ sequenceDiagram
     CLI->>BROKER: Request scoped credential for action + execution context
     BROKER-->>CLI: Grant or structured denial
     CLI->>HTTP: Authenticated POST tab.create request
-    HTTP->>HTTP: Verify enablement + credential + execution context
+    HTTP->>HTTP: Verify context-specific enablement + credential + execution context
     HTTP->>BRIDGE: Typed request + response channel
     BRIDGE->>BRIDGE: Recheck enablement + tier + auth-user policy
     BRIDGE->>RES: Resolve window/tab/pane/session selectors
@@ -305,13 +307,13 @@ sequenceDiagram
 ## Testing and validation
 Map tests directly to `PRODUCT.md` behavior.
 - Security architecture:
-  - Protected enablement tests proving disabled state rejects credential issuance, sensitive discovery, and mutating requests with `local_control_disabled`.
+  - Protected enablement tests proving inside-Warp control defaults on, outside-Warp control defaults off, and disabled contexts reject credential issuance, sensitive discovery, and mutating requests with `local_control_disabled`.
   - Tests proving discovery in disabled state exposes no actionable endpoint authority or credential reference.
   - Credential-storage tests proving raw credentials are not written into plaintext discovery records.
   - Execution-context tests proving external clients cannot receive grants reserved for verified Warp-terminal invocations.
   - Tier-enforcement tests proving insufficient grants fail with `insufficient_permissions` before selector resolution or handler dispatch.
   - Authenticated-user tests proving user-authenticated actions fail without a logged-in app user or authenticated-user grant.
-  - Granular-permission tests proving disabled categories invalidate credentials and prevent new grants.
+  - Settings > Scripting tests proving both top-level toggles and granular disabled categories invalidate credentials and prevent new grants.
   - Structured-error tests for disabled, unauthenticated, expired, revoked, insufficient-scope, execution-context-denied, authenticated-user-required, authenticated-user-unavailable, unsupported, malformed, ambiguous, missing-target, stale-target, and invalid-selector requests.
 - Behavior 1-6, 29-31:
   - Protocol version/unit tests.
@@ -363,8 +365,8 @@ flowchart LR
   - Mitigation: leave current `9277` endpoints undisturbed and use a per-process control listener plus discovery registry.
 - Browser-to-localhost abuse:
   - Mitigation: no permissive CORS, protected in-app enablement, explicit local auth, scoped grants, and mutating routes gated before selector resolution.
-- External apps silently enabling local control:
-  - Mitigation: authoritative enablement state lives in protected local storage, is local-only, is not Settings Sync'd, and is not writable through `warpctrl`, config files, registry/plist preference edits, or server-backed settings.
+- External apps silently enabling outside-Warp local control:
+  - Mitigation: the outside-Warp enablement state defaults off, lives in protected local storage behind Settings > Scripting, is local-only, is not Settings Sync'd, and is not writable through `warpctrl`, config files, registry/plist preference edits, defaults writes, or server-backed settings.
 - External apps obtaining in-Warp authenticated-user grants:
   - Mitigation: require an app-issued execution-context proof for Warp-terminal-only grants, do not trust caller-declared labels or plain environment variables as sole authority, and keep external authenticated-user grants behind a separate default-off permission.
 - Logged-out requests touching user-authenticated data:

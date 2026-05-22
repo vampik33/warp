@@ -173,6 +173,7 @@ Every action definition must include:
 - a risk tier;
 - whether a true logged-in Warp user is required;
 - whether the action may run from external clients, verified Warp-terminal clients, or both;
+- whether inside-Warp and outside-Warp scripting settings can enable the action;
 - the required local-control permission category;
 - any target-scope restrictions.
 By default, new actions require an authenticated Warp user. An action may be marked logged-out-safe only after deliberate review confirms it does not touch Warp Drive, AI conversation traces, synced settings, team/account data, cloud-backed user state, terminal content, or other user-sensitive data.
@@ -182,7 +183,7 @@ Every action in the catalog belongs to exactly one of the following tiers, from 
    - Instance discovery and health: `instance list`, `app active`, `app version`, `app ping`.
    - Layout enumeration: `window list`, `tab list`, `pane list`, `session list`.
    - Appearance reads that return local configuration values but not user data: `theme list`, selected `setting get` actions for logged-out-safe local settings.
-   These are the primary default actions for external clients.
+   These are the primary initial actions for external clients after outside-Warp control is explicitly enabled.
 2. **Read-only / terminal data.** Actions that return content from terminal sessions, command history, pane output buffers, input editor state, session replay, or terminal-derived traces.
    - Reading pane output or scrollback content.
    - Reading the current input buffer contents.
@@ -209,11 +210,16 @@ The allowlist must clearly indicate `requires_authenticated_user` for every acti
 If an authenticated-user action is invoked while the selected app has no logged-in user, the CLI reports a structured authenticated-user error. It must not silently return partial logged-out data as success.
 ### Execution context policy
 `warpctrl` should distinguish verified invocations from inside Warp-managed terminal sessions from external invocations.
-- **External invocation:** a `warpctrl` process started outside Warp's terminal. By default, it can receive only the smaller logged-out-safe local action set that does not touch user-authenticated data. Higher tiers require explicit local-control settings or approvals.
-- **Verified Warp-terminal invocation:** a `warpctrl` process started inside a Warp-managed terminal session and able to present an app-issued execution-context proof. When the selected app has a logged-in Warp user, this context can receive authenticated-user grants if the user enabled that permission.
+- **Verified Warp-terminal invocation:** a `warpctrl` process started inside a Warp-managed terminal session and able to present an app-issued execution-context proof. The top-level setting for this context should default to on. When the selected app has a logged-in Warp user, this context can receive authenticated-user grants if the user's Scripting permissions allow that grant.
+- **External invocation:** a `warpctrl` process started outside Warp's terminal, such as from another terminal app, launch agent, IDE, or background script. The top-level setting for this context must default to off. When disabled, external invocations receive no local-control credentials, including logged-out-safe metadata credentials.
 - The app must not trust a caller-declared label. Environment variables may help discover the context, but the broker must verify a session-bound capability or equivalent proof before issuing in-Warp-only grants.
+### Settings surface
+Warp should add a new top-level Settings pane page named **Scripting**. This page should own settings for local scripting and automation surfaces, including Warp control. For Warp control, it should include two top-level toggles:
+- **Allow Warp control from inside Warp:** default on. Controls `warpctrl` invocations from verified Warp-managed terminal sessions.
+- **Allow Warp control from outside Warp:** default off. Controls `warpctrl` invocations from external terminals, scripts, IDEs, launch agents, and other same-user processes.
+The Scripting page should explain that inside-Warp control is scoped to commands launched from Warp-managed terminals, while outside-Warp control allows other local apps and scripts to talk to Warp's control plane. Disabling either top-level toggle should invalidate credentials for that invocation context.
 ### Granular local-control permissions
-The product settings surface should expose granular permissions under the default-off local-control setting. Recommended controls:
+The Scripting settings page should expose granular permissions beneath the inside-Warp and outside-Warp toggles. Recommended controls:
 - Allow local read-only metadata.
 - Allow terminal data reads.
 - Allow non-destructive local mutations.
