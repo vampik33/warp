@@ -116,18 +116,13 @@ pub struct TabRenameParams {
     pub title: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TabCloseScope {
+    #[default]
     Target,
     Others,
     Right,
-}
-
-impl Default for TabCloseScope {
-    fn default() -> Self {
-        Self::Target
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
