@@ -4,15 +4,16 @@ use ::local_control::protocol::{
     Action, AppFocusParams, AppSurfaceParams, AppearanceFontSizeParams, AppearanceSetParams,
     AppearanceZoomParams, BlockGetParams, BlockListParams, BlockTarget, ControlResponse,
     DriveCreateParams, DriveDeleteParams, DriveGetParams, DriveGetResult, DriveInsertParams,
-    DriveListParams, DriveListResult, DriveObjectType, DriveRunParams, DriveUpdateParams,
-    FileDeleteParams, FileOpenParams, FileTarget, FileWriteParams, HorizontalDirection,
-    InputClearParams, InputInsertParams, InputMode, InputModeSetParams, InputReplaceParams,
-    InputRunParams, PaneCloseParams, PaneDirection, PaneFocusParams, PaneMaximizeParams,
-    PaneNavigateParams, PaneResizeParams, PaneSelector, PaneSplitParams, PaneTarget,
-    SessionSelector, SessionTarget, SettingSetParams, SettingToggleParams, SizeAdjustment,
-    TabActivateParams, TabActivationTarget, TabCloseParams, TabCloseScope, TabMoveParams,
-    TabRenameParams, TabSelector, TabTarget, TargetSelector, ThemeSetParams, WindowCloseParams,
-    WindowCreateParams, WindowFocusParams, WindowSelector, WindowTarget,
+    DriveListParams, DriveListResult, DriveMutationResult, DriveObjectSelector, DriveObjectType,
+    DriveRunParams, DriveTarget, DriveUpdateParams, FileDeleteParams, FileOpenParams, FileTarget,
+    FileWriteParams, HorizontalDirection, InputClearParams, InputInsertParams, InputMode,
+    InputModeSetParams, InputReplaceParams, InputRunParams, PaneCloseParams, PaneDirection,
+    PaneFocusParams, PaneMaximizeParams, PaneNavigateParams, PaneResizeParams, PaneSelector,
+    PaneSplitParams, PaneTarget, SessionSelector, SessionTarget, SettingSetParams,
+    SettingToggleParams, SizeAdjustment, TabActivateParams, TabActivationTarget, TabCloseParams,
+    TabCloseScope, TabMoveParams, TabRenameParams, TabSelector, TabTarget, TargetSelector,
+    ThemeSetParams, WindowCloseParams, WindowCreateParams, WindowFocusParams, WindowSelector,
+    WindowTarget,
 };
 use ::local_control::{
     ErrorCode, InstanceId, InvocationContext, PermissionCategory, RequestEnvelope,
@@ -37,6 +38,9 @@ use crate::auth::AuthStateProvider;
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::cloud_object::Owner;
 use crate::drive::folders::{CloudFolder, CloudFolderModel};
+use crate::env_vars::{
+    CloudEnvVarCollection, CloudEnvVarCollectionModel, EnvVar, EnvVarCollection,
+};
 use crate::notebooks::{CloudNotebook, CloudNotebookModel};
 use crate::server::ids::{ClientId, SyncId};
 use crate::settings::{
@@ -165,6 +169,29 @@ fn create_notebook(app: &mut App, title: &str, data: &str) -> String {
     })
 }
 
+fn create_environment(app: &mut App, title: &str) -> String {
+    CloudModel::handle(app).update(app, |cloud_model, ctx| {
+        let client_id = ClientId::new();
+        let sync_id = SyncId::ClientId(client_id);
+        let uid = sync_id.uid();
+        cloud_model.create_object(
+            sync_id,
+            CloudEnvVarCollection::new_local(
+                CloudEnvVarCollectionModel::new(EnvVarCollection::new(
+                    Some(title.to_owned()),
+                    None,
+                    vec![EnvVar::new("PORT".to_owned(), "4000".to_owned(), None)],
+                )),
+                Owner::mock_current_user(),
+                None,
+                client_id,
+            ),
+            ctx,
+        );
+        uid
+    })
+}
+
 fn create_folder(app: &mut App, name: &str) -> String {
     CloudModel::handle(app).update(app, |cloud_model, ctx| {
         let client_id = ClientId::new();
@@ -215,6 +242,13 @@ fn response_error_code(response: ::local_control::ResponseEnvelope) -> ErrorCode
         panic!("expected error response");
     };
     error.code
+}
+
+fn response_drive_mutation(response: ::local_control::ResponseEnvelope) -> DriveMutationResult {
+    let ControlResponse::Ok { data } = response.response else {
+        panic!("expected ok response");
+    };
+    serde_json::from_value(data).expect("drive mutation result decodes")
 }
 
 fn with_local_control_bridge(
@@ -327,6 +361,11 @@ fn capabilities_advertises_only_first_slice_core_actions() {
             ActionKind::ProjectList,
             ActionKind::DriveList,
             ActionKind::DriveGet,
+            ActionKind::DriveCreate,
+            ActionKind::DriveUpdate,
+            ActionKind::DriveDelete,
+            ActionKind::DriveRun,
+            ActionKind::DriveInsert,
         ]
     );
 }
@@ -1487,6 +1526,319 @@ fn drive_get_rejects_unsupported_or_mismatched_objects() {
             assert_eq!(
                 response_error_code(response),
                 ErrorCode::TargetStateConflict
+            );
+        });
+    })
+}
+
+#[test]
+fn drive_mutations_require_true_logged_in_user() {
+    let _flag = FeatureFlag::WarpControlCli.override_enabled(true);
+    App::test((), |mut app| async move {
+        initialize_drive_app(&mut app, false);
+        let request = RequestEnvelope::new(
+            Action::with_params(
+                ActionKind::DriveCreate,
+                DriveCreateParams {
+                    object_type: DriveObjectType::Workflow,
+                    name: "build".to_owned(),
+                    content: serde_json::json!({ "command": "cargo check" }),
+                },
+            )
+            .expect("drive.create params serialize"),
+        );
+        LocalControlBridge::handle(&app).update(&mut app, |bridge, ctx| {
+            let response = bridge.handle_request(
+                request,
+                spoofed_authenticated_grant(ActionKind::DriveCreate),
+                ctx,
+            );
+            assert_eq!(
+                response_error_code(response),
+                ErrorCode::AuthenticatedUserUnavailable
+            );
+        });
+    })
+}
+
+#[test]
+fn drive_mutations_require_underlying_data_mutation_permission() {
+    let _flag = FeatureFlag::WarpControlCli.override_enabled(true);
+    App::test((), |mut app| async move {
+        initialize_drive_app(&mut app, true);
+        let request = RequestEnvelope::new(
+            Action::with_params(
+                ActionKind::DriveCreate,
+                DriveCreateParams {
+                    object_type: DriveObjectType::Notebook,
+                    name: "notes".to_owned(),
+                    content: serde_json::json!({ "data": "# Notes" }),
+                },
+            )
+            .expect("drive.create params serialize"),
+        );
+        LocalControlBridge::handle(&app).update(&mut app, |bridge, ctx| {
+            let response =
+                bridge.handle_request(request, authenticated_grant(ActionKind::DriveGet, ctx), ctx);
+            assert_eq!(
+                response_error_code(response),
+                ErrorCode::InsufficientPermissions
+            );
+        });
+    })
+}
+
+#[test]
+fn drive_mutations_reject_unsupported_targets_and_objects() {
+    let _flag = FeatureFlag::WarpControlCli.override_enabled(true);
+    App::test((), |mut app| async move {
+        initialize_drive_app(&mut app, true);
+        let folder_id = create_folder(&mut app, "folder");
+        let notebook_id = create_notebook(&mut app, "notes", "# Notes");
+        let name_target_request = {
+            let mut request = RequestEnvelope::new(
+                Action::with_params(
+                    ActionKind::DriveCreate,
+                    DriveCreateParams {
+                        object_type: DriveObjectType::Workflow,
+                        name: "build".to_owned(),
+                        content: serde_json::json!({ "command": "cargo check" }),
+                    },
+                )
+                .expect("drive.create params serialize"),
+            );
+            request.target = TargetSelector {
+                drive: Some(DriveTarget::Name {
+                    object_type: DriveObjectType::Workflow,
+                    name: "build".to_owned(),
+                }),
+                ..TargetSelector::default()
+            };
+            request
+        };
+        let mismatched_target_request = {
+            let mut request = RequestEnvelope::new(
+                Action::with_params(
+                    ActionKind::DriveUpdate,
+                    DriveUpdateParams {
+                        object_type: DriveObjectType::Notebook,
+                        id: notebook_id.clone(),
+                        content: serde_json::json!({ "data": "updated" }),
+                    },
+                )
+                .expect("drive.update params serialize"),
+            );
+            request.target = TargetSelector {
+                drive: Some(DriveTarget::Id {
+                    object_type: DriveObjectType::Workflow,
+                    id: DriveObjectSelector(notebook_id),
+                }),
+                ..TargetSelector::default()
+            };
+            request
+        };
+        let unsupported_object_request = RequestEnvelope::new(
+            Action::with_params(
+                ActionKind::DriveDelete,
+                DriveDeleteParams {
+                    object_type: DriveObjectType::Workflow,
+                    id: folder_id,
+                },
+            )
+            .expect("drive.delete params serialize"),
+        );
+        LocalControlBridge::handle(&app).update(&mut app, |bridge, ctx| {
+            let response = bridge.handle_request(
+                name_target_request,
+                authenticated_grant(ActionKind::DriveCreate, ctx),
+                ctx,
+            );
+            assert_eq!(response_error_code(response), ErrorCode::UnsupportedAction);
+
+            let response = bridge.handle_request(
+                mismatched_target_request,
+                authenticated_grant(ActionKind::DriveUpdate, ctx),
+                ctx,
+            );
+            assert_eq!(
+                response_error_code(response),
+                ErrorCode::TargetStateConflict
+            );
+
+            let response = bridge.handle_request(
+                unsupported_object_request,
+                authenticated_grant(ActionKind::DriveDelete, ctx),
+                ctx,
+            );
+            assert_eq!(response_error_code(response), ErrorCode::UnsupportedAction);
+        });
+    })
+}
+
+#[test]
+fn drive_create_returns_safe_success_for_allowlisted_object_types() {
+    let _flag = FeatureFlag::WarpControlCli.override_enabled(true);
+    App::test((), |mut app| async move {
+        initialize_drive_app(&mut app, true);
+        LocalControlBridge::handle(&app).update(&mut app, |bridge, ctx| {
+            let workflow = response_drive_mutation(
+                bridge.handle_request(
+                    RequestEnvelope::new(
+                        Action::with_params(
+                            ActionKind::DriveCreate,
+                            DriveCreateParams {
+                                object_type: DriveObjectType::Workflow,
+                                name: "build".to_owned(),
+                                content: serde_json::json!({ "command": "cargo check" }),
+                            },
+                        )
+                        .expect("drive.create workflow params serialize"),
+                    ),
+                    authenticated_grant(ActionKind::DriveCreate, ctx),
+                    ctx,
+                ),
+            );
+            assert_eq!(workflow.object.object_type, DriveObjectType::Workflow);
+            assert_eq!(workflow.object.name, "build");
+
+            let notebook = response_drive_mutation(
+                bridge.handle_request(
+                    RequestEnvelope::new(
+                        Action::with_params(
+                            ActionKind::DriveCreate,
+                            DriveCreateParams {
+                                object_type: DriveObjectType::Notebook,
+                                name: "notes".to_owned(),
+                                content: serde_json::json!({ "data": "# Notes" }),
+                            },
+                        )
+                        .expect("drive.create notebook params serialize"),
+                    ),
+                    authenticated_grant(ActionKind::DriveCreate, ctx),
+                    ctx,
+                ),
+            );
+            assert_eq!(notebook.object.object_type, DriveObjectType::Notebook);
+            assert_eq!(notebook.object.name, "notes");
+
+            let environment = response_drive_mutation(
+                bridge.handle_request(
+                    RequestEnvelope::new(
+                        Action::with_params(
+                            ActionKind::DriveCreate,
+                            DriveCreateParams {
+                                object_type: DriveObjectType::Environment,
+                                name: "dev".to_owned(),
+                                content: serde_json::json!({
+                                    "vars": [{ "name": "PORT", "value": { "Constant": "4000" } }]
+                                }),
+                            },
+                        )
+                        .expect("drive.create environment params serialize"),
+                    ),
+                    authenticated_grant(ActionKind::DriveCreate, ctx),
+                    ctx,
+                ),
+            );
+            assert_eq!(environment.object.object_type, DriveObjectType::Environment);
+            assert_eq!(environment.object.name, "dev");
+        });
+    })
+}
+
+#[test]
+fn drive_update_and_delete_return_safe_success() {
+    let _flag = FeatureFlag::WarpControlCli.override_enabled(true);
+    App::test((), |mut app| async move {
+        initialize_drive_app(&mut app, true);
+        let notebook_id = create_notebook(&mut app, "notes", "# Notes");
+        let environment_id = create_environment(&mut app, "dev");
+        LocalControlBridge::handle(&app).update(&mut app, |bridge, ctx| {
+            let update = response_drive_mutation(bridge.handle_request(
+                RequestEnvelope::new(
+                    Action::with_params(
+                        ActionKind::DriveUpdate,
+                        DriveUpdateParams {
+                            object_type: DriveObjectType::Notebook,
+                            id: notebook_id.clone(),
+                            content: serde_json::json!({ "title": "updated", "data": "changed" }),
+                        },
+                    )
+                    .expect("drive.update params serialize"),
+                ),
+                authenticated_grant(ActionKind::DriveUpdate, ctx),
+                ctx,
+            ));
+            assert_eq!(update.object.name, "updated");
+
+            let delete = response_drive_mutation(
+                bridge.handle_request(
+                    RequestEnvelope::new(
+                        Action::with_params(
+                            ActionKind::DriveDelete,
+                            DriveDeleteParams {
+                                object_type: DriveObjectType::Environment,
+                                id: environment_id.clone(),
+                            },
+                        )
+                        .expect("drive.delete params serialize"),
+                    ),
+                    authenticated_grant(ActionKind::DriveDelete, ctx),
+                    ctx,
+                ),
+            );
+            assert_eq!(delete.object.id, environment_id);
+            assert_eq!(delete.object.object_type, DriveObjectType::Environment);
+        });
+    })
+}
+
+#[test]
+fn drive_run_and_insert_fail_closed_without_policy_approval() {
+    let _flag = FeatureFlag::WarpControlCli.override_enabled(true);
+    App::test((), |mut app| async move {
+        initialize_drive_app(&mut app, true);
+        let workflow_id = create_workflow(&mut app, "build", "cargo check");
+        let notebook_id = create_notebook(&mut app, "notes", "# Notes");
+        let run_request = RequestEnvelope::new(
+            Action::with_params(
+                ActionKind::DriveRun,
+                DriveRunParams {
+                    object_type: DriveObjectType::Workflow,
+                    id: workflow_id,
+                },
+            )
+            .expect("drive.run params serialize"),
+        );
+        let insert_request = RequestEnvelope::new(
+            Action::with_params(
+                ActionKind::DriveInsert,
+                DriveInsertParams {
+                    object_type: DriveObjectType::Notebook,
+                    id: notebook_id,
+                },
+            )
+            .expect("drive.insert params serialize"),
+        );
+        LocalControlBridge::handle(&app).update(&mut app, |bridge, ctx| {
+            let response = bridge.handle_request(
+                run_request,
+                authenticated_grant(ActionKind::DriveRun, ctx),
+                ctx,
+            );
+            assert_eq!(
+                response_error_code(response),
+                ErrorCode::ExecutionContextNotAllowed
+            );
+
+            let response = bridge.handle_request(
+                insert_request,
+                authenticated_grant(ActionKind::DriveInsert, ctx),
+                ctx,
+            );
+            assert_eq!(
+                response_error_code(response),
+                ErrorCode::ExecutionContextNotAllowed
             );
         });
     })

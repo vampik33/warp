@@ -345,6 +345,20 @@ fn mutating_contract_actions_are_allowlisted_stubs_except_tab_create() {
         ActionKind::FileOpen,
         ActionKind::FileWrite,
         ActionKind::FileDelete,
+    ] {
+        let metadata = action.metadata();
+        assert_eq!(
+            metadata.implementation_status,
+            ActionImplementationStatus::Stub
+        );
+        assert!(metadata.requires_authenticated_user);
+        assert!(metadata.allowed_invocation_contexts.is_empty());
+    }
+}
+
+#[test]
+fn drive_mutations_are_implemented_underlying_data_mutations() {
+    for action in [
         ActionKind::DriveCreate,
         ActionKind::DriveUpdate,
         ActionKind::DriveDelete,
@@ -354,10 +368,25 @@ fn mutating_contract_actions_are_allowlisted_stubs_except_tab_create() {
         let metadata = action.metadata();
         assert_eq!(
             metadata.implementation_status,
-            ActionImplementationStatus::Stub
+            ActionImplementationStatus::Implemented
         );
-        assert!(metadata.requires_authenticated_user);
-        assert!(metadata.allowed_invocation_contexts.is_empty());
+        assert_eq!(metadata.risk_tier, RiskTier::MutatingDestructiveOrExecution);
+        assert_eq!(
+            metadata.state_data_category,
+            StateDataCategory::UnderlyingDataMutation
+        );
+        assert_eq!(
+            metadata.permission_category,
+            PermissionCategory::MutateUnderlyingData
+        );
+        assert!(metadata.authenticated_user.required);
+        assert_eq!(
+            metadata.allowed_invocation_contexts,
+            vec![
+                InvocationContext::InsideWarp,
+                InvocationContext::OutsideWarp
+            ]
+        );
     }
 }
 
