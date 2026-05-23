@@ -213,7 +213,7 @@ All commands that address a running app target accept the same selector flags wh
 - `--output-format <pretty|json|ndjson|text>` controls output shape and remains globally available.
 Within a selector family, specifying more than one form is invalid. For example, `--tab-id` conflicts with `--tab-index`, `--tab-title`, and `--tab`. Omitted lower-level selectors use active defaults only when that active target is unambiguous. Explicit IDs must resolve exactly or fail with `stale_target`; index/title/name/path selectors that match zero targets fail with `missing_target`, and selectors that match multiple targets fail with `ambiguous_target`.
 ### Read-only command set
-The read-only branch `zach/warp-cli-readonly` should implement the following commands before mutating catalog expansion begins. Read-only does not mean one permission: metadata reads and underlying data reads are separate grant categories.
+The read-only branches should implement the following commands before mutating catalog expansion begins: `zach/warp-cli-readonly-metadata` owns structural metadata reads, and `zach/warp-cli-readonly-data-settings` owns underlying-data reads plus read-only settings/appearance/docs. Read-only does not mean one permission: metadata reads and underlying data reads are separate grant categories.
 Metadata and capability reads:
 - `warpctrl instance list`
 - `warpctrl instance inspect [--instance <id>|--pid <pid>]`
@@ -255,7 +255,7 @@ Authenticated read-only Warp Drive metadata and data reads, enabled only when th
 - `warpctrl drive list --type <workflow|notebook|env-var-collection|prompt|folder|ai-fact|mcp-server|space|trash> [selectors]`
 - `warpctrl drive inspect <id> [selectors]`
 ### Mutating command set
-The stacked branch `zach/warp-cli-read-write` should build on `zach/warp-cli-readonly` and implement the following mutating commands. Mutating commands are split by what they mutate: app-state, metadata/configuration, or underlying data. Underlying data mutations require a separate and stronger permission than app-state or metadata/configuration mutations.
+The mutating branches should build on the read-only stack and implement the following mutating commands: `zach/warp-cli-mutating-layout` owns app/window/tab/pane layout mutations, and `zach/warp-cli-mutating-input-settings-surfaces` owns the remaining input/session/settings/surface mutations. Mutating commands are split by what they mutate: app-state, metadata/configuration, or underlying data. Underlying data mutations require a separate and stronger permission than app-state or metadata/configuration mutations.
 App-state mutations for app, window, and surfaces:
 - `warpctrl app focus [selectors]`
 - `warpctrl window create [--shell <name>] [selectors]`
@@ -345,12 +345,13 @@ These are underlying-data mutations because they can execute code, trigger exter
 ### Excluded from the public command surface
 The command surface must continue to exclude debug-only, crash-only, auth-token, heap-dump, and arbitrary internal dispatch actions even when those actions are available in command palette or keybinding registries. Examples that remain excluded are app crash/panic helpers, access-token copy helpers, heap profile dumps, debug reset actions, raw view-tree debugging, and broad internal action-by-string execution.
 ## Branch stacking and delivery model
-The Warp Control CLI work should ship as a raw-git branch stack so specs, core scaffolding, read-only expansion, and mutating expansion remain reviewable independently:
-- `zach/warp-cli-specs` is the spec-only branch. It owns `specs/warp-control-cli/PRODUCT.md`, `TECH.md`, `SECURITY.md`, and supporting docs, and should not contain implementation changes.
-- `zach/warp-cli` stacks on the specs branch and owns the first implementation slice: shared protocol, discovery/auth scaffolding, Settings > Scripting, local-control bridge/server, standalone `warpctrl` binary, packaging hooks, and the smallest safe end-to-end action.
-- `zach/warp-cli-readonly` stacks on `zach/warp-cli` and fills in the read-only command set, including structural metadata reads and separately gated underlying-data reads such as terminal block output.
-- `zach/warp-cli-read-write` stacks on `zach/warp-cli-readonly` and fills in approved mutating command families while preserving the initial prohibition on terminal command execution and agent-prompt submission.
-Spec changes originate on `zach/warp-cli-specs` and are propagated upward through the stack with raw git so all implementation branches reflect the same product/security contract. Graphite is not part of this stack. If a lower branch merges first, higher branches should rebase onto the merged successor while preserving the approved spec content.
+The Warp Control CLI work should ship as a raw-git branch stack so the combined specs/foundation slice, read-only expansion, and mutating expansion remain reviewable independently:
+- `zach/warp-cli-core-foundation` is the bottom review branch and targets `master`. It owns `specs/warp-control-cli/PRODUCT.md`, `TECH.md`, `SECURITY.md`, and supporting docs alongside the first implementation slice: shared protocol, discovery/auth scaffolding, Settings > Scripting, local-control bridge/server, standalone `warpctrl` binary, packaging hooks, and the smallest safe end-to-end action.
+- `zach/warp-cli-readonly-metadata` stacks on `zach/warp-cli-core-foundation` and implements structural metadata reads, including instance/app health, active-chain, windows, tabs, panes, sessions, and action metadata.
+- `zach/warp-cli-readonly-data-settings` stacks on `zach/warp-cli-readonly-metadata` and fills in underlying-data reads plus read-only settings/appearance/docs, including terminal block output, input-buffer reads, history reads, and allowlisted settings metadata.
+- `zach/warp-cli-mutating-layout` stacks on `zach/warp-cli-readonly-data-settings` and implements app/window/tab/pane layout mutations.
+- `zach/warp-cli-mutating-input-settings-surfaces` stacks on `zach/warp-cli-mutating-layout` and fills in approved input/session/settings/surface mutating command families while preserving the initial prohibition on terminal command execution and agent-prompt submission.
+The previous `zach/warp-cli-specs` branch is retained only as migration-source/history material. New spec changes originate on `zach/warp-cli-core-foundation` and are propagated upward through the stack with raw git so all higher implementation branches reflect the same product/security contract. Graphite is not part of this stack. If a lower branch merges first, higher branches should rebase onto the merged successor while preserving the approved spec content.
 ## Built-in Warp Agent skill
 Warp should include a built-in Agent skill for `warpctrl`, analogous to the bundled `oz-platform` skill. The skill should teach Warp Agent when to use `warpctrl`, how to discover and target running instances, how to prefer read-only commands before mutating commands, how to request explicit user approval for underlying data mutations, and how to interpret structured errors. The skill should document the stable command hierarchy above, include concise recipes for common automation tasks, and avoid instructing agents to bypass the CLI by calling local-control HTTP endpoints directly.
 ## CLI implementation and documentation conventions
