@@ -1,14 +1,11 @@
 use std::io::Write as _;
 use std::process::ExitCode;
 
-use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::aot::{Shell, generate};
-use local_control::protocol::{
-    Action, ActionKind, ActionMetadata, ControlError, ErrorCode, RequestEnvelope,
-};
+use local_control::protocol::{Action, ActionKind, ActionMetadata, ControlError, ErrorCode};
 use local_control::selection::{InstanceSelector, select_instance};
 use serde::Serialize;
-use serde_json::json;
 
 use crate::agent::OutputFormat;
 
@@ -66,10 +63,45 @@ pub enum ControlCommand {
     /// Inspect a selected local Warp app.
     #[command(subcommand)]
     App(AppCommand),
-
+    /// Inspect the local-control action catalog.
+    #[command(subcommand)]
+    Action(ActionCommand),
+    /// Inspect local Warp windows.
+    #[command(subcommand)]
+    Window(WindowCommand),
     /// Control local Warp tabs.
     #[command(subcommand)]
     Tab(TabCommand),
+    /// Inspect local Warp panes.
+    #[command(subcommand)]
+    Pane(PaneCommand),
+    /// Inspect local Warp sessions.
+    #[command(subcommand)]
+    Session(SessionCommand),
+    /// Inspect terminal blocks.
+    #[command(subcommand)]
+    Block(BlockCommand),
+    /// Inspect terminal input state.
+    #[command(subcommand)]
+    Input(InputCommand),
+    /// Inspect terminal command history.
+    #[command(subcommand)]
+    History(HistoryCommand),
+    /// Inspect Warp themes.
+    #[command(subcommand)]
+    Theme(ThemeCommand),
+    /// Inspect appearance state.
+    #[command(subcommand)]
+    Appearance(AppearanceCommand),
+    /// Inspect allowlisted settings.
+    #[command(subcommand)]
+    Setting(SettingCommand),
+    /// Inspect files currently surfaced in Warp.
+    #[command(subcommand)]
+    File(FileCommand),
+    /// Inspect Warp Drive objects.
+    #[command(subcommand)]
+    Drive(DriveCommand),
 
     /// Generate shell completions for your shell to stdout.
     ///
@@ -104,15 +136,100 @@ pub enum InstanceCommand {
 pub enum AppCommand {
     /// Check that the selected local Warp app responds.
     Ping(TargetArgs),
-
     /// Print protocol and app version metadata for the selected local Warp app.
     Version(TargetArgs),
+    /// Print the active window/tab/pane/session chain.
+    Active(TargetArgs),
+    /// Print app and protocol metadata.
+    Inspect(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum ActionCommand {
+    /// List allowlisted local-control actions.
+    List(TargetArgs),
+    /// Inspect one allowlisted local-control action.
+    Get(ActionGetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum WindowCommand {
+    /// List windows in the selected local Warp app.
+    List(TargetArgs),
 }
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum TabCommand {
+    /// List tabs in the selected local Warp app.
+    List(TargetArgs),
     /// Create a new terminal tab in the active window.
     Create(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum PaneCommand {
+    /// List panes in the selected local Warp app.
+    List(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum SessionCommand {
+    /// List sessions in the selected local Warp app.
+    List(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum BlockCommand {
+    /// List terminal blocks.
+    List(LimitTargetArgs),
+    /// Read one terminal block.
+    Get(BlockGetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum InputCommand {
+    /// Read the current input buffer.
+    Get(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum HistoryCommand {
+    /// List command history entries.
+    List(LimitTargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum ThemeCommand {
+    /// List available themes.
+    List(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum AppearanceCommand {
+    /// Read appearance state.
+    Get(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum SettingCommand {
+    /// List allowlisted settings.
+    List(TargetArgs),
+    /// Read one allowlisted setting.
+    Get(SettingGetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum FileCommand {
+    /// List files currently surfaced in Warp.
+    List(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum DriveCommand {
+    /// List Warp Drive objects.
+    List(DriveListArgs),
+    /// Read one Warp Drive object.
+    Get(DriveGetArgs),
 }
 
 #[derive(Debug, Clone, Args, Default)]
@@ -124,6 +241,85 @@ pub struct TargetArgs {
     /// Target a specific local Warp process id.
     #[arg(long = "pid", conflicts_with = "instance")]
     pub pid: Option<u32>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ActionGetArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    /// Action name, such as tab.create or window.list.
+    pub action: String,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct LimitTargetArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    /// Maximum number of items to return.
+    #[arg(long = "limit")]
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct BlockGetArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    /// Opaque block id returned by block list.
+    pub block_id: String,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct SettingGetArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    /// Allowlisted setting key.
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DriveListArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    /// Restrict results to one Drive object type.
+    #[arg(long = "type")]
+    pub object_type: Option<DriveObjectTypeArg>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DriveGetArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    /// Warp Drive object type.
+    #[arg(long = "type")]
+    pub object_type: DriveObjectTypeArg,
+
+    /// Opaque Warp Drive object id.
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum DriveObjectTypeArg {
+    Workflow,
+    Notebook,
+    Environment,
+    Prompt,
+}
+
+impl From<DriveObjectTypeArg> for local_control::DriveObjectType {
+    fn from(value: DriveObjectTypeArg) -> Self {
+        match value {
+            DriveObjectTypeArg::Workflow => Self::Workflow,
+            DriveObjectTypeArg::Notebook => Self::Notebook,
+            DriveObjectTypeArg::Environment => Self::Environment,
+            DriveObjectTypeArg::Prompt => Self::Prompt,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -182,7 +378,19 @@ fn run_inner(args: ControlArgs) -> Result<(), ControlError> {
     match args.command {
         ControlCommand::Instance(command) => run_instance_command(command, output_format),
         ControlCommand::App(command) => run_app_command(command, output_format),
+        ControlCommand::Action(command) => run_action_command(command, output_format),
+        ControlCommand::Window(command) => run_window_command(command, output_format),
         ControlCommand::Tab(command) => run_tab_command(command, output_format),
+        ControlCommand::Pane(command) => run_pane_command(command, output_format),
+        ControlCommand::Session(command) => run_session_command(command, output_format),
+        ControlCommand::Block(command) => run_block_command(command, output_format),
+        ControlCommand::Input(command) => run_input_command(command, output_format),
+        ControlCommand::History(command) => run_history_command(command, output_format),
+        ControlCommand::Theme(command) => run_theme_command(command, output_format),
+        ControlCommand::Appearance(command) => run_appearance_command(command, output_format),
+        ControlCommand::Setting(command) => run_setting_command(command, output_format),
+        ControlCommand::File(command) => run_file_command(command, output_format),
+        ControlCommand::Drive(command) => run_drive_command(command, output_format),
         ControlCommand::Completions { shell } => generate_completions_to_stdout(shell),
     }
 }
@@ -226,33 +434,255 @@ fn run_instance_command(
 
 fn run_app_command(command: AppCommand, output_format: OutputFormat) -> Result<(), ControlError> {
     match command {
-        AppCommand::Ping(args) => run_action(args, ActionKind::AppPing, json!({}), output_format),
-        AppCommand::Version(args) => {
-            run_action(args, ActionKind::AppVersion, json!({}), output_format)
-        }
-    }
-}
-fn run_tab_command(command: TabCommand, output_format: OutputFormat) -> Result<(), ControlError> {
-    match command {
-        TabCommand::Create(args) => {
-            run_action(args, ActionKind::TabCreate, json!({}), output_format)
-        }
+        AppCommand::Ping(args) => run_action_with_params(
+            args,
+            ActionKind::AppPing,
+            local_control::EmptyParams {},
+            output_format,
+        ),
+        AppCommand::Version(args) => run_action_with_params(
+            args,
+            ActionKind::AppVersion,
+            local_control::EmptyParams {},
+            output_format,
+        ),
+        AppCommand::Active(args) => run_action_with_params(
+            args,
+            ActionKind::AppActive,
+            local_control::AppActiveParams::default(),
+            output_format,
+        ),
+        AppCommand::Inspect(args) => run_action_with_params(
+            args,
+            ActionKind::AppInspect,
+            local_control::AppInspectParams::default(),
+            output_format,
+        ),
     }
 }
 
-fn run_action(
+fn run_action_command(
+    command: ActionCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        ActionCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::ActionList,
+            local_control::ActionListParams::default(),
+            output_format,
+        ),
+        ActionCommand::Get(args) => run_action_with_params(
+            args.target,
+            ActionKind::ActionGet,
+            local_control::ActionGetParams {
+                action: args.action,
+            },
+            output_format,
+        ),
+    }
+}
+
+fn run_window_command(
+    command: WindowCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        WindowCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::WindowList,
+            local_control::EmptyParams {},
+            output_format,
+        ),
+    }
+}
+
+fn run_tab_command(command: TabCommand, output_format: OutputFormat) -> Result<(), ControlError> {
+    match command {
+        TabCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::TabList,
+            local_control::EmptyParams {},
+            output_format,
+        ),
+        TabCommand::Create(args) => run_action_with_params(
+            args,
+            ActionKind::TabCreate,
+            local_control::EmptyParams {},
+            output_format,
+        ),
+    }
+}
+
+fn run_pane_command(command: PaneCommand, output_format: OutputFormat) -> Result<(), ControlError> {
+    match command {
+        PaneCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::PaneList,
+            local_control::EmptyParams {},
+            output_format,
+        ),
+    }
+}
+
+fn run_session_command(
+    command: SessionCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        SessionCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::SessionList,
+            local_control::EmptyParams {},
+            output_format,
+        ),
+    }
+}
+
+fn run_block_command(
+    command: BlockCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        BlockCommand::List(args) => run_action_with_params(
+            args.target,
+            ActionKind::BlockList,
+            local_control::BlockListParams { limit: args.limit },
+            output_format,
+        ),
+        BlockCommand::Get(args) => run_action_with_params(
+            args.target,
+            ActionKind::BlockGet,
+            local_control::BlockGetParams {
+                block_id: args.block_id,
+            },
+            output_format,
+        ),
+    }
+}
+
+fn run_input_command(
+    command: InputCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        InputCommand::Get(args) => run_action_with_params(
+            args,
+            ActionKind::InputGet,
+            local_control::InputGetParams::default(),
+            output_format,
+        ),
+    }
+}
+
+fn run_history_command(
+    command: HistoryCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        HistoryCommand::List(args) => run_action_with_params(
+            args.target,
+            ActionKind::HistoryList,
+            local_control::HistoryListParams { limit: args.limit },
+            output_format,
+        ),
+    }
+}
+
+fn run_theme_command(
+    command: ThemeCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        ThemeCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::ThemeList,
+            local_control::EmptyParams {},
+            output_format,
+        ),
+    }
+}
+
+fn run_appearance_command(
+    command: AppearanceCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        AppearanceCommand::Get(args) => run_action_with_params(
+            args,
+            ActionKind::AppearanceGet,
+            local_control::EmptyParams {},
+            output_format,
+        ),
+    }
+}
+
+fn run_setting_command(
+    command: SettingCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        SettingCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::SettingList,
+            local_control::SettingListParams::default(),
+            output_format,
+        ),
+        SettingCommand::Get(args) => run_action_with_params(
+            args.target,
+            ActionKind::SettingGet,
+            local_control::SettingGetParams { key: args.key },
+            output_format,
+        ),
+    }
+}
+
+fn run_file_command(command: FileCommand, output_format: OutputFormat) -> Result<(), ControlError> {
+    match command {
+        FileCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::FileList,
+            local_control::FileListParams::default(),
+            output_format,
+        ),
+    }
+}
+
+fn run_drive_command(
+    command: DriveCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        DriveCommand::List(args) => run_action_with_params(
+            args.target,
+            ActionKind::DriveList,
+            local_control::DriveListParams {
+                object_type: args.object_type.map(Into::into),
+            },
+            output_format,
+        ),
+        DriveCommand::Get(args) => run_action_with_params(
+            args.target,
+            ActionKind::DriveGet,
+            local_control::DriveGetParams {
+                object_type: args.object_type.into(),
+                id: args.id,
+            },
+            output_format,
+        ),
+    }
+}
+
+fn run_action_with_params<T: Serialize>(
     args: TargetArgs,
     action: ActionKind,
-    params: serde_json::Value,
+    params: T,
     output_format: OutputFormat,
 ) -> Result<(), ControlError> {
     let records = local_control::discovery::list_instances();
     let selector = instance_selector(args);
     let instance = select_instance(&records, &selector)?;
-    let request = RequestEnvelope::new(Action {
-        kind: action,
-        params,
-    });
+    let request = local_control::RequestEnvelope::new(Action::with_params(action, params)?);
     let response = local_control::client::send_request(&instance, &request)?;
     let local_control::protocol::ControlResponse::Ok { data } = response.response else {
         return Err(ControlError::new(
@@ -328,6 +758,7 @@ fn write_json(value: &impl Serialize) -> Result<(), ControlError> {
     writeln!(&mut lock).map_err(write_error)?;
     Ok(())
 }
+
 fn write_json_line(value: &impl Serialize) -> Result<(), ControlError> {
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
@@ -335,6 +766,7 @@ fn write_json_line(value: &impl Serialize) -> Result<(), ControlError> {
     writeln!(&mut lock).map_err(write_error)?;
     Ok(())
 }
+
 fn write_error(error: impl std::error::Error) -> ControlError {
     ControlError::with_details(
         ErrorCode::Internal,

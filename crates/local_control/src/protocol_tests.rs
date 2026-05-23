@@ -9,6 +9,95 @@ fn request_envelope_serializes_stable_action_names() {
 }
 
 #[test]
+fn read_only_metadata_actions_are_logged_out_safe_metadata_reads() {
+    for action in [
+        ActionKind::AppActive,
+        ActionKind::ActionList,
+        ActionKind::WindowList,
+        ActionKind::TabList,
+        ActionKind::PaneList,
+        ActionKind::SessionList,
+        ActionKind::ThemeList,
+        ActionKind::AppearanceGet,
+        ActionKind::SettingGet,
+        ActionKind::SettingList,
+        ActionKind::FileList,
+    ] {
+        let metadata = action.metadata();
+        assert_eq!(
+            metadata.implementation_status,
+            ActionImplementationStatus::Stub
+        );
+        assert_eq!(metadata.risk_tier, RiskTier::ReadOnlyMetadata);
+        assert_eq!(
+            metadata.permission_category,
+            PermissionCategory::ReadMetadata
+        );
+        assert!(!metadata.authenticated_user.required);
+        assert_eq!(
+            metadata.allowed_invocation_contexts,
+            vec![
+                InvocationContext::InsideWarp,
+                InvocationContext::OutsideWarp
+            ]
+        );
+    }
+}
+
+#[test]
+fn terminal_data_and_drive_content_reads_use_underlying_data_permission() {
+    for action in [
+        ActionKind::BlockList,
+        ActionKind::BlockGet,
+        ActionKind::InputGet,
+        ActionKind::HistoryList,
+        ActionKind::DriveGet,
+    ] {
+        let metadata = action.metadata();
+        assert_eq!(
+            metadata.implementation_status,
+            ActionImplementationStatus::Stub
+        );
+        assert_eq!(metadata.risk_tier, RiskTier::ReadOnlyTerminalData);
+        assert_eq!(
+            metadata.state_data_category,
+            StateDataCategory::UnderlyingDataRead
+        );
+        assert_eq!(
+            metadata.permission_category,
+            PermissionCategory::ReadUnderlyingData
+        );
+        assert!(metadata.authenticated_user.required);
+    }
+}
+
+#[test]
+fn drive_list_is_authenticated_metadata_read() {
+    let metadata = ActionKind::DriveList.metadata();
+    assert_eq!(metadata.risk_tier, RiskTier::ReadOnlyMetadata);
+    assert_eq!(
+        metadata.permission_category,
+        PermissionCategory::ReadMetadata
+    );
+    assert!(metadata.authenticated_user.required);
+}
+
+#[test]
+fn typed_params_round_trip_through_action_envelope() {
+    let action = Action::with_params(
+        ActionKind::SettingGet,
+        SettingGetParams {
+            key: "appearance.theme".to_owned(),
+        },
+    )
+    .expect("setting params serialize");
+    let params = action
+        .params_as::<SettingGetParams>()
+        .expect("setting params deserialize");
+    assert_eq!(params.key, "appearance.theme");
+}
+
+#[test]
 fn response_error_serializes_machine_code() {
     let response = ResponseEnvelope::error(
         Uuid::nil(),
@@ -116,6 +205,14 @@ fn default_permissions_preserve_security_categories() {
     assert_eq!(
         ActionKind::TabList.metadata().permission_category,
         PermissionCategory::ReadMetadata
+    );
+    assert_eq!(
+        ActionKind::InputGet.metadata().permission_category,
+        PermissionCategory::ReadUnderlyingData
+    );
+    assert_eq!(
+        ActionKind::DriveGet.metadata().permission_category,
+        PermissionCategory::ReadUnderlyingData
     );
 }
 #[test]

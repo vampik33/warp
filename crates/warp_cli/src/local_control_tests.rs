@@ -46,6 +46,8 @@ fn parses_first_slice_instance_list() {
 fn parses_first_slice_app_smoke_metadata_commands() {
     assert!(ControlArgs::try_parse_from(["warpctrl", "app", "ping"]).is_ok());
     assert!(ControlArgs::try_parse_from(["warpctrl", "app", "version"]).is_ok());
+    assert!(ControlArgs::try_parse_from(["warpctrl", "app", "active"]).is_ok());
+    assert!(ControlArgs::try_parse_from(["warpctrl", "app", "inspect"]).is_ok());
 }
 
 #[test]
@@ -61,10 +63,44 @@ fn parses_completion_generation_command() {
 }
 
 #[test]
-fn rejects_future_catalog_commands_not_in_first_slice() {
-    assert!(ControlArgs::try_parse_from(["warpctrl", "window", "list"]).is_err());
-    assert!(ControlArgs::try_parse_from(["warpctrl", "tab", "list"]).is_err());
-    assert!(ControlArgs::try_parse_from(["warpctrl", "setting", "list"]).is_err());
+fn parses_read_only_contract_commands() {
+    let commands = [
+        vec!["warpctrl", "action", "list"],
+        vec!["warpctrl", "action", "get", "tab.create"],
+        vec!["warpctrl", "window", "list"],
+        vec!["warpctrl", "tab", "list"],
+        vec!["warpctrl", "pane", "list"],
+        vec!["warpctrl", "session", "list"],
+        vec!["warpctrl", "block", "list", "--limit", "10"],
+        vec!["warpctrl", "block", "get", "block_123"],
+        vec!["warpctrl", "input", "get"],
+        vec!["warpctrl", "history", "list", "--limit", "20"],
+        vec!["warpctrl", "theme", "list"],
+        vec!["warpctrl", "appearance", "get"],
+        vec!["warpctrl", "setting", "list"],
+        vec!["warpctrl", "setting", "get", "appearance.theme"],
+        vec!["warpctrl", "file", "list"],
+        vec!["warpctrl", "drive", "list", "--type", "workflow"],
+        vec![
+            "warpctrl",
+            "drive",
+            "get",
+            "--type",
+            "notebook",
+            "notebook_123",
+        ],
+    ];
+    for command in commands {
+        ControlArgs::try_parse_from(command).expect("read-only command parses");
+    }
+}
+
+#[test]
+fn rejects_mutating_commands_outside_contract_scope() {
+    assert!(ControlArgs::try_parse_from(["warpctrl", "window", "create"]).is_err());
+    assert!(ControlArgs::try_parse_from(["warpctrl", "pane", "split"]).is_err());
+    assert!(ControlArgs::try_parse_from(["warpctrl", "setting", "set"]).is_err());
+    assert!(ControlArgs::try_parse_from(["warpctrl", "input", "insert", "cargo check"]).is_err());
 }
 
 #[test]
@@ -73,6 +109,9 @@ fn generated_bash_completions_include_first_slice_commands() {
         generate_completion_string(Shell::Bash).expect("bash completions render to UTF-8");
     assert!(completions.contains("instance"));
     assert!(completions.contains("tab"));
+    assert!(completions.contains("window"));
+    assert!(completions.contains("setting"));
+    assert!(completions.contains("drive"));
     assert!(completions.contains("completions"));
 }
 

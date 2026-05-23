@@ -1,3 +1,4 @@
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -8,6 +9,271 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub enum InvocationContext {
     InsideWarp,
     OutsideWarp,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EmptyParams {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActionGetParams {
+    pub action: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActionListParams {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppActiveParams {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppInspectParams {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockListParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockGetParams {
+    pub block_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DriveObjectType {
+    Workflow,
+    Notebook,
+    Environment,
+    Prompt,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DriveListParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object_type: Option<DriveObjectType>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DriveGetParams {
+    pub object_type: DriveObjectType,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileListParams {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HistoryListParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputGetParams {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SettingGetParams {
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SettingListParams {}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ActionListResult {
+    pub actions: Vec<ActionMetadata>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ActionGetResult {
+    pub action: ActionMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActiveTargetChain {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppVersionResult {
+    pub protocol_version: u32,
+    pub channel: String,
+    pub app_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_version: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AppInspectResult {
+    pub version: AppVersionResult,
+    pub active: ActiveTargetChain,
+    pub actions: Vec<ActionMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowSummary {
+    pub window_id: String,
+    pub is_active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowListResult {
+    pub windows: Vec<WindowSummary>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TabListResult {
+    pub tabs: Vec<TabSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TabSummary {
+    pub tab_id: String,
+    pub window_id: String,
+    pub index: u32,
+    pub is_active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PaneSummary {
+    pub pane_id: String,
+    pub tab_id: String,
+    pub index: u32,
+    pub is_active: bool,
+    pub has_terminal_session: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PaneListResult {
+    pub panes: Vec<PaneSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionSummary {
+    pub session_id: String,
+    pub pane_id: String,
+    pub is_active: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionListResult {
+    pub sessions: Vec<SessionSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockSummary {
+    pub block_id: String,
+    pub session_id: String,
+    pub index: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockListResult {
+    pub blocks: Vec<BlockSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockGetResult {
+    pub block: BlockSummary,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputStateResult {
+    pub session_id: String,
+    pub text: String,
+    pub cursor_offset: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HistoryEntrySummary {
+    pub entry_id: String,
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HistoryListResult {
+    pub entries: Vec<HistoryEntrySummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThemeSummary {
+    pub name: String,
+    pub is_current: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThemeListResult {
+    pub themes: Vec<ThemeSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppearanceStateResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
+    pub follow_system_theme: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub light_theme: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dark_theme: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_size: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_zoom_percent: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SettingSummary {
+    pub key: String,
+    pub value: serde_json::Value,
+    pub value_type: String,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SettingListResult {
+    pub settings: Vec<SettingSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SettingGetResult {
+    pub setting: SettingSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileSummary {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_id: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileListResult {
+    pub files: Vec<FileSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DriveObjectSummary {
+    pub object_type: DriveObjectType,
+    pub id: String,
+    pub name: String,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DriveListResult {
+    pub objects: Vec<DriveObjectSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DriveGetResult {
+    pub object: DriveObjectSummary,
+    pub content: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,12 +321,18 @@ pub struct AuthenticatedUserRequirement {
 #[serde(rename_all = "snake_case")]
 pub enum TargetScope {
     Instance,
+    Action,
     Window,
     Tab,
     Pane,
     Session,
+    Block,
+    Input,
+    History,
     Settings,
     Appearance,
+    File,
+    Drive,
     Surface,
 }
 
@@ -96,6 +368,21 @@ pub struct TabSelector(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct PaneSelector(pub String);
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SessionSelector(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct BlockSelector(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct FileSelector(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct DriveObjectSelector(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -106,6 +393,14 @@ pub struct TargetSelector {
     pub tab: Option<TabTarget>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pane: Option<PaneTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<SessionTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block: Option<BlockTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<FileTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drive: Option<DriveTarget>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,6 +427,41 @@ pub enum PaneTarget {
     Active,
     Id { id: PaneSelector },
     Index { index: u32 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SessionTarget {
+    Active,
+    Id { id: SessionSelector },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum BlockTarget {
+    Active,
+    Id { id: BlockSelector },
+    Index { index: u32 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum FileTarget {
+    Path { path: String },
+    Id { id: FileSelector },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DriveTarget {
+    Id {
+        object_type: DriveObjectType,
+        id: DriveObjectSelector,
+    },
+    Name {
+        object_type: DriveObjectType,
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -168,6 +498,29 @@ impl Action {
             params: serde_json::Value::Object(Default::default()),
         }
     }
+
+    pub fn with_params<T: Serialize>(kind: ActionKind, params: T) -> Result<Self, ControlError> {
+        Ok(Self {
+            kind,
+            params: serde_json::to_value(params).map_err(|err| {
+                ControlError::with_details(
+                    ErrorCode::InvalidParams,
+                    format!("failed to serialize {} parameters", kind.as_str()),
+                    err.to_string(),
+                )
+            })?,
+        })
+    }
+
+    pub fn params_as<T: DeserializeOwned>(&self) -> Result<T, ControlError> {
+        serde_json::from_value(self.params.clone()).map_err(|err| {
+            ControlError::with_details(
+                ErrorCode::InvalidParams,
+                format!("failed to decode {} parameters", self.kind.as_str()),
+                err.to_string(),
+            )
+        })
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -182,6 +535,10 @@ pub enum ActionKind {
     AppVersion,
     #[serde(rename = "app.active")]
     AppActive,
+    #[serde(rename = "action.list")]
+    ActionList,
+    #[serde(rename = "action.get")]
+    ActionGet,
     #[serde(rename = "app.focus")]
     AppFocus,
     #[serde(rename = "app.settings.open")]
@@ -242,6 +599,12 @@ pub enum ActionKind {
     PaneSessionNext,
     #[serde(rename = "session.list")]
     SessionList,
+    #[serde(rename = "block.list")]
+    BlockList,
+    #[serde(rename = "block.get")]
+    BlockGet,
+    #[serde(rename = "input.get")]
+    InputGet,
     #[serde(rename = "input.insert")]
     InputInsert,
     #[serde(rename = "input.replace")]
@@ -250,6 +613,8 @@ pub enum ActionKind {
     InputClear,
     #[serde(rename = "input.mode.set")]
     InputModeSet,
+    #[serde(rename = "history.list")]
+    HistoryList,
     #[serde(rename = "theme.list")]
     ThemeList,
     #[serde(rename = "theme.set")]
@@ -270,6 +635,12 @@ pub enum ActionKind {
     SettingSet,
     #[serde(rename = "setting.toggle")]
     SettingToggle,
+    #[serde(rename = "file.list")]
+    FileList,
+    #[serde(rename = "drive.list")]
+    DriveList,
+    #[serde(rename = "drive.get")]
+    DriveGet,
 }
 
 impl ActionKind {
@@ -279,6 +650,8 @@ impl ActionKind {
         Self::AppInspect,
         Self::AppVersion,
         Self::AppActive,
+        Self::ActionList,
+        Self::ActionGet,
         Self::AppFocus,
         Self::AppSettingsOpen,
         Self::AppCommandPaletteOpen,
@@ -309,10 +682,14 @@ impl ActionKind {
         Self::PaneSessionPrevious,
         Self::PaneSessionNext,
         Self::SessionList,
+        Self::BlockList,
+        Self::BlockGet,
+        Self::InputGet,
         Self::InputInsert,
         Self::InputReplace,
         Self::InputClear,
         Self::InputModeSet,
+        Self::HistoryList,
         Self::ThemeList,
         Self::ThemeSet,
         Self::AppearanceGet,
@@ -323,6 +700,9 @@ impl ActionKind {
         Self::SettingList,
         Self::SettingSet,
         Self::SettingToggle,
+        Self::FileList,
+        Self::DriveList,
+        Self::DriveGet,
     ];
     pub fn as_str(self) -> &'static str {
         match self {
@@ -331,6 +711,8 @@ impl ActionKind {
             Self::AppInspect => "app.inspect",
             Self::AppVersion => "app.version",
             Self::AppActive => "app.active",
+            Self::ActionList => "action.list",
+            Self::ActionGet => "action.get",
             Self::AppFocus => "app.focus",
             Self::AppSettingsOpen => "app.settings.open",
             Self::AppCommandPaletteOpen => "app.command_palette.open",
@@ -361,10 +743,14 @@ impl ActionKind {
             Self::PaneSessionPrevious => "pane.session.previous",
             Self::PaneSessionNext => "pane.session.next",
             Self::SessionList => "session.list",
+            Self::BlockList => "block.list",
+            Self::BlockGet => "block.get",
+            Self::InputGet => "input.get",
             Self::InputInsert => "input.insert",
             Self::InputReplace => "input.replace",
             Self::InputClear => "input.clear",
             Self::InputModeSet => "input.mode.set",
+            Self::HistoryList => "history.list",
             Self::ThemeList => "theme.list",
             Self::ThemeSet => "theme.set",
             Self::AppearanceGet => "appearance.get",
@@ -375,22 +761,20 @@ impl ActionKind {
             Self::SettingList => "setting.list",
             Self::SettingSet => "setting.set",
             Self::SettingToggle => "setting.toggle",
+            Self::FileList => "file.list",
+            Self::DriveList => "drive.list",
+            Self::DriveGet => "drive.get",
         }
     }
 
     pub fn metadata(self) -> ActionMetadata {
-        let (implementation_status, requires_authenticated_user, allowed_invocation_contexts) =
-            match self {
-                Self::InstanceList | Self::AppPing | Self::AppVersion | Self::TabCreate => (
-                    ActionImplementationStatus::Implemented,
-                    false,
-                    vec![
-                        InvocationContext::InsideWarp,
-                        InvocationContext::OutsideWarp,
-                    ],
-                ),
-                _ => (ActionImplementationStatus::Stub, true, Vec::new()),
-            };
+        let implementation_status = match self {
+            Self::InstanceList | Self::AppPing | Self::AppVersion | Self::TabCreate => {
+                ActionImplementationStatus::Implemented
+            }
+            _ => ActionImplementationStatus::Stub,
+        };
+        let requires_authenticated_user = self.default_requires_authenticated_user();
         ActionMetadata {
             kind: self,
             name: self.as_str().to_owned(),
@@ -401,7 +785,7 @@ impl ActionKind {
             authenticated_user: AuthenticatedUserRequirement {
                 required: requires_authenticated_user,
             },
-            allowed_invocation_contexts,
+            allowed_invocation_contexts: self.default_allowed_invocation_contexts(),
             permission_category: self.default_permission_category(),
             target_scope: self.default_target_scope(),
         }
@@ -429,6 +813,8 @@ impl ActionKind {
             | Self::AppInspect
             | Self::AppVersion
             | Self::AppActive
+            | Self::ActionList
+            | Self::ActionGet
             | Self::WindowList
             | Self::TabList
             | Self::PaneList
@@ -436,7 +822,14 @@ impl ActionKind {
             | Self::ThemeList
             | Self::AppearanceGet
             | Self::SettingGet
-            | Self::SettingList => RiskTier::ReadOnlyMetadata,
+            | Self::SettingList
+            | Self::FileList
+            | Self::DriveList => RiskTier::ReadOnlyMetadata,
+            Self::BlockList
+            | Self::BlockGet
+            | Self::InputGet
+            | Self::HistoryList
+            | Self::DriveGet => RiskTier::ReadOnlyTerminalData,
             Self::InputInsert
             | Self::InputReplace
             | Self::InputClear
@@ -483,6 +876,8 @@ impl ActionKind {
             | Self::AppInspect
             | Self::AppVersion
             | Self::AppActive
+            | Self::ActionList
+            | Self::ActionGet
             | Self::WindowList
             | Self::TabList
             | Self::PaneList
@@ -490,7 +885,14 @@ impl ActionKind {
             | Self::ThemeList
             | Self::AppearanceGet
             | Self::SettingGet
-            | Self::SettingList => StateDataCategory::MetadataRead,
+            | Self::SettingList
+            | Self::FileList
+            | Self::DriveList => StateDataCategory::MetadataRead,
+            Self::BlockList
+            | Self::BlockGet
+            | Self::InputGet
+            | Self::HistoryList
+            | Self::DriveGet => StateDataCategory::UnderlyingDataRead,
             Self::SettingSet
             | Self::SettingToggle
             | Self::ThemeSet
@@ -540,6 +942,32 @@ impl ActionKind {
             StateDataCategory::UnderlyingDataMutation => PermissionCategory::MutateUnderlyingData,
         }
     }
+
+    fn default_requires_authenticated_user(self) -> bool {
+        matches!(
+            self,
+            Self::BlockList
+                | Self::BlockGet
+                | Self::InputGet
+                | Self::HistoryList
+                | Self::DriveList
+                | Self::DriveGet
+        )
+    }
+
+    fn default_allowed_invocation_contexts(self) -> Vec<InvocationContext> {
+        if matches!(
+            self.default_risk_tier(),
+            RiskTier::ReadOnlyMetadata | RiskTier::ReadOnlyTerminalData
+        ) || self == Self::TabCreate
+        {
+            return vec![
+                InvocationContext::InsideWarp,
+                InvocationContext::OutsideWarp,
+            ];
+        }
+        Vec::new()
+    }
     fn default_target_scope(self) -> TargetScope {
         match self {
             Self::WindowList | Self::WindowCreate | Self::WindowFocus | Self::WindowClose => {
@@ -561,10 +989,13 @@ impl ActionKind {
             | Self::PaneSessionPrevious
             | Self::PaneSessionNext => TargetScope::Pane,
             Self::SessionList
+            | Self::InputGet
             | Self::InputInsert
             | Self::InputReplace
             | Self::InputClear
             | Self::InputModeSet => TargetScope::Session,
+            Self::BlockList | Self::BlockGet => TargetScope::Block,
+            Self::HistoryList => TargetScope::History,
             Self::ThemeList
             | Self::ThemeSet
             | Self::AppearanceGet
@@ -574,6 +1005,9 @@ impl ActionKind {
             Self::SettingGet | Self::SettingList | Self::SettingSet | Self::SettingToggle => {
                 TargetScope::Settings
             }
+            Self::ActionList | Self::ActionGet => TargetScope::Action,
+            Self::FileList => TargetScope::File,
+            Self::DriveList | Self::DriveGet => TargetScope::Drive,
             Self::AppSettingsOpen
             | Self::AppCommandPaletteOpen
             | Self::AppCommandSearchOpen

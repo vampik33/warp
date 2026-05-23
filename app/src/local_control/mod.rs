@@ -575,6 +575,16 @@ fn validate_tab_create_target(target: &TargetSelector) -> Result<(), ControlErro
             "tab.create does not accept a concrete pane selector",
         ));
     }
+    if target.session.is_some()
+        || target.block.is_some()
+        || target.file.is_some()
+        || target.drive.is_some()
+    {
+        return Err(ControlError::new(
+            ErrorCode::InvalidSelector,
+            "tab.create does not accept session, block, file, or drive selectors",
+        ));
+    }
     Ok(())
 }
 fn validate_action_params(action: &::local_control::Action) -> Result<(), ControlError> {

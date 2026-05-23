@@ -51,6 +51,7 @@ fn tab_create_accepts_default_and_active_targets() {
         window: Some(WindowTarget::Active),
         tab: Some(TabTarget::Active),
         pane: Some(PaneTarget::Active),
+        ..TargetSelector::default()
     })
     .expect("active target is accepted");
 }
@@ -63,6 +64,7 @@ fn tab_create_rejects_concrete_targets() {
         }),
         tab: None,
         pane: None,
+        ..TargetSelector::default()
     })
     .expect_err("concrete window target is rejected");
     assert_eq!(err.code, ErrorCode::StaleTarget);
@@ -73,6 +75,7 @@ fn tab_create_rejects_concrete_targets() {
             id: TabSelector("tab".to_owned()),
         }),
         pane: None,
+        ..TargetSelector::default()
     })
     .expect_err("concrete tab target is rejected");
     assert_eq!(err.code, ErrorCode::StaleTarget);
@@ -83,6 +86,7 @@ fn tab_create_rejects_concrete_targets() {
         pane: Some(PaneTarget::Id {
             id: PaneSelector("pane".to_owned()),
         }),
+        ..TargetSelector::default()
     })
     .expect_err("concrete pane target is rejected");
     assert_eq!(err.code, ErrorCode::StaleTarget);
@@ -94,6 +98,7 @@ fn tab_create_rejects_unsupported_selector_forms() {
         window: Some(WindowTarget::Index { index: 0 }),
         tab: None,
         pane: None,
+        ..TargetSelector::default()
     })
     .expect_err("indexed window target is rejected");
     assert_eq!(err.code, ErrorCode::InvalidSelector);
@@ -102,6 +107,7 @@ fn tab_create_rejects_unsupported_selector_forms() {
         window: None,
         tab: Some(TabTarget::Index { index: 0 }),
         pane: None,
+        ..TargetSelector::default()
     })
     .expect_err("indexed tab target is rejected");
     assert_eq!(err.code, ErrorCode::InvalidSelector);
