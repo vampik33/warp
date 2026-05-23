@@ -23,15 +23,16 @@ use warp_core::features::FeatureFlag;
 use warp_core::session_id::SessionId;
 use warpui::{App, SingletonEntity};
 
+use super::allow_input_run_policy_for_test;
 use super::{
     action_metadata_for_name, appearance_state_result, authenticated_user_subject_for_action,
     block_get_result_from_model, block_list_result_from_model, capabilities,
-    ensure_feature_enabled, ensure_settings_allow_action, outside_warp_action_enabled_for_settings,
-    rejected_setting_key, require_active_window_id, require_active_window_id_for_action,
-    setting_get_result, setting_list_result, theme_list_result, validate_action_params,
-    validate_block_get_target, validate_block_list_target, validate_drive_target,
-    validate_instance_metadata_read_target, validate_tab_create_target,
-    validate_terminal_read_target, LocalControlBridge,
+    ensure_feature_enabled, ensure_input_run_policy_allows, ensure_settings_allow_action,
+    outside_warp_action_enabled_for_settings, rejected_setting_key, require_active_window_id,
+    require_active_window_id_for_action, setting_get_result, setting_list_result,
+    theme_list_result, validate_action_params, validate_block_get_target,
+    validate_block_list_target, validate_drive_target, validate_instance_metadata_read_target,
+    validate_tab_create_target, validate_terminal_read_target, LocalControlBridge,
 };
 use crate::auth::AuthStateProvider;
 use crate::cloud_object::model::persistence::CloudModel;
@@ -317,6 +318,7 @@ fn capabilities_advertises_only_first_slice_core_actions() {
             ActionKind::BlockList,
             ActionKind::BlockGet,
             ActionKind::InputGet,
+            ActionKind::InputRun,
             ActionKind::HistoryList,
             ActionKind::ThemeList,
             ActionKind::AppearanceGet,
@@ -1145,6 +1147,122 @@ fn input_and_history_reject_malformed_params() {
     })
     .expect_err("unexpected history.list params are rejected");
     assert_eq!(err.code, ErrorCode::InvalidParams);
+}
+
+#[test]
+fn input_run_rejects_empty_command_params() {
+    let err = validate_action_params(
+        &Action::with_params(
+            ActionKind::InputRun,
+            InputRunParams {
+                command: "  \t  ".to_owned(),
+            },
+        )
+        .expect("input.run params serialize"),
+    )
+    .expect_err("empty command is rejected");
+    assert_eq!(err.code, ErrorCode::InvalidParams);
+}
+
+#[test]
+fn input_run_policy_gate_fails_closed_and_allows_test_override() {
+    let action = Action::with_params(
+        ActionKind::InputRun,
+        InputRunParams {
+            command: "echo hi".to_owned(),
+        },
+    )
+    .expect("input.run params serialize");
+    let mut grant = CredentialGrant::new(
+        InstanceId("instance".to_owned()),
+        ActionKind::InputRun,
+        InvocationContext::InsideWarp,
+        Duration::minutes(5),
+    );
+    grant.authenticated_user.subject = Some("user".to_owned());
+
+    let err = ensure_input_run_policy_allows(&grant, &action)
+        .expect_err("input.run policy fails closed by default");
+    assert_eq!(err.code, ErrorCode::InsufficientPermissions);
+
+    let guard = allow_input_run_policy_for_test();
+    ensure_input_run_policy_allows(&grant, &action).expect("test policy override allows input.run");
+    drop(guard);
+}
+
+#[test]
+fn input_run_denials_happen_before_selector_resolution() {
+    let _flag = FeatureFlag::WarpControlCli.override_enabled(true);
+    App::test((), |mut app| async move {
+        initialize_drive_app(&mut app, true);
+        let request = RequestEnvelope {
+            target: TargetSelector {
+                window: Some(WindowTarget::Id {
+                    id: WindowSelector("stale-window".to_owned()),
+                }),
+                ..TargetSelector::default()
+            },
+            ..RequestEnvelope::new(
+                Action::with_params(
+                    ActionKind::InputRun,
+                    InputRunParams {
+                        command: "echo hi".to_owned(),
+                    },
+                )
+                .expect("input.run params serialize"),
+            )
+        };
+        LocalControlBridge::handle(&app).update(&mut app, |bridge, ctx| {
+            let mut wrong_permission_grant = authenticated_grant(ActionKind::InputRun, ctx);
+            wrong_permission_grant.permission_category = PermissionCategory::MutateAppState;
+            let response = bridge.handle_request(request.clone(), wrong_permission_grant, ctx);
+            assert_eq!(
+                response_error_code(response),
+                ErrorCode::InsufficientPermissions
+            );
+
+            let response = bridge.handle_request(
+                request.clone(),
+                spoofed_authenticated_grant(ActionKind::InputRun),
+                ctx,
+            );
+            assert_eq!(
+                response_error_code(response),
+                ErrorCode::AuthenticatedUserUnavailable
+            );
+
+            let response =
+                bridge.handle_request(request, authenticated_grant(ActionKind::InputRun, ctx), ctx);
+            assert_eq!(
+                response_error_code(response),
+                ErrorCode::InsufficientPermissions
+            );
+        });
+    })
+}
+
+#[test]
+fn input_run_reaches_target_resolution_only_with_explicit_policy_gate() {
+    let _flag = FeatureFlag::WarpControlCli.override_enabled(true);
+    App::test((), |mut app| async move {
+        initialize_drive_app(&mut app, true);
+        let request = RequestEnvelope::new(
+            Action::with_params(
+                ActionKind::InputRun,
+                InputRunParams {
+                    command: "echo hi".to_owned(),
+                },
+            )
+            .expect("input.run params serialize"),
+        );
+        LocalControlBridge::handle(&app).update(&mut app, |bridge, ctx| {
+            let guard = allow_input_run_policy_for_test();
+            let response =
+                bridge.handle_request(request, authenticated_grant(ActionKind::InputRun, ctx), ctx);
+            assert_eq!(response_error_code(response), ErrorCode::MissingTarget);
+            drop(guard);
+        });
+    })
 }
 
 #[test]

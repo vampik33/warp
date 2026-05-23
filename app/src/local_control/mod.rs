@@ -13,6 +13,8 @@ use crate::terminal::model::session::SessionId;
 use crate::terminal::model::TerminalModel;
 use std::collections::{BTreeMap, HashMap};
 use std::net::SocketAddr;
+#[cfg(test)]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::settings::{
@@ -65,6 +67,8 @@ use warpui::{
 };
 
 use crate::workspace::{Workspace, WorkspaceAction};
+#[cfg(test)]
+static TEST_ALLOW_INPUT_RUN_POLICY: AtomicBool = AtomicBool::new(false);
 
 struct ResolvedTerminalTarget {
     terminal_view: ViewHandle<TerminalView>,
@@ -484,6 +488,27 @@ impl LocalControlBridge {
                     Err(error) => ResponseEnvelope::error(request.request_id, error),
                 }
             }
+            ActionKind::InputRun => {
+                if let Err(error) = ensure_authenticated_user_matches(&grant, ctx) {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                if let Err(error) = ensure_input_run_policy_allows(&grant, &request.action) {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match request
+                    .action
+                    .params_as::<InputRunParams>()
+                    .and_then(|params| self.run_input_command(&request.target, params, ctx))
+                {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
             ActionKind::BlockList => {
                 if let Err(error) = ensure_authenticated_user_matches(&grant, ctx) {
                     return ResponseEnvelope::error(request.request_id, error);
@@ -553,6 +578,31 @@ impl LocalControlBridge {
         }
     }
 
+    fn run_input_command(
+        &mut self,
+        target: &TargetSelector,
+        params: InputRunParams,
+        ctx: &mut ModelContext<Self>,
+    ) -> Result<serde_json::Value, ControlError> {
+        let resolved = resolve_terminal_read_target(ActionKind::InputRun, target, ctx)?;
+        let session_id = resolved
+            .terminal_view
+            .read(ctx, |terminal, _| terminal.active_block_session_id())
+            .ok_or_else(|| {
+                ControlError::new(
+                    ErrorCode::MissingTarget,
+                    "input.run requires a target terminal session",
+                )
+            })?;
+        resolved.terminal_view.update(ctx, |terminal, ctx| {
+            terminal.execute_command_or_set_pending(&params.command, ctx);
+        });
+        Ok(json!({
+            "action": ActionKind::InputRun.as_str(),
+            "submitted": true,
+            "session_id": session_id.as_u64().to_string(),
+        }))
+    }
     fn create_terminal_tab(
         &mut self,
         target: &TargetSelector,
@@ -2182,7 +2232,15 @@ fn validate_action_params(action: &::local_control::Action) -> Result<(), Contro
         ActionKind::InputReplace => action.params_as::<InputReplaceParams>().map(|_| ()),
         ActionKind::InputClear => action.params_as::<InputClearParams>().map(|_| ()),
         ActionKind::InputModeSet => action.params_as::<InputModeSetParams>().map(|_| ()),
-        ActionKind::InputRun => action.params_as::<InputRunParams>().map(|_| ()),
+        ActionKind::InputRun => action.params_as::<InputRunParams>().and_then(|params| {
+            if params.command.trim().is_empty() {
+                return Err(ControlError::new(
+                    ErrorCode::InvalidParams,
+                    "input.run requires a non-empty command",
+                ));
+            }
+            Ok(())
+        }),
         ActionKind::ThemeSet => action.params_as::<ThemeSetParams>().map(|_| ()),
         ActionKind::AppearanceSet => action.params_as::<AppearanceSetParams>().map(|_| ()),
         ActionKind::AppearanceFontSize => {
@@ -2593,6 +2651,49 @@ fn ensure_authenticated_user_matches(
     Ok(())
 }
 
+fn ensure_input_run_policy_allows(
+    grant: &CredentialGrant,
+    action: &::local_control::Action,
+) -> Result<(), ControlError> {
+    if input_run_policy_allows(grant, action) {
+        return Ok(());
+    }
+    Err(ControlError::new(
+        ErrorCode::InsufficientPermissions,
+        "input.run requires explicit local approval policy before command execution",
+    ))
+}
+
+#[cfg(not(test))]
+fn input_run_policy_allows(_grant: &CredentialGrant, _action: &::local_control::Action) -> bool {
+    false
+}
+
+#[cfg(test)]
+fn input_run_policy_allows(grant: &CredentialGrant, action: &::local_control::Action) -> bool {
+    grant.action == ActionKind::InputRun
+        && action.kind == ActionKind::InputRun
+        && TEST_ALLOW_INPUT_RUN_POLICY.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+fn allow_input_run_policy_for_test() -> TestInputRunPolicyGuard {
+    TestInputRunPolicyGuard {
+        previous: TEST_ALLOW_INPUT_RUN_POLICY.swap(true, Ordering::SeqCst),
+    }
+}
+
+#[cfg(test)]
+struct TestInputRunPolicyGuard {
+    previous: bool,
+}
+
+#[cfg(test)]
+impl Drop for TestInputRunPolicyGuard {
+    fn drop(&mut self) {
+        TEST_ALLOW_INPUT_RUN_POLICY.store(self.previous, Ordering::SeqCst);
+    }
+}
 fn authenticated_user_subject(
     ctx: &mut ModelContext<LocalControlBridge>,
 ) -> Result<String, ControlError> {

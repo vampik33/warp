@@ -145,6 +145,32 @@ fn input_and_history_reads_are_authenticated_underlying_data_implemented_actions
 }
 
 #[test]
+fn input_run_is_authenticated_underlying_data_mutation_implemented_action() {
+    let metadata = ActionKind::InputRun.metadata();
+    assert_eq!(
+        metadata.implementation_status,
+        ActionImplementationStatus::Implemented
+    );
+    assert_eq!(metadata.risk_tier, RiskTier::MutatingDestructiveOrExecution);
+    assert_eq!(
+        metadata.state_data_category,
+        StateDataCategory::UnderlyingDataMutation
+    );
+    assert_eq!(
+        metadata.permission_category,
+        PermissionCategory::MutateUnderlyingData
+    );
+    assert!(metadata.authenticated_user.required);
+    assert_eq!(
+        metadata.allowed_invocation_contexts,
+        vec![
+            InvocationContext::InsideWarp,
+            InvocationContext::OutsideWarp
+        ]
+    );
+}
+
+#[test]
 fn drive_content_read_is_implemented_underlying_data_permission() {
     let metadata = ActionKind::DriveGet.metadata();
     assert_eq!(
@@ -335,7 +361,6 @@ fn mutating_contract_actions_are_allowlisted_stubs_except_tab_create() {
         ActionKind::InputReplace,
         ActionKind::InputClear,
         ActionKind::InputModeSet,
-        ActionKind::InputRun,
         ActionKind::ThemeSet,
         ActionKind::AppearanceSet,
         ActionKind::AppearanceFontSize,

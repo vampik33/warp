@@ -1195,6 +1195,7 @@ impl ActionKind {
             | Self::BlockList
             | Self::BlockGet
             | Self::InputGet
+            | Self::InputRun
             | Self::HistoryList
             | Self::ThemeList
             | Self::AppearanceGet
@@ -1459,7 +1460,7 @@ impl ActionKind {
         if matches!(
             self.default_risk_tier(),
             RiskTier::ReadOnlyMetadata | RiskTier::ReadOnlyTerminalData
-        ) || self == Self::TabCreate
+        ) || matches!(self, Self::TabCreate | Self::InputRun)
         {
             return vec![
                 InvocationContext::InsideWarp,
