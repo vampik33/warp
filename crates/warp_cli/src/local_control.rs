@@ -201,8 +201,22 @@ fn write_json_line(value: &impl Serialize) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use clap::Parser as _;
+    use serial_test::serial;
 
     use super::*;
+
+    fn set_discovery_dir(path: &std::path::Path) -> Option<std::ffi::OsString> {
+        let previous = std::env::var_os("WARP_LOCAL_CONTROL_DISCOVERY_DIR");
+        unsafe { std::env::set_var("WARP_LOCAL_CONTROL_DISCOVERY_DIR", path) };
+        previous
+    }
+
+    fn restore_discovery_dir(previous: Option<std::ffi::OsString>) {
+        match previous {
+            Some(value) => unsafe { std::env::set_var("WARP_LOCAL_CONTROL_DISCOVERY_DIR", value) },
+            None => unsafe { std::env::remove_var("WARP_LOCAL_CONTROL_DISCOVERY_DIR") },
+        }
+    }
 
     #[test]
     fn parses_first_slice_tab_create() {
@@ -231,5 +245,26 @@ mod tests {
         assert!(ControlArgs::try_parse_from(["warpctrl", "app", "ping"]).is_err());
         assert!(ControlArgs::try_parse_from(["warpctrl", "tab", "list"]).is_err());
         assert!(ControlArgs::try_parse_from(["warpctrl", "setting", "list"]).is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn tab_create_reports_no_instance_when_discovery_is_empty() {
+        let dir = std::env::temp_dir().join(format!(
+            "warpctrl-empty-discovery-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&dir).expect("create discovery dir");
+        let previous = set_discovery_dir(&dir);
+        let result = run(ControlArgs {
+            output_format: OutputFormat::Json,
+            command: ControlCommand::Tab(TabCommand::Create(TargetArgs::default())),
+        });
+        restore_discovery_dir(previous);
+        let err = result.expect_err("missing instance is reported");
+        assert!(
+            err.to_string().contains("no_instance"),
+            "expected no_instance error, got: {err}"
+        );
     }
 }

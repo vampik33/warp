@@ -29,8 +29,11 @@ pub enum RiskTier {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LocalControlPermission {
-    ReadOnly,
-    ReadWrite,
+    MetadataReads,
+    UnderlyingDataReads,
+    AppStateMutations,
+    MetadataConfigurationMutations,
+    UnderlyingDataMutations,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -366,7 +369,7 @@ impl ActionKind {
                     InvocationContext::InsideWarp,
                     InvocationContext::OutsideWarp,
                 ],
-                permission: LocalControlPermission::ReadWrite,
+                permission: LocalControlPermission::AppStateMutations,
                 target_scope: TargetScope::Window,
             };
         }
@@ -451,13 +454,55 @@ impl ActionKind {
     }
 
     fn default_permission(self) -> LocalControlPermission {
-        match self.default_risk_tier() {
-            RiskTier::ReadOnlyMetadata | RiskTier::ReadOnlyTerminalData => {
-                LocalControlPermission::ReadOnly
-            }
-            RiskTier::MutatingNonDestructive | RiskTier::MutatingDestructiveOrExecution => {
-                LocalControlPermission::ReadWrite
-            }
+        match self {
+            Self::AppPing
+            | Self::AppInspect
+            | Self::AppVersion
+            | Self::AppActive
+            | Self::WindowList
+            | Self::TabList
+            | Self::PaneList
+            | Self::SessionList
+            | Self::ThemeList
+            | Self::AppearanceGet
+            | Self::SettingGet
+            | Self::SettingList => LocalControlPermission::MetadataReads,
+            Self::InputInsert
+            | Self::InputReplace
+            | Self::InputClear
+            | Self::InputModeSet
+            | Self::WindowClose
+            | Self::TabClose
+            | Self::PaneClose => LocalControlPermission::UnderlyingDataMutations,
+            Self::ThemeSet
+            | Self::AppearanceSet
+            | Self::AppearanceFontSize
+            | Self::AppearanceZoom
+            | Self::SettingSet
+            | Self::SettingToggle => LocalControlPermission::MetadataConfigurationMutations,
+            Self::AppFocus
+            | Self::AppSettingsOpen
+            | Self::AppCommandPaletteOpen
+            | Self::AppCommandSearchOpen
+            | Self::AppWarpDriveOpen
+            | Self::AppWarpDriveToggle
+            | Self::AppResourceCenterToggle
+            | Self::AppAiAssistantToggle
+            | Self::AppCodeReviewToggle
+            | Self::AppVerticalTabsToggle
+            | Self::WindowCreate
+            | Self::WindowFocus
+            | Self::TabCreate
+            | Self::TabActivate
+            | Self::TabMove
+            | Self::TabRename
+            | Self::PaneSplit
+            | Self::PaneFocus
+            | Self::PaneNavigate
+            | Self::PaneMaximize
+            | Self::PaneResize
+            | Self::PaneSessionPrevious
+            | Self::PaneSessionNext => LocalControlPermission::AppStateMutations,
         }
     }
 
@@ -659,6 +704,24 @@ mod tests {
     }
 
     #[test]
+    fn malformed_action_name_is_not_deserialized() {
+        let request = serde_json::json!({
+            "protocol_version": PROTOCOL_VERSION,
+            "request_id": Uuid::nil(),
+            "target": {},
+            "action": {
+                "kind": "tab.create.unexpected",
+                "params": {}
+            }
+        });
+        let err = serde_json::from_value::<RequestEnvelope>(request).expect_err("bad action name");
+        assert!(
+            err.to_string().contains("unknown variant"),
+            "expected unknown action variant error, got: {err}"
+        );
+    }
+
+    #[test]
     fn tab_create_metadata_is_first_slice_logged_out_safe_mutation() {
         let metadata = ActionKind::TabCreate.metadata();
         assert_eq!(
@@ -667,7 +730,10 @@ mod tests {
         );
         assert_eq!(metadata.risk_tier, RiskTier::MutatingNonDestructive);
         assert!(!metadata.requires_authenticated_user);
-        assert_eq!(metadata.permission, LocalControlPermission::ReadWrite);
+        assert_eq!(
+            metadata.permission,
+            LocalControlPermission::AppStateMutations
+        );
         assert_eq!(
             metadata.allowed_invocation_contexts,
             vec![
@@ -688,6 +754,26 @@ mod tests {
             !metadata
                 .allowed_invocation_contexts
                 .contains(&InvocationContext::OutsideWarp)
+        );
+    }
+
+    #[test]
+    fn default_permissions_preserve_security_categories() {
+        assert_eq!(
+            ActionKind::WindowList.metadata().permission,
+            LocalControlPermission::MetadataReads
+        );
+        assert_eq!(
+            ActionKind::InputInsert.metadata().permission,
+            LocalControlPermission::UnderlyingDataMutations
+        );
+        assert_eq!(
+            ActionKind::SettingSet.metadata().permission,
+            LocalControlPermission::MetadataConfigurationMutations
+        );
+        assert_eq!(
+            ActionKind::PaneSplit.metadata().permission,
+            LocalControlPermission::AppStateMutations
         );
     }
 }

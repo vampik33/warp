@@ -15,6 +15,7 @@ use crate::settings::{
 use settings::{Setting as _, ToggleableSetting as _};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use warp_core::features::FeatureFlag;
 use warp_core::settings::SyncToCloud;
 use warpui::elements::{Container, Element, MouseStateHandle};
 use warpui::ui_components::components::UiComponent;
@@ -235,7 +236,7 @@ impl SettingsPageMeta for ScriptingSettingsPageView {
     }
 
     fn should_render(&self, _ctx: &AppContext) -> bool {
-        cfg!(not(target_family = "wasm"))
+        cfg!(not(target_family = "wasm")) && FeatureFlag::WarpControlCli.is_enabled()
     }
 
     fn update_filter(&mut self, query: &str, ctx: &mut ViewContext<Self>) -> MatchData {

@@ -1,10 +1,41 @@
 use ::local_control::protocol::{
-    PaneSelector, PaneTarget, TabSelector, TabTarget, TargetSelector, WindowSelector, WindowTarget,
+    Action, ExecutionContextProof, PaneSelector, PaneTarget, TabSelector, TabTarget,
+    TargetSelector, WindowSelector, WindowTarget,
 };
 
-use super::{capabilities, preferred_window_id, validate_tab_create_target};
+use super::{
+    capabilities, ensure_execution_context_proof, ensure_feature_enabled,
+    ensure_settings_allow_action, require_active_window_id, validate_action_params,
+    validate_tab_create_target,
+};
+use crate::settings::{
+    AllowInsideWarpControl, AllowInsideWarpReadOnly, AllowInsideWarpReadWrite,
+    AllowOutsideWarpControl, AllowOutsideWarpReadOnly, AllowOutsideWarpReadWrite,
+    LocalControlSettings,
+};
 use ::local_control::protocol::ActionKind;
 use ::local_control::ErrorCode;
+use ::local_control::InvocationContext;
+use settings::Setting;
+use warp_core::features::FeatureFlag;
+
+fn settings_with_values(
+    inside_enabled: bool,
+    outside_enabled: bool,
+    inside_read_only: bool,
+    outside_read_only: bool,
+    inside_read_write: bool,
+    outside_read_write: bool,
+) -> LocalControlSettings {
+    LocalControlSettings {
+        allow_inside_warp_control: AllowInsideWarpControl::new(Some(inside_enabled)),
+        allow_outside_warp_control: AllowOutsideWarpControl::new(Some(outside_enabled)),
+        allow_inside_warp_read_only: AllowInsideWarpReadOnly::new(Some(inside_read_only)),
+        allow_outside_warp_read_only: AllowOutsideWarpReadOnly::new(Some(outside_read_only)),
+        allow_inside_warp_read_write: AllowInsideWarpReadWrite::new(Some(inside_read_write)),
+        allow_outside_warp_read_write: AllowOutsideWarpReadWrite::new(Some(outside_read_write)),
+    }
+}
 
 #[test]
 fn tab_create_accepts_default_and_active_targets() {
@@ -28,7 +59,7 @@ fn tab_create_rejects_concrete_targets() {
         pane: None,
     })
     .expect_err("concrete window target is rejected");
-    assert_eq!(err.code, ErrorCode::InvalidSelector);
+    assert_eq!(err.code, ErrorCode::StaleTarget);
 
     let err = validate_tab_create_target(&TargetSelector {
         window: None,
@@ -38,7 +69,7 @@ fn tab_create_rejects_concrete_targets() {
         pane: None,
     })
     .expect_err("concrete tab target is rejected");
-    assert_eq!(err.code, ErrorCode::InvalidSelector);
+    assert_eq!(err.code, ErrorCode::StaleTarget);
 
     let err = validate_tab_create_target(&TargetSelector {
         window: None,
@@ -48,6 +79,25 @@ fn tab_create_rejects_concrete_targets() {
         }),
     })
     .expect_err("concrete pane target is rejected");
+    assert_eq!(err.code, ErrorCode::StaleTarget);
+}
+
+#[test]
+fn tab_create_rejects_unsupported_selector_forms() {
+    let err = validate_tab_create_target(&TargetSelector {
+        window: Some(WindowTarget::Index { index: 0 }),
+        tab: None,
+        pane: None,
+    })
+    .expect_err("indexed window target is rejected");
+    assert_eq!(err.code, ErrorCode::InvalidSelector);
+
+    let err = validate_tab_create_target(&TargetSelector {
+        window: None,
+        tab: Some(TabTarget::Index { index: 0 }),
+        pane: None,
+    })
+    .expect_err("indexed tab target is rejected");
     assert_eq!(err.code, ErrorCode::InvalidSelector);
 }
 
@@ -57,19 +107,84 @@ fn capabilities_only_advertises_tab_create() {
 }
 
 #[test]
-fn tab_create_prefers_active_window() {
+fn tab_create_requires_active_window() {
     let active = warpui::WindowId::from_usize(1);
-    let frontmost = warpui::WindowId::from_usize(2);
 
     assert_eq!(
-        preferred_window_id(Some(active), Some(frontmost)),
-        Some(active)
+        require_active_window_id(Some(active)).expect("active"),
+        active
     );
+    let err = require_active_window_id(None).expect_err("missing active window");
+    assert_eq!(err.code, ErrorCode::MissingTarget);
 }
 
 #[test]
-fn tab_create_falls_back_to_frontmost_window() {
-    let frontmost = warpui::WindowId::from_usize(2);
+fn feature_flag_disabled_denies_local_control() {
+    let _flag = FeatureFlag::WarpControlCli.override_enabled(false);
+    let err = ensure_feature_enabled().expect_err("feature flag disabled");
+    assert_eq!(err.code, ErrorCode::LocalControlDisabled);
+}
 
-    assert_eq!(preferred_window_id(None, Some(frontmost)), Some(frontmost));
+#[test]
+fn disabled_context_denies_before_granular_permission() {
+    let settings = settings_with_values(false, true, true, true, true, true);
+
+    let err = ensure_settings_allow_action(
+        &settings,
+        InvocationContext::InsideWarp,
+        ActionKind::TabCreate,
+    )
+    .expect_err("inside-Warp parent context is disabled");
+    assert_eq!(err.code, ErrorCode::LocalControlDisabled);
+}
+
+#[test]
+fn disabled_granular_permission_denies_with_insufficient_permissions() {
+    let settings = settings_with_values(true, true, true, true, false, true);
+
+    let err = ensure_settings_allow_action(
+        &settings,
+        InvocationContext::InsideWarp,
+        ActionKind::TabCreate,
+    )
+    .expect_err("read-write permission is disabled");
+    assert_eq!(err.code, ErrorCode::InsufficientPermissions);
+}
+
+#[test]
+fn tab_create_rejects_malformed_params() {
+    let err = validate_action_params(&Action {
+        kind: ActionKind::TabCreate,
+        params: serde_json::json!({ "unexpected": true }),
+    })
+    .expect_err("tab.create params must be empty");
+    assert_eq!(err.code, ErrorCode::InvalidParams);
+
+    validate_action_params(&Action {
+        kind: ActionKind::TabCreate,
+        params: serde_json::json!({}),
+    })
+    .expect("empty tab.create params are accepted");
+}
+
+#[test]
+fn inside_warp_credential_requires_verified_execution_context_proof() {
+    let err = ensure_execution_context_proof(InvocationContext::InsideWarp, &None)
+        .expect_err("inside-Warp proof is required");
+    assert_eq!(err.code, ErrorCode::ExecutionContextNotAllowed);
+
+    let err = ensure_execution_context_proof(
+        InvocationContext::InsideWarp,
+        &Some(ExecutionContextProof::ExternalClient),
+    )
+    .expect_err("external proof is not accepted for inside-Warp grants");
+    assert_eq!(err.code, ErrorCode::ExecutionContextNotAllowed);
+
+    ensure_execution_context_proof(
+        InvocationContext::InsideWarp,
+        &Some(ExecutionContextProof::VerifiedWarpTerminal {
+            proof_id: "proof".to_owned(),
+        }),
+    )
+    .expect("verified proof is accepted");
 }
