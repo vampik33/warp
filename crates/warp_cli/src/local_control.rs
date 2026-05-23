@@ -1,18 +1,22 @@
 use std::io::Write as _;
 use std::process::ExitCode;
+use std::str::FromStr;
 
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::aot::{Shell, generate};
 use local_control::protocol::{
     Action, ActionKind, ActionMetadata, AppFocusParams, AppSurfaceParams, AppearanceFontSizeParams,
-    AppearanceSetParams, AppearanceZoomParams, ControlError, DriveCreateParams, DriveDeleteParams,
-    DriveInsertParams, DriveRunParams, DriveUpdateParams, ErrorCode, FileDeleteParams,
-    FileOpenParams, FileWriteParams, HorizontalDirection, InputClearParams, InputInsertParams,
+    AppearanceSetParams, AppearanceZoomParams, BlockSelector, BlockTarget, ControlError,
+    DriveCreateParams, DriveDeleteParams, DriveInsertParams, DriveObjectSelector, DriveRunParams,
+    DriveTarget, DriveUpdateParams, ErrorCode, FileDeleteParams, FileOpenParams, FileSelector,
+    FileTarget, FileWriteParams, HorizontalDirection, InputClearParams, InputInsertParams,
     InputMode, InputModeSetParams, InputReplaceParams, InputRunParams, PaneCloseParams,
     PaneDirection, PaneFocusParams, PaneMaximizeParams, PaneNavigateParams, PaneResizeParams,
-    PaneSplitParams, SettingSetParams, SettingToggleParams, SizeAdjustment, TabActivateParams,
-    TabActivationTarget, TabCloseParams, TabCloseScope, TabMoveParams, TabRenameParams,
-    ThemeSetParams, WindowCloseParams, WindowCreateParams, WindowFocusParams,
+    PaneSelector, PaneSplitParams, PaneTarget, RequestEnvelope, SessionSelector, SessionTarget,
+    SettingSetParams, SettingToggleParams, SizeAdjustment, TabActivateParams, TabActivationTarget,
+    TabCloseParams, TabCloseScope, TabMoveParams, TabRenameParams, TabSelector, TabTarget,
+    TargetSelector, ThemeSetParams, WindowCloseParams, WindowCreateParams, WindowFocusParams,
+    WindowSelector, WindowTarget,
 };
 use local_control::selection::{InstanceSelector, select_instance};
 use serde::Serialize;
@@ -38,6 +42,664 @@ pub struct ControlArgs {
 
     #[command(subcommand)]
     pub command: ControlCommand,
+}
+
+#[derive(Debug, Clone, Args, Default)]
+struct WindowTargetArgs {
+    /// Target a window with active, id:<id>, index:<n>, or title:<title>.
+    #[arg(
+        long = "window",
+        value_name = "SELECTOR",
+        conflicts_with_all = ["window_id", "window_index", "window_title"]
+    )]
+    window: Option<WindowTargetArg>,
+
+    /// Target a window by opaque id.
+    #[arg(
+        long = "window-id",
+        value_name = "ID",
+        conflicts_with_all = ["window", "window_index", "window_title"]
+    )]
+    window_id: Option<String>,
+
+    /// Target a window by zero-based index.
+    #[arg(
+        long = "window-index",
+        value_name = "INDEX",
+        conflicts_with_all = ["window", "window_id", "window_title"]
+    )]
+    window_index: Option<u32>,
+
+    /// Target a window by exact title.
+    #[arg(
+        long = "window-title",
+        value_name = "TITLE",
+        conflicts_with_all = ["window", "window_id", "window_index"]
+    )]
+    window_title: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum WindowTargetArg {
+    Active,
+    Id(String),
+    Index(u32),
+    Title(String),
+}
+
+impl WindowTargetArgs {
+    fn to_target(&self) -> Option<WindowTarget> {
+        if let Some(target) = &self.window {
+            return Some(match target {
+                WindowTargetArg::Active => WindowTarget::Active,
+                WindowTargetArg::Id(id) => WindowTarget::Id {
+                    id: WindowSelector(id.clone()),
+                },
+                WindowTargetArg::Index(index) => WindowTarget::Index { index: *index },
+                WindowTargetArg::Title(title) => WindowTarget::Title {
+                    title: title.clone(),
+                },
+            });
+        }
+        if let Some(id) = &self.window_id {
+            return Some(WindowTarget::Id {
+                id: WindowSelector(id.clone()),
+            });
+        }
+        if let Some(index) = self.window_index {
+            return Some(WindowTarget::Index { index });
+        }
+        self.window_title.as_ref().map(|title| WindowTarget::Title {
+            title: title.clone(),
+        })
+    }
+
+    fn has_target(&self) -> bool {
+        self.window.is_some()
+            || self.window_id.is_some()
+            || self.window_index.is_some()
+            || self.window_title.is_some()
+    }
+}
+
+impl FromStr for WindowTargetArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value == "active" {
+            return Ok(Self::Active);
+        }
+        let (kind, selector) = parse_selector_parts(value, "window")?;
+        match kind {
+            "id" => Ok(Self::Id(non_empty_selector_value(selector, "window id")?)),
+            "index" => Ok(Self::Index(parse_selector_index(selector, "window index")?)),
+            "title" => Ok(Self::Title(non_empty_selector_value(
+                selector,
+                "window title",
+            )?)),
+            _ => Err(format!(
+                "invalid window selector {value}; expected active, id:<id>, index:<n>, or title:<title>"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Args, Default)]
+struct TabTargetArgs {
+    /// Target a tab with active, id:<id>, index:<n>, or title:<title>.
+    #[arg(
+        long = "tab",
+        value_name = "SELECTOR",
+        conflicts_with_all = ["tab_id", "tab_index", "tab_title"]
+    )]
+    tab: Option<TabTargetArg>,
+
+    /// Target a tab by opaque id.
+    #[arg(
+        long = "tab-id",
+        value_name = "ID",
+        conflicts_with_all = ["tab", "tab_index", "tab_title"]
+    )]
+    tab_id: Option<String>,
+
+    /// Target a tab by zero-based index.
+    #[arg(
+        long = "tab-index",
+        value_name = "INDEX",
+        conflicts_with_all = ["tab", "tab_id", "tab_title"]
+    )]
+    tab_index: Option<u32>,
+
+    /// Target a tab by exact title.
+    #[arg(
+        long = "tab-title",
+        value_name = "TITLE",
+        conflicts_with_all = ["tab", "tab_id", "tab_index"]
+    )]
+    tab_title: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TabTargetArg {
+    Active,
+    Id(String),
+    Index(u32),
+    Title(String),
+}
+
+impl TabTargetArgs {
+    fn to_target(&self) -> Option<TabTarget> {
+        if let Some(target) = &self.tab {
+            return Some(match target {
+                TabTargetArg::Active => TabTarget::Active,
+                TabTargetArg::Id(id) => TabTarget::Id {
+                    id: TabSelector(id.clone()),
+                },
+                TabTargetArg::Index(index) => TabTarget::Index { index: *index },
+                TabTargetArg::Title(title) => TabTarget::Title {
+                    title: title.clone(),
+                },
+            });
+        }
+        if let Some(id) = &self.tab_id {
+            return Some(TabTarget::Id {
+                id: TabSelector(id.clone()),
+            });
+        }
+        if let Some(index) = self.tab_index {
+            return Some(TabTarget::Index { index });
+        }
+        self.tab_title.as_ref().map(|title| TabTarget::Title {
+            title: title.clone(),
+        })
+    }
+
+    fn has_target(&self) -> bool {
+        self.tab.is_some()
+            || self.tab_id.is_some()
+            || self.tab_index.is_some()
+            || self.tab_title.is_some()
+    }
+}
+
+impl FromStr for TabTargetArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value == "active" {
+            return Ok(Self::Active);
+        }
+        let (kind, selector) = parse_selector_parts(value, "tab")?;
+        match kind {
+            "id" => Ok(Self::Id(non_empty_selector_value(selector, "tab id")?)),
+            "index" => Ok(Self::Index(parse_selector_index(selector, "tab index")?)),
+            "title" => Ok(Self::Title(non_empty_selector_value(
+                selector,
+                "tab title",
+            )?)),
+            _ => Err(format!(
+                "invalid tab selector {value}; expected active, id:<id>, index:<n>, or title:<title>"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Args, Default)]
+struct PaneTargetArgs {
+    /// Target a pane with active, id:<id>, or index:<n>.
+    #[arg(
+        long = "pane",
+        value_name = "SELECTOR",
+        conflicts_with_all = ["pane_id", "pane_index"]
+    )]
+    pane: Option<PaneTargetArg>,
+
+    /// Target a pane by opaque id.
+    #[arg(
+        long = "pane-id",
+        value_name = "ID",
+        conflicts_with_all = ["pane", "pane_index"]
+    )]
+    pane_id: Option<String>,
+
+    /// Target a pane by zero-based index.
+    #[arg(
+        long = "pane-index",
+        value_name = "INDEX",
+        conflicts_with_all = ["pane", "pane_id"]
+    )]
+    pane_index: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PaneTargetArg {
+    Active,
+    Id(String),
+    Index(u32),
+}
+
+impl PaneTargetArgs {
+    fn to_target(&self) -> Option<PaneTarget> {
+        if let Some(target) = &self.pane {
+            return Some(match target {
+                PaneTargetArg::Active => PaneTarget::Active,
+                PaneTargetArg::Id(id) => PaneTarget::Id {
+                    id: PaneSelector(id.clone()),
+                },
+                PaneTargetArg::Index(index) => PaneTarget::Index { index: *index },
+            });
+        }
+        if let Some(id) = &self.pane_id {
+            return Some(PaneTarget::Id {
+                id: PaneSelector(id.clone()),
+            });
+        }
+        self.pane_index.map(|index| PaneTarget::Index { index })
+    }
+
+    fn has_target(&self) -> bool {
+        self.pane.is_some() || self.pane_id.is_some() || self.pane_index.is_some()
+    }
+}
+
+impl FromStr for PaneTargetArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value == "active" {
+            return Ok(Self::Active);
+        }
+        let (kind, selector) = parse_selector_parts(value, "pane")?;
+        match kind {
+            "id" => Ok(Self::Id(non_empty_selector_value(selector, "pane id")?)),
+            "index" => Ok(Self::Index(parse_selector_index(selector, "pane index")?)),
+            _ => Err(format!(
+                "invalid pane selector {value}; expected active, id:<id>, or index:<n>"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Args, Default)]
+struct SessionTargetArgs {
+    /// Target a session with active or id:<id>.
+    #[arg(
+        long = "session",
+        value_name = "SELECTOR",
+        conflicts_with = "session_id"
+    )]
+    session: Option<SessionTargetArg>,
+
+    /// Target a session by opaque id.
+    #[arg(long = "session-id", value_name = "ID", conflicts_with = "session")]
+    session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SessionTargetArg {
+    Active,
+    Id(String),
+}
+
+impl SessionTargetArgs {
+    fn to_target(&self) -> Option<SessionTarget> {
+        if let Some(target) = &self.session {
+            return Some(match target {
+                SessionTargetArg::Active => SessionTarget::Active,
+                SessionTargetArg::Id(id) => SessionTarget::Id {
+                    id: SessionSelector(id.clone()),
+                },
+            });
+        }
+        self.session_id.as_ref().map(|id| SessionTarget::Id {
+            id: SessionSelector(id.clone()),
+        })
+    }
+
+    fn has_target(&self) -> bool {
+        self.session.is_some() || self.session_id.is_some()
+    }
+}
+
+impl FromStr for SessionTargetArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value == "active" {
+            return Ok(Self::Active);
+        }
+        let (kind, selector) = parse_selector_parts(value, "session")?;
+        match kind {
+            "id" => Ok(Self::Id(non_empty_selector_value(selector, "session id")?)),
+            _ => Err(format!(
+                "invalid session selector {value}; expected active or id:<id>"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Args, Default)]
+struct BlockTargetArgs {
+    /// Target a block with active, id:<id>, or index:<n>.
+    #[arg(
+        long = "block",
+        value_name = "SELECTOR",
+        conflicts_with_all = ["block_id_selector", "block_index"]
+    )]
+    block: Option<BlockTargetArg>,
+
+    /// Target a block by opaque id.
+    #[arg(
+        long = "block-id",
+        value_name = "ID",
+        id = "block_id_selector",
+        conflicts_with_all = ["block", "block_index"]
+    )]
+    block_id: Option<String>,
+
+    /// Target a block by zero-based index.
+    #[arg(
+        long = "block-index",
+        value_name = "INDEX",
+        conflicts_with_all = ["block", "block_id_selector"]
+    )]
+    block_index: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BlockTargetArg {
+    Active,
+    Id(String),
+    Index(u32),
+}
+
+impl BlockTargetArgs {
+    fn to_target(&self) -> Option<BlockTarget> {
+        if let Some(target) = &self.block {
+            return Some(match target {
+                BlockTargetArg::Active => BlockTarget::Active,
+                BlockTargetArg::Id(id) => BlockTarget::Id {
+                    id: BlockSelector(id.clone()),
+                },
+                BlockTargetArg::Index(index) => BlockTarget::Index { index: *index },
+            });
+        }
+        if let Some(id) = &self.block_id {
+            return Some(BlockTarget::Id {
+                id: BlockSelector(id.clone()),
+            });
+        }
+        self.block_index.map(|index| BlockTarget::Index { index })
+    }
+
+    fn has_target(&self) -> bool {
+        self.block.is_some() || self.block_id.is_some() || self.block_index.is_some()
+    }
+}
+
+impl FromStr for BlockTargetArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value == "active" {
+            return Ok(Self::Active);
+        }
+        let (kind, selector) = parse_selector_parts(value, "block")?;
+        match kind {
+            "id" => Ok(Self::Id(non_empty_selector_value(selector, "block id")?)),
+            "index" => Ok(Self::Index(parse_selector_index(selector, "block index")?)),
+            _ => Err(format!(
+                "invalid block selector {value}; expected active, id:<id>, or index:<n>"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Args, Default)]
+struct FileTargetArgs {
+    /// Target a file with path:<path> or id:<id>.
+    #[arg(
+        long = "file",
+        value_name = "SELECTOR",
+        conflicts_with_all = ["file_path", "file_id"]
+    )]
+    file: Option<FileTargetArg>,
+
+    /// Target a file by path.
+    #[arg(
+        long = "file-path",
+        value_name = "PATH",
+        conflicts_with_all = ["file", "file_id"]
+    )]
+    file_path: Option<String>,
+
+    /// Target a file by opaque id.
+    #[arg(
+        long = "file-id",
+        value_name = "ID",
+        conflicts_with_all = ["file", "file_path"]
+    )]
+    file_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FileTargetArg {
+    Path(String),
+    Id(String),
+}
+
+impl FileTargetArgs {
+    fn to_target(&self) -> Option<FileTarget> {
+        if let Some(target) = &self.file {
+            return Some(match target {
+                FileTargetArg::Path(path) => FileTarget::Path { path: path.clone() },
+                FileTargetArg::Id(id) => FileTarget::Id {
+                    id: FileSelector(id.clone()),
+                },
+            });
+        }
+        if let Some(path) = &self.file_path {
+            return Some(FileTarget::Path { path: path.clone() });
+        }
+        self.file_id.as_ref().map(|id| FileTarget::Id {
+            id: FileSelector(id.clone()),
+        })
+    }
+
+    fn has_target(&self) -> bool {
+        self.file.is_some() || self.file_path.is_some() || self.file_id.is_some()
+    }
+}
+
+impl FromStr for FileTargetArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (kind, selector) = parse_selector_parts(value, "file")?;
+        match kind {
+            "path" => Ok(Self::Path(non_empty_selector_value(selector, "file path")?)),
+            "id" => Ok(Self::Id(non_empty_selector_value(selector, "file id")?)),
+            _ => Err(format!(
+                "invalid file selector {value}; expected path:<path> or id:<id>"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Args, Default)]
+struct DriveTargetArgs {
+    /// Target a Drive object with id:<type>:<id> or name:<type>:<name>.
+    #[arg(
+        long = "drive",
+        value_name = "SELECTOR",
+        conflicts_with_all = ["drive_id", "drive_name"]
+    )]
+    drive: Option<DriveTargetArg>,
+
+    /// Target a Drive object by type and opaque id, such as workflow:abc123.
+    #[arg(
+        long = "drive-id",
+        value_name = "TYPE:ID",
+        conflicts_with_all = ["drive", "drive_name"]
+    )]
+    drive_id: Option<DriveObjectValueArg>,
+
+    /// Target a Drive object by type and exact name, such as workflow:Deploy.
+    #[arg(
+        long = "drive-name",
+        value_name = "TYPE:NAME",
+        conflicts_with_all = ["drive", "drive_id"]
+    )]
+    drive_name: Option<DriveObjectValueArg>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DriveTargetArg {
+    Id {
+        object_type: local_control::DriveObjectType,
+        id: String,
+    },
+    Name {
+        object_type: local_control::DriveObjectType,
+        name: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DriveObjectValueArg {
+    object_type: local_control::DriveObjectType,
+    value: String,
+}
+
+impl DriveTargetArgs {
+    fn to_target(&self) -> Option<DriveTarget> {
+        if let Some(target) = &self.drive {
+            return Some(match target {
+                DriveTargetArg::Id { object_type, id } => DriveTarget::Id {
+                    object_type: *object_type,
+                    id: DriveObjectSelector(id.clone()),
+                },
+                DriveTargetArg::Name { object_type, name } => DriveTarget::Name {
+                    object_type: *object_type,
+                    name: name.clone(),
+                },
+            });
+        }
+        if let Some(value) = &self.drive_id {
+            return Some(DriveTarget::Id {
+                object_type: value.object_type,
+                id: DriveObjectSelector(value.value.clone()),
+            });
+        }
+        self.drive_name.as_ref().map(|value| DriveTarget::Name {
+            object_type: value.object_type,
+            name: value.value.clone(),
+        })
+    }
+
+    fn has_target(&self) -> bool {
+        self.drive.is_some() || self.drive_id.is_some() || self.drive_name.is_some()
+    }
+}
+
+impl FromStr for DriveTargetArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (kind, selector) = parse_selector_parts(value, "drive")?;
+        let parsed = selector.parse::<DriveObjectValueArg>()?;
+        match kind {
+            "id" => Ok(Self::Id {
+                object_type: parsed.object_type,
+                id: parsed.value,
+            }),
+            "name" => Ok(Self::Name {
+                object_type: parsed.object_type,
+                name: parsed.value,
+            }),
+            _ => Err(format!(
+                "invalid drive selector {value}; expected id:<type>:<id> or name:<type>:<name>"
+            )),
+        }
+    }
+}
+
+impl FromStr for DriveObjectValueArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (object_type, selector) = value
+            .split_once(':')
+            .ok_or_else(|| format!("invalid Drive selector {value}; expected type:value"))?;
+        Ok(Self {
+            object_type: parse_drive_object_type(object_type)?,
+            value: non_empty_selector_value(selector, "Drive selector value")?,
+        })
+    }
+}
+impl TargetArgs {
+    fn instance_selector(&self) -> InstanceSelector {
+        if let Some(instance_id) = &self.instance {
+            return InstanceSelector::Id(local_control::discovery::InstanceId(instance_id.clone()));
+        }
+        if let Some(pid) = self.pid {
+            return InstanceSelector::Pid(pid);
+        }
+        InstanceSelector::Active
+    }
+
+    fn target_selector(&self) -> TargetSelector {
+        TargetSelector {
+            window: self.window.to_target(),
+            tab: self.tab.to_target(),
+            pane: self.pane.to_target(),
+            session: self.session.to_target(),
+            block: self.block.to_target(),
+            file: self.file.to_target(),
+            drive: self.drive.to_target(),
+        }
+    }
+
+    fn has_app_target(&self) -> bool {
+        self.window.has_target()
+            || self.tab.has_target()
+            || self.pane.has_target()
+            || self.session.has_target()
+            || self.block.has_target()
+            || self.file.has_target()
+            || self.drive.has_target()
+    }
+}
+
+fn parse_selector_parts<'a>(value: &'a str, family: &str) -> Result<(&'a str, &'a str), String> {
+    value
+        .split_once(':')
+        .ok_or_else(|| format!("invalid {family} selector {value}; expected kind:value"))
+}
+
+fn non_empty_selector_value(value: &str, label: &str) -> Result<String, String> {
+    if value.is_empty() {
+        return Err(format!("{label} cannot be empty"));
+    }
+    Ok(value.to_owned())
+}
+
+fn parse_selector_index(value: &str, label: &str) -> Result<u32, String> {
+    value
+        .parse::<u32>()
+        .map_err(|_| format!("{label} must be a non-negative integer"))
+}
+
+fn parse_drive_object_type(value: &str) -> Result<local_control::DriveObjectType, String> {
+    match value {
+        "workflow" => Ok(local_control::DriveObjectType::Workflow),
+        "notebook" => Ok(local_control::DriveObjectType::Notebook),
+        "environment" => Ok(local_control::DriveObjectType::Environment),
+        "prompt" => Ok(local_control::DriveObjectType::Prompt),
+        _ => Err(format!(
+            "invalid Drive object type {value}; expected workflow, notebook, environment, or prompt"
+        )),
+    }
 }
 
 impl ControlArgs {
@@ -70,6 +732,7 @@ fn run_app_surface_command(
     action: ActionKind,
     output_format: OutputFormat,
 ) -> Result<(), ControlError> {
+    reject_app_target(&args.target, action)?;
     run_action_with_params(
         args.target,
         action,
@@ -394,6 +1057,27 @@ pub struct TargetArgs {
     /// Target a specific local Warp process id.
     #[arg(long = "pid", conflicts_with = "instance")]
     pub pid: Option<u32>,
+
+    #[command(flatten)]
+    window: WindowTargetArgs,
+
+    #[command(flatten)]
+    tab: TabTargetArgs,
+
+    #[command(flatten)]
+    pane: PaneTargetArgs,
+
+    #[command(flatten)]
+    session: SessionTargetArgs,
+
+    #[command(flatten)]
+    block: BlockTargetArgs,
+
+    #[command(flatten)]
+    file: FileTargetArgs,
+
+    #[command(flatten)]
+    drive: DriveTargetArgs,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -959,36 +1643,51 @@ fn run_instance_command(
 
 fn run_app_command(command: AppCommand, output_format: OutputFormat) -> Result<(), ControlError> {
     match command {
-        AppCommand::Ping(args) => run_action_with_params(
-            args,
-            ActionKind::AppPing,
-            local_control::EmptyParams {},
-            output_format,
-        ),
-        AppCommand::Version(args) => run_action_with_params(
-            args,
-            ActionKind::AppVersion,
-            local_control::EmptyParams {},
-            output_format,
-        ),
-        AppCommand::Active(args) => run_action_with_params(
-            args,
-            ActionKind::AppActive,
-            local_control::AppActiveParams::default(),
-            output_format,
-        ),
-        AppCommand::Inspect(args) => run_action_with_params(
-            args,
-            ActionKind::AppInspect,
-            local_control::AppInspectParams::default(),
-            output_format,
-        ),
-        AppCommand::Focus(args) => run_action_with_params(
-            args,
-            ActionKind::AppFocus,
-            AppFocusParams::default(),
-            output_format,
-        ),
+        AppCommand::Ping(args) => {
+            reject_app_target(&args, ActionKind::AppPing)?;
+            run_action_with_params(
+                args,
+                ActionKind::AppPing,
+                local_control::EmptyParams {},
+                output_format,
+            )
+        }
+        AppCommand::Version(args) => {
+            reject_app_target(&args, ActionKind::AppVersion)?;
+            run_action_with_params(
+                args,
+                ActionKind::AppVersion,
+                local_control::EmptyParams {},
+                output_format,
+            )
+        }
+        AppCommand::Active(args) => {
+            reject_app_target(&args, ActionKind::AppActive)?;
+            run_action_with_params(
+                args,
+                ActionKind::AppActive,
+                local_control::AppActiveParams::default(),
+                output_format,
+            )
+        }
+        AppCommand::Inspect(args) => {
+            reject_app_target(&args, ActionKind::AppInspect)?;
+            run_action_with_params(
+                args,
+                ActionKind::AppInspect,
+                local_control::AppInspectParams::default(),
+                output_format,
+            )
+        }
+        AppCommand::Focus(args) => {
+            reject_app_target(&args, ActionKind::AppFocus)?;
+            run_action_with_params(
+                args,
+                ActionKind::AppFocus,
+                AppFocusParams::default(),
+                output_format,
+            )
+        }
         AppCommand::SettingsOpen(args) => {
             run_app_surface_command(args, ActionKind::AppSettingsOpen, output_format)
         }
@@ -1539,9 +2238,11 @@ fn run_action_with_params<T: Serialize>(
     output_format: OutputFormat,
 ) -> Result<(), ControlError> {
     let records = local_control::discovery::list_instances();
-    let selector = instance_selector(args);
+    let selector = args.instance_selector();
+    let target = args.target_selector();
     let instance = select_instance(&records, &selector)?;
-    let request = local_control::RequestEnvelope::new(Action::with_params(action, params)?);
+    let mut request = RequestEnvelope::new(Action::with_params(action, params)?);
+    request.target = target;
     let response = local_control::client::send_request(&instance, &request)?;
     let local_control::protocol::ControlResponse::Ok { data } = response.response else {
         return Err(ControlError::new(
@@ -1556,14 +2257,14 @@ fn run_action_with_params<T: Serialize>(
     }
 }
 
-fn instance_selector(args: TargetArgs) -> InstanceSelector {
-    if let Some(instance_id) = args.instance {
-        return InstanceSelector::Id(local_control::discovery::InstanceId(instance_id));
+fn reject_app_target(args: &TargetArgs, action: ActionKind) -> Result<(), ControlError> {
+    if args.has_app_target() {
+        return Err(ControlError::new(
+            ErrorCode::InvalidSelector,
+            format!("{} does not accept target selectors", action.as_str()),
+        ));
     }
-    if let Some(pid) = args.pid {
-        return InstanceSelector::Pid(pid);
-    }
-    InstanceSelector::Active
+    Ok(())
 }
 
 fn generate_completions_to_stdout(shell: Option<Shell>) -> Result<(), ControlError> {

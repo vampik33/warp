@@ -9,6 +9,47 @@ fn request_envelope_serializes_stable_action_names() {
 }
 
 #[test]
+fn request_envelope_serializes_target_selector() {
+    let mut request = RequestEnvelope::new(Action::new(ActionKind::TabActivate));
+    request.target = TargetSelector {
+        window: Some(WindowTarget::Index { index: 1 }),
+        tab: Some(TabTarget::Title {
+            title: "Main".to_owned(),
+        }),
+        pane: Some(PaneTarget::Id {
+            id: PaneSelector("pane-1".to_owned()),
+        }),
+        session: Some(SessionTarget::Id {
+            id: SessionSelector("session-1".to_owned()),
+        }),
+        block: Some(BlockTarget::Index { index: 2 }),
+        file: Some(FileTarget::Path {
+            path: "/tmp/example.txt".to_owned(),
+        }),
+        drive: Some(DriveTarget::Id {
+            object_type: DriveObjectType::Workflow,
+            id: DriveObjectSelector("workflow-1".to_owned()),
+        }),
+    };
+    let value = serde_json::to_value(&request).expect("request serializes");
+    assert_eq!(value["target"]["window"]["type"], "index");
+    assert_eq!(value["target"]["window"]["index"], 1);
+    assert_eq!(value["target"]["tab"]["type"], "title");
+    assert_eq!(value["target"]["tab"]["title"], "Main");
+    assert_eq!(value["target"]["pane"]["type"], "id");
+    assert_eq!(value["target"]["pane"]["id"], "pane-1");
+    assert_eq!(value["target"]["session"]["type"], "id");
+    assert_eq!(value["target"]["session"]["id"], "session-1");
+    assert_eq!(value["target"]["block"]["type"], "index");
+    assert_eq!(value["target"]["block"]["index"], 2);
+    assert_eq!(value["target"]["file"]["type"], "path");
+    assert_eq!(value["target"]["file"]["path"], "/tmp/example.txt");
+    assert_eq!(value["target"]["drive"]["type"], "id");
+    assert_eq!(value["target"]["drive"]["object_type"], "workflow");
+    assert_eq!(value["target"]["drive"]["id"], "workflow-1");
+}
+
+#[test]
 fn read_only_metadata_actions_are_logged_out_safe_metadata_reads() {
     for action in [
         ActionKind::AppActive,

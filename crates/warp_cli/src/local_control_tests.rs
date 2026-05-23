@@ -31,6 +31,181 @@ fn parses_first_slice_tab_create() {
     };
     assert_eq!(target.instance.as_deref(), Some("inst_123"));
 }
+#[test]
+fn parses_target_selector_aliases() {
+    let args = ControlArgs::try_parse_from([
+        "warpctrl",
+        "tab",
+        "create",
+        "--window-id",
+        "window-1",
+        "--tab-index",
+        "2",
+        "--pane",
+        "active",
+    ])
+    .expect("selector aliases parse");
+    let ControlCommand::Tab(TabCommand::Create(target)) = args.command else {
+        panic!("expected tab create command");
+    };
+    assert_eq!(
+        target.target_selector(),
+        TargetSelector {
+            window: Some(WindowTarget::Id {
+                id: WindowSelector("window-1".to_owned()),
+            }),
+            tab: Some(TabTarget::Index { index: 2 }),
+            pane: Some(PaneTarget::Active),
+            ..TargetSelector::default()
+        }
+    );
+}
+#[test]
+fn parses_generic_target_selectors() {
+    let args = ControlArgs::try_parse_from([
+        "warpctrl",
+        "tab",
+        "create",
+        "--window",
+        "title:Main",
+        "--tab",
+        "id:tab-1",
+        "--pane",
+        "index:3",
+    ])
+    .expect("generic selectors parse");
+    let ControlCommand::Tab(TabCommand::Create(target)) = args.command else {
+        panic!("expected tab create command");
+    };
+    assert_eq!(
+        target.target_selector(),
+        TargetSelector {
+            window: Some(WindowTarget::Title {
+                title: "Main".to_owned(),
+            }),
+            tab: Some(TabTarget::Id {
+                id: TabSelector("tab-1".to_owned()),
+            }),
+            pane: Some(PaneTarget::Index { index: 3 }),
+            ..TargetSelector::default()
+        }
+    );
+}
+#[test]
+fn parses_read_only_target_selector_families() {
+    let args = ControlArgs::try_parse_from([
+        "warpctrl",
+        "session",
+        "list",
+        "--session-id",
+        "session-1",
+        "--block-index",
+        "4",
+        "--file-path",
+        "/tmp/example.txt",
+        "--drive-id",
+        "workflow:workflow-1",
+    ])
+    .expect("read-only selector families parse");
+    let ControlCommand::Session(SessionCommand::List(target)) = args.command else {
+        panic!("expected session list command");
+    };
+    assert_eq!(
+        target.target_selector(),
+        TargetSelector {
+            window: None,
+            tab: None,
+            pane: None,
+            session: Some(SessionTarget::Id {
+                id: SessionSelector("session-1".to_owned()),
+            }),
+            block: Some(BlockTarget::Index { index: 4 }),
+            file: Some(FileTarget::Path {
+                path: "/tmp/example.txt".to_owned(),
+            }),
+            drive: Some(DriveTarget::Id {
+                object_type: local_control::DriveObjectType::Workflow,
+                id: DriveObjectSelector("workflow-1".to_owned()),
+            }),
+        }
+    );
+}
+#[test]
+fn parses_mutating_target_selector_families() {
+    let args = ControlArgs::try_parse_from([
+        "warpctrl",
+        "tab",
+        "rename",
+        "--window-id",
+        "window-1",
+        "--tab-id",
+        "tab-1",
+        "Build",
+    ])
+    .expect("mutating selector families parse");
+    let ControlCommand::Tab(TabCommand::Rename(rename)) = args.command else {
+        panic!("expected tab rename command");
+    };
+    assert_eq!(rename.title.as_deref(), Some("Build"));
+    assert_eq!(
+        rename.target.target_selector(),
+        TargetSelector {
+            window: Some(WindowTarget::Id {
+                id: WindowSelector("window-1".to_owned()),
+            }),
+            tab: Some(TabTarget::Id {
+                id: TabSelector("tab-1".to_owned()),
+            }),
+            ..TargetSelector::default()
+        }
+    );
+}
+#[test]
+fn rejects_conflicting_target_selectors() {
+    assert!(
+        ControlArgs::try_parse_from([
+            "warpctrl",
+            "tab",
+            "create",
+            "--window",
+            "active",
+            "--window-id",
+            "window-1",
+        ])
+        .is_err()
+    );
+    assert!(
+        ControlArgs::try_parse_from([
+            "warpctrl",
+            "tab",
+            "create",
+            "--tab-id",
+            "tab-1",
+            "--tab-title",
+            "Main",
+        ])
+        .is_err()
+    );
+    assert!(
+        ControlArgs::try_parse_from([
+            "warpctrl",
+            "tab",
+            "create",
+            "--pane",
+            "active",
+            "--pane-index",
+            "0",
+        ])
+        .is_err()
+    );
+}
+#[test]
+fn app_metadata_commands_reject_app_targets() {
+    let args = ControlArgs::try_parse_from(["warpctrl", "app", "ping", "--tab-id", "tab-1"])
+        .expect("app ping parses");
+    let error = run_inner(args).expect_err("app ping target is rejected");
+    assert_eq!(error.code, ErrorCode::InvalidSelector);
+}
 
 #[test]
 fn parses_first_slice_instance_list() {
