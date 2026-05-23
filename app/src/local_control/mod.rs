@@ -9,6 +9,8 @@ use crate::features::FeatureFlag;
 use crate::notebooks::CloudNotebook;
 use crate::pane_group::{PaneGroup, PaneId};
 use crate::projects::ProjectManagementModel;
+use crate::terminal::model::session::SessionId;
+use crate::terminal::model::TerminalModel;
 use std::collections::{BTreeMap, HashMap};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -22,7 +24,8 @@ use crate::workflows::CloudWorkflow;
 use crate::workspace::ActiveSession;
 use ::local_control::auth::{CredentialGrant, CredentialRequest, ScopedCredential};
 use ::local_control::protocol::{
-    ActionGetParams, DriveGetParams, DriveGetResult, DriveListParams, DriveListResult,
+    ActionGetParams, BlockGetParams, BlockGetResult, BlockListParams, BlockListResult,
+    BlockSummary, DriveGetParams, DriveGetResult, DriveListParams, DriveListResult,
     DriveObjectSummary, DriveObjectType as ControlDriveObjectType, DriveTarget, FileListResult,
     FileSummary, HistoryEntrySummary, HistoryListParams, HistoryListResult, InputStateResult,
     PaneTarget, ProjectActiveResult, ProjectListResult, ProjectSummary, SessionTarget, TabTarget,
@@ -348,6 +351,34 @@ impl LocalControlBridge {
                     Err(error) => ResponseEnvelope::error(request.request_id, error),
                 }
             }
+            ActionKind::BlockList => {
+                if let Err(error) = ensure_authenticated_user_matches(&grant, ctx) {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match self.list_blocks(&request.target, request.action.params_as(), ctx) {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
+            ActionKind::BlockGet => {
+                if let Err(error) = ensure_authenticated_user_matches(&grant, ctx) {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match self.get_block(&request.target, request.action.params_as(), ctx) {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
             ActionKind::DriveList => {
                 if let Err(error) = ensure_authenticated_user_matches(&grant, ctx) {
                     return ResponseEnvelope::error(request.request_id, error);
@@ -601,6 +632,59 @@ impl LocalControlBridge {
         })?;
         drive_object_get_result(object, params.object_type)
             .and_then(|result| serde_json::to_value(result).map_err(json_response_error))
+    }
+    fn list_blocks(
+        &self,
+        target: &TargetSelector,
+        params: Result<BlockListParams, ControlError>,
+        ctx: &mut ModelContext<Self>,
+    ) -> Result<serde_json::Value, ControlError> {
+        validate_block_list_target(target)?;
+        let params = params?;
+        let terminal = target_terminal_view(ctx)?;
+        let result = terminal.read(ctx, |view, _| {
+            let session_id = resolve_session_selector(
+                target.session.as_ref(),
+                view.active_block_session_id(),
+                ActionKind::BlockList,
+            )?;
+            let model = view.model.lock();
+            block_list_result_from_model(&model, session_id, target.session.is_some(), params)
+        })?;
+        serde_json::to_value(result).map_err(|err| {
+            ControlError::with_details(
+                ErrorCode::Internal,
+                "failed to serialize block.list result",
+                err.to_string(),
+            )
+        })
+    }
+
+    fn get_block(
+        &self,
+        target: &TargetSelector,
+        params: Result<BlockGetParams, ControlError>,
+        ctx: &mut ModelContext<Self>,
+    ) -> Result<serde_json::Value, ControlError> {
+        validate_block_get_target(target)?;
+        let params = params?;
+        let terminal = target_terminal_view(ctx)?;
+        let result = terminal.read(ctx, |view, _| {
+            let session_id = resolve_session_selector(
+                target.session.as_ref(),
+                view.active_block_session_id(),
+                ActionKind::BlockGet,
+            )?;
+            let model = view.model.lock();
+            block_get_result_from_model(&model, session_id, &params.block_id)
+        })?;
+        serde_json::to_value(result).map_err(|err| {
+            ControlError::with_details(
+                ErrorCode::Internal,
+                "failed to serialize block.get result",
+                err.to_string(),
+            )
+        })
     }
 
     fn instance_metadata(&self) -> serde_json::Value {
@@ -1004,6 +1088,78 @@ fn validate_instance_metadata_read_target(
     Ok(())
 }
 
+fn validate_block_list_target(target: &TargetSelector) -> Result<(), ControlError> {
+    validate_active_terminal_target(target, ActionKind::BlockList)?;
+    if target.block.is_some() {
+        return Err(ControlError::new(
+            ErrorCode::InvalidSelector,
+            "block.list does not accept a block selector",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_block_get_target(target: &TargetSelector) -> Result<(), ControlError> {
+    validate_active_terminal_target(target, ActionKind::BlockGet)?;
+    if target.block.is_some() {
+        return Err(ControlError::new(
+            ErrorCode::InvalidSelector,
+            "block.get uses its block_id parameter instead of a block selector",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_active_terminal_target(
+    target: &TargetSelector,
+    action: ActionKind,
+) -> Result<(), ControlError> {
+    let action_name = action.as_str();
+    if matches!(target.window.as_ref(), Some(WindowTarget::Id { .. })) {
+        return Err(ControlError::new(
+            ErrorCode::StaleTarget,
+            format!("{action_name} cannot resolve the requested window id"),
+        ));
+    }
+    if !matches!(target.window.as_ref(), None | Some(WindowTarget::Active)) {
+        return Err(ControlError::new(
+            ErrorCode::InvalidSelector,
+            format!("{action_name} only supports the active window selector"),
+        ));
+    }
+    if matches!(target.tab.as_ref(), Some(TabTarget::Id { .. })) {
+        return Err(ControlError::new(
+            ErrorCode::StaleTarget,
+            format!("{action_name} cannot resolve the requested tab id"),
+        ));
+    }
+    if !matches!(target.tab.as_ref(), None | Some(TabTarget::Active)) {
+        return Err(ControlError::new(
+            ErrorCode::InvalidSelector,
+            format!("{action_name} only supports the active tab selector"),
+        ));
+    }
+    if matches!(target.pane.as_ref(), Some(PaneTarget::Id { .. })) {
+        return Err(ControlError::new(
+            ErrorCode::StaleTarget,
+            format!("{action_name} cannot resolve the requested pane id"),
+        ));
+    }
+    if !matches!(target.pane.as_ref(), None | Some(PaneTarget::Active)) {
+        return Err(ControlError::new(
+            ErrorCode::InvalidSelector,
+            format!("{action_name} only supports the active pane selector"),
+        ));
+    }
+    if target.file.is_some() || target.drive.is_some() {
+        return Err(ControlError::new(
+            ErrorCode::InvalidSelector,
+            format!("{action_name} does not accept file or drive selectors"),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_terminal_read_target(
     action: ActionKind,
     target: &TargetSelector,
@@ -1144,6 +1300,8 @@ fn validate_action_params(action: &::local_control::Action) -> Result<(), Contro
         | ActionKind::ProjectActive
         | ActionKind::ProjectList
         | ActionKind::InputGet => validate_empty_action_params(action),
+        ActionKind::BlockList => action.params_as::<BlockListParams>().map(|_| ()),
+        ActionKind::BlockGet => action.params_as::<BlockGetParams>().map(|_| ()),
         ActionKind::HistoryList => {
             let params = action.params.as_object().ok_or_else(|| {
                 ControlError::new(
@@ -1327,6 +1485,124 @@ fn require_active_window_id_for_action(
             format!("{} requires an active Warp window", action.as_str()),
         )
     })
+}
+fn target_terminal_view(
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<ViewHandle<TerminalView>, ControlError> {
+    let window_id = target_window_id(ctx)?;
+    let workspace = ctx
+        .views_of_type::<Workspace>(window_id)
+        .and_then(|workspaces| workspaces.into_iter().next())
+        .ok_or_else(|| {
+            ControlError::new(
+                ErrorCode::MissingTarget,
+                "block read requires a workspace in the target window",
+            )
+        })?;
+    workspace
+        .read(ctx, |workspace, ctx| {
+            workspace
+                .active_tab_pane_group()
+                .read(ctx, |pane_group, ctx| pane_group.active_session_view(ctx))
+        })
+        .ok_or_else(|| {
+            ControlError::new(
+                ErrorCode::MissingTarget,
+                "block read requires an active terminal session",
+            )
+        })
+}
+
+fn resolve_session_selector(
+    target: Option<&SessionTarget>,
+    active_session_id: Option<SessionId>,
+    action: ActionKind,
+) -> Result<SessionId, ControlError> {
+    match target {
+        None | Some(SessionTarget::Active) => active_session_id.ok_or_else(|| {
+            ControlError::new(
+                ErrorCode::MissingTarget,
+                format!("{} requires an active terminal session", action.as_str()),
+            )
+        }),
+        Some(SessionTarget::Id { id }) => id.0.parse::<u64>().map(SessionId::from).map_err(|err| {
+            ControlError::with_details(
+                ErrorCode::InvalidSelector,
+                format!("{} received an invalid session id", action.as_str()),
+                err.to_string(),
+            )
+        }),
+    }
+}
+
+fn block_summary(
+    block: &crate::terminal::model::block::Block,
+    index: usize,
+) -> Option<BlockSummary> {
+    let session_id = block.session_id()?;
+    let command = block.command_to_string();
+    Some(BlockSummary {
+        block_id: block.id().to_string(),
+        session_id: session_id.as_u64().to_string(),
+        index: index as u32,
+        command: (!command.is_empty()).then_some(command),
+    })
+}
+
+fn block_list_result_from_model(
+    model: &TerminalModel,
+    session_id: SessionId,
+    explicit_session: bool,
+    params: BlockListParams,
+) -> Result<BlockListResult, ControlError> {
+    let mut blocks: Vec<BlockSummary> = model
+        .block_list()
+        .blocks()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, block)| {
+            let summary = block_summary(block, index)?;
+            (summary.session_id == session_id.as_u64().to_string()).then_some(summary)
+        })
+        .collect();
+    if explicit_session && blocks.is_empty() {
+        return Err(ControlError::new(
+            ErrorCode::StaleTarget,
+            "block.list cannot resolve the requested session id",
+        ));
+    }
+    if let Some(limit) = params.limit {
+        let start = blocks.len().saturating_sub(limit as usize);
+        blocks = blocks.split_off(start);
+    }
+    Ok(BlockListResult { blocks })
+}
+
+fn block_get_result_from_model(
+    model: &TerminalModel,
+    session_id: SessionId,
+    block_id: &str,
+) -> Result<BlockGetResult, ControlError> {
+    model
+        .block_list()
+        .blocks()
+        .iter()
+        .enumerate()
+        .find_map(|(index, block)| {
+            if block.id().as_str() != block_id || block.session_id() != Some(session_id) {
+                return None;
+            }
+            block_summary(block, index).map(|summary| BlockGetResult {
+                block: summary,
+                output: Some(block.output_to_string()),
+            })
+        })
+        .ok_or_else(|| {
+            ControlError::new(
+                ErrorCode::StaleTarget,
+                "block.get cannot resolve the requested block id",
+            )
+        })
 }
 
 fn outside_warp_any_implemented_action_enabled(ctx: &ModelContext<LocalControlServer>) -> bool {

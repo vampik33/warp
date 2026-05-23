@@ -1,21 +1,25 @@
 use ::local_control::auth::CredentialGrant;
 use ::local_control::protocol::ActionKind;
 use ::local_control::protocol::{
-    Action, ControlResponse, DriveGetParams, DriveGetResult, DriveListParams, DriveListResult,
-    DriveObjectType, FileTarget, PaneSelector, PaneTarget, SessionSelector, SessionTarget,
-    TabSelector, TabTarget, TargetSelector, WindowSelector, WindowTarget,
+    Action, BlockGetParams, BlockListParams, ControlResponse, DriveGetParams, DriveGetResult,
+    DriveListParams, DriveListResult, DriveObjectType, FileTarget, PaneSelector, PaneTarget,
+    SessionSelector, SessionTarget, TabSelector, TabTarget, TargetSelector, WindowSelector,
+    WindowTarget,
 };
 use ::local_control::{ErrorCode, InstanceId, InvocationContext, RequestEnvelope};
 use chrono::Duration;
 use settings::Setting as _;
 use warp_core::features::FeatureFlag;
+use warp_core::session_id::SessionId;
 use warpui::{App, SingletonEntity};
 
 use super::{
-    action_metadata_for_name, authenticated_user_subject_for_action, capabilities,
-    ensure_feature_enabled, ensure_settings_allow_action, outside_warp_action_enabled_for_settings,
+    action_metadata_for_name, authenticated_user_subject_for_action, block_get_result_from_model,
+    block_list_result_from_model, capabilities, ensure_feature_enabled,
+    ensure_settings_allow_action, outside_warp_action_enabled_for_settings,
     require_active_window_id, require_active_window_id_for_action, validate_action_params,
-    validate_drive_target, validate_instance_metadata_read_target, validate_tab_create_target,
+    validate_block_get_target, validate_block_list_target, validate_drive_target,
+    validate_instance_metadata_read_target, validate_tab_create_target,
     validate_terminal_read_target, LocalControlBridge,
 };
 use crate::auth::AuthStateProvider;
@@ -29,6 +33,7 @@ use crate::settings::{
     AllowOutsideWarpControl, AllowOutsideWarpReadOnly, AllowOutsideWarpReadWrite,
     LocalControlSettings,
 };
+use crate::terminal::model::TerminalModel;
 use crate::test_util::settings::initialize_settings_for_tests;
 use crate::workflows::{workflow::Workflow, CloudWorkflow, CloudWorkflowModel};
 use crate::workspaces::user_workspaces::UserWorkspaces;
@@ -246,6 +251,8 @@ fn capabilities_advertises_only_first_slice_core_actions() {
             ActionKind::ActionList,
             ActionKind::ActionGet,
             ActionKind::TabCreate,
+            ActionKind::BlockList,
+            ActionKind::BlockGet,
             ActionKind::InputGet,
             ActionKind::HistoryList,
             ActionKind::FileList,
@@ -568,6 +575,131 @@ fn file_and_project_metadata_reads_reject_malformed_params() {
         })
         .expect("empty metadata read params are accepted");
     }
+}
+
+#[test]
+fn block_reads_require_underlying_data_permission() {
+    let settings = settings_with_values(true, true, false, false, true, true);
+
+    let err = ensure_settings_allow_action(
+        &settings,
+        InvocationContext::InsideWarp,
+        ActionKind::BlockList,
+    )
+    .expect_err("underlying data read permission is disabled");
+    assert_eq!(err.code, ErrorCode::InsufficientPermissions);
+}
+
+#[test]
+fn metadata_read_grant_cannot_read_blocks() {
+    let grant = CredentialGrant::new(
+        InstanceId("instance".to_owned()),
+        ActionKind::AppPing,
+        InvocationContext::OutsideWarp,
+        Duration::minutes(5),
+    );
+
+    let err = grant
+        .verify_for_action(ActionKind::BlockList)
+        .expect_err("metadata credential cannot read terminal data");
+    assert_eq!(err.code, ErrorCode::InsufficientPermissions);
+}
+
+#[test]
+fn block_read_grant_requires_authenticated_user_subject() {
+    let grant = CredentialGrant::new(
+        InstanceId("instance".to_owned()),
+        ActionKind::BlockGet,
+        InvocationContext::OutsideWarp,
+        Duration::minutes(5),
+    );
+
+    let err = grant
+        .verify_for_action(ActionKind::BlockGet)
+        .expect_err("block.get requires authenticated user grant");
+    assert_eq!(err.code, ErrorCode::AuthenticatedUserRequired);
+}
+
+#[test]
+fn block_read_targets_accept_default_and_active_session() {
+    validate_block_list_target(&TargetSelector::default()).expect("default target is accepted");
+    validate_block_get_target(&TargetSelector {
+        session: Some(SessionTarget::Active),
+        ..TargetSelector::default()
+    })
+    .expect("active session target is accepted");
+}
+
+#[test]
+fn block_list_rejects_block_selector() {
+    let err = validate_block_list_target(&TargetSelector {
+        block: Some(::local_control::protocol::BlockTarget::Id {
+            id: ::local_control::protocol::BlockSelector("block".to_owned()),
+        }),
+        ..TargetSelector::default()
+    })
+    .expect_err("block.list does not accept block selectors");
+    assert_eq!(err.code, ErrorCode::InvalidSelector);
+}
+
+#[test]
+fn block_read_rejects_stale_session_targets() {
+    let model = TerminalModel::mock(None, None);
+
+    let err = block_list_result_from_model(
+        &model,
+        SessionId::from(42),
+        true,
+        BlockListParams::default(),
+    )
+    .expect_err("explicit session id is stale");
+    assert_eq!(err.code, ErrorCode::StaleTarget);
+}
+
+#[test]
+fn block_get_rejects_stale_block_targets() {
+    let model = TerminalModel::mock(None, None);
+
+    let err = block_get_result_from_model(&model, SessionId::from(0), "missing-block")
+        .expect_err("block id is stale");
+    assert_eq!(err.code, ErrorCode::StaleTarget);
+}
+
+#[test]
+fn block_list_and_get_return_active_session_block_output() {
+    let mut model = TerminalModel::mock(None, None);
+    model.simulate_block("echo hi", "hello from block");
+    let session_id = SessionId::from(7);
+    let mut block_id = None;
+
+    for block in model.block_list_mut().blocks_mut() {
+        if block.command_to_string() == "echo hi" {
+            block.set_session_id(session_id);
+            block_id = Some(block.id().to_string());
+        }
+    }
+
+    let Some(block_id) = block_id else {
+        panic!("expected simulated block id");
+    };
+    let list = block_list_result_from_model(
+        &model,
+        session_id,
+        false,
+        BlockListParams { limit: Some(1) },
+    )
+    .expect("block list succeeds");
+    assert_eq!(list.blocks.len(), 1);
+    assert_eq!(list.blocks[0].block_id, block_id);
+    assert_eq!(list.blocks[0].command.as_deref(), Some("echo hi"));
+
+    let params = BlockGetParams {
+        block_id: block_id.clone(),
+    };
+    let block = block_get_result_from_model(&model, session_id, &params.block_id)
+        .expect("block get succeeds");
+    assert_eq!(block.block.block_id, block_id);
+    assert_eq!(block.output.as_deref(), Some("hello from block"));
 }
 
 #[test]
