@@ -105,7 +105,7 @@ Non-goals:
    - Replace the active input buffer.
    - Clear the active input buffer where that matches existing user behavior.
    - Switch input mode between terminal and agent modes only where that mode switch is already user-visible and valid for the selected target.
-   The initial public version must not submit terminal input, press Enter, run terminal commands, accept suggested commands, launch workflows into a terminal, or submit agent prompts. At most, it may stage text into an active input buffer for the user to review and confirm manually. Command execution and agent-prompt submission may be reserved as future protocol concepts only after a separate product/security review.
+   Input staging commands must not submit terminal input or press Enter. The separate `input run` execution action may submit a command only in the later execution-underlying branch, after authenticated scripting identity, underlying-data-mutation permission, audit coverage, and explicit target resolution are implemented. Accepted-command submission and agent-prompt submission remain future protocol concepts that require separate product/security review.
 21. Appearance actions:
    - List available themes.
    - Set the current fixed theme.
@@ -138,13 +138,14 @@ Non-goals:
    - Open a path in a new tab or window.
    - Open a repository picker or repo path flow where the current app already supports it.
    These should remain allowlisted intent actions rather than arbitrary filesystem RPCs.
-26. The following categories are explicitly excluded from the initial public allowlist even if there are internal actions for them:
+26. The following categories are explicitly excluded from the public allowlist even when internal actions exist for them:
    - Crash, panic, heap-dump, token-copying, debug-reset, and similar developer/debug helpers.
-   - Arbitrary auth manipulation.
-   - Arbitrary cloud object mutation or broad Warp Drive CRUD.
+   - Arbitrary auth manipulation outside the explicit authenticated-scripting flows.
+   - Arbitrary cloud object mutation or broad Warp Drive CRUD outside the typed Drive actions in this spec.
    - Arbitrary internal view dispatch by string.
    - Arbitrary setting names outside the allowlist.
-   - Terminal command execution, workflow execution, accepted-command submission, and agent-prompt submission in the initial public version.
+   - Accepted-command submission and agent-prompt submission until they receive a separate product/security review.
+   Terminal command execution, file writes/deletes, and typed Warp Drive object mutations are no longer excluded from the full product scope, but they belong to later authenticated underlying-data mutation branches and require stronger authenticated-user and permission gates than app-state or settings mutations.
 27. CLI command names should be noun-oriented and discoverable. During the provisional standalone-binary phase, the control CLI should expose a `warpctrl ...` command surface:
    - `warpctrl instance list`
    - `warpctrl app active`
@@ -193,8 +194,8 @@ The product surface must distinguish what kind of state a command touches. This 
 - **Underlying data reads** expose user content or data-bearing state without changing it: terminal output, block contents, command history, input buffer contents, file contents, Warp Drive object contents, AI conversation content, and any other content that could contain user data or secrets.
 - **App-state mutations** change visible local Warp UI state without directly changing user data: opening or focusing windows, creating or closing tabs, splitting panes, focusing panes, opening panels, opening command surfaces, opening files in Warp, and editing the input buffer without submitting it.
 - **Metadata/configuration mutations** change persistent configuration or metadata, but not primary user content: changing themes, font size, zoom, allowlisted settings, keybindings, tab names, pane names, and tab colors.
-- **Underlying data mutations** can change user data or cause external side effects: writing/creating/deleting files, CRUD operations on Warp Drive objects, mutating AI conversation history, and future execution actions such as running terminal commands, running workflows that execute commands, accepting suggested commands, or submitting agent prompts.
-A command that touches multiple categories must require the strongest applicable permission. For example, `file open` is an app-state mutation, while `file write` is an underlying data mutation; `input insert` is an app-state mutation, while a future `input run` action would be an underlying data mutation because it executes a command in the target session.
+- **Underlying data mutations** can change user data or cause external side effects: writing/creating/deleting files, typed CRUD operations on Warp Drive objects, inserting content into Warp Drive views, running allowlisted Warp Drive workflows, and running terminal commands through an explicit `input run` action. Accepted-command submission, agent-prompt submission, arbitrary workflow execution, and arbitrary internal dispatch remain excluded until separately reviewed.
+A command that touches multiple categories must require the strongest applicable permission. For example, `file open` is an app-state mutation, while `file write` is an underlying data mutation; `input insert` is an app-state mutation, while `input run` is an underlying data mutation because it executes a command in the target session.
 ### Targeting flags
 All commands that address a running app target accept the same selector flags where meaningful. Generic `--window`, `--tab`, `--pane`, `--session`, and `--block` flags accept the selector grammar below; explicit typed aliases are provided so scripts can avoid string parsing ambiguity:
 - `--instance <instance_id>` selects a running Warp process from `warpctrl instance list`.
@@ -255,8 +256,19 @@ Local file and project reads that expose only app/editor state, not arbitrary fi
 Authenticated read-only Warp Drive metadata and data reads, enabled only when the selected app has a logged-in Warp user and the grant allows authenticated reads. Listing is metadata; inspecting object content is an underlying data read:
 - `warpctrl drive list --type <workflow|notebook|env-var-collection|prompt|folder|ai-fact|mcp-server|space|trash> [selectors]`
 - `warpctrl drive inspect <id> [selectors]`
+### Authenticated scripting command set
+The full product requires two authenticated scripting modes before high-risk underlying-data mutations ship:
+- **Verified Warp-terminal authenticated scripting:** `warpctrl` runs inside a Warp-managed terminal, presents the app-issued terminal proof described in `TECH.md`, and may receive authenticated-user grants only when the selected app is logged into Warp and Settings > Scripting allows authenticated actions from verified Warp terminals.
+- **External API-key authenticated scripting:** `warpctrl` runs outside Warp or in a pure automation environment and presents a Warp-issued API key or derived short-lived exchange token to the selected app's local broker. The broker verifies the key, scopes, expiry, and user subject before issuing local authenticated-user grants. This path is separate from the local-control bearer credential and is required for unattended scripts that need file, Drive, or execution authority.
+Recommended CLI surface for API-key setup and inspection:
+- `warpctrl auth status [selectors]` reports local-control auth state, selected app login state, authenticated grant availability, and whether an external API-key identity is configured.
+- `warpctrl auth login [selectors]` focuses the selected Warp app's sign-in UI for interactive app-login flows.
+- `warpctrl auth api-key set --key-env <env_var>|--key-stdin [selectors]` stores or references an external scripting API key in platform secure storage without printing it.
+- `warpctrl auth api-key status [selectors]` reports key subject/scope metadata without revealing the key.
+- `warpctrl auth api-key revoke [selectors]` deletes the local stored reference and, where supported, revokes the server-side key.
+The API-key path must support non-interactive scripts through an environment variable or secret manager reference, but raw keys must never be written to discovery records, logs, JSON output, shell completions, or repo config.
 ### Mutating command set
-The mutating branches should build on the read-only stack and implement the following mutating commands: `zach/warp-cli-mutating-layout` owns app/window/tab/pane layout mutations, and `zach/warp-cli-mutating-input-settings-surfaces` owns the remaining input/session/settings/surface mutations. Mutating commands are split by what they mutate: app-state, metadata/configuration, or underlying data. Underlying data mutations require a separate and stronger permission than app-state or metadata/configuration mutations.
+The mutating branches should build on the read-only and authenticated-scripting stack. `zach/warp-cli-mutating-layout` owns app/window/tab/pane layout mutations. `zach/warp-cli-mutating-input-settings-surfaces` owns input/session/settings/surface mutations. `zach/warp-cli-mutating-files-drive-data` owns file and Warp Drive underlying-data mutations. `zach/warp-cli-mutating-execution-underlying` owns terminal command execution and other approved execution-underlying actions. Mutating commands are split by what they mutate: app-state, metadata/configuration, or underlying data. Underlying data mutations require a separate and stronger permission plus an authenticated scripting identity.
 App-state mutations for app, window, and surfaces:
 - `warpctrl app focus [selectors]`
 - `warpctrl window create [--shell <name>] [selectors]`
@@ -309,7 +321,7 @@ App-state mutations for sessions and input buffers:
 - `warpctrl input replace <text> [--session <selector>] [selectors]`
 - `warpctrl input clear [--session <selector>] [selectors]`
 - `warpctrl input mode set <terminal|agent> [--session <selector>] [selectors]`
-These input-buffer commands only stage or edit text. The initial public implementation must not include a command that submits the buffer, executes a terminal command, accepts a suggested command, or sends an agent prompt.
+These input-buffer commands only stage or edit text and must not submit the buffer. The separate `input run` command belongs only to the execution-underlying branch and requires authenticated scripting identity, underlying-data-mutation permission, explicit target resolution, and audit coverage. Accepted-command submission and agent-prompt submission remain excluded until separately reviewed.
 Metadata/configuration mutations for appearance and settings:
 - `warpctrl theme set <theme_name> [selectors]`
 - `warpctrl theme system set <true|false> [selectors]`
@@ -330,19 +342,18 @@ App-state mutations for files, projects, and Warp Drive views:
 - `warpctrl drive notebook open <id> [selectors]`
 - `warpctrl drive env-var-collection open <id> [selectors]`
 Underlying data mutations for files and authenticated Warp Drive objects:
-- `warpctrl file create <path> [--content <text>] [selectors]`
-- `warpctrl file write <path> --content <text> [selectors]`
-- `warpctrl file append <path> --content <text> [selectors]`
+- `warpctrl file create <path> [--content <text>|--content-file <path>] [selectors]`
+- `warpctrl file write <path> --content <text>|--content-file <path> [selectors]`
+- `warpctrl file append <path> --content <text>|--content-file <path> [selectors]`
 - `warpctrl file delete <path> [selectors]`
-- `warpctrl drive object create --type <workflow|notebook|env-var-collection|prompt|folder> [selectors]`
-- `warpctrl drive object update <id> [selectors]`
-- `warpctrl drive object trash <id> [selectors]`
-- `warpctrl drive object restore <id> [selectors]`
-Future execution actions explicitly excluded from the initial public implementation:
-- `warpctrl input run <command> [--session <selector>] [selectors]`
-- `warpctrl agent prompt submit <prompt> [--session <selector>] [selectors]`
+- `warpctrl drive object create --type <workflow|notebook|env-var-collection|prompt|folder> [--content <text>|--content-file <path>] [selectors]`
+- `warpctrl drive object update <id> [--content <text>|--content-file <path>] [selectors]`
+- `warpctrl drive object delete <id> [selectors]`
+- `warpctrl drive object insert <id> [--target <selector>] [selectors]`
 - `warpctrl drive workflow run <id> [--arg <name=value>...] [selectors]`
-These are underlying-data mutations because they can execute code, trigger external side effects, or send user-authored prompts. They require a separate product/security review before being added to any public allowlist.
+Execution-underlying actions:
+- `warpctrl input run <command> [--session <selector>] [selectors]`
+These are underlying-data mutations because they can modify user data, execute code, trigger external side effects, or run user-authored content. They require authenticated scripting identity, underlying-data-mutation permission, deterministic target resolution, audit records, and explicit tests proving lower-permission credentials cannot run them. Accepted-command submission and agent-prompt submission remain excluded until separately reviewed.
 ### Excluded from the public command surface
 The command surface must continue to exclude debug-only, crash-only, auth-token, heap-dump, and arbitrary internal dispatch actions even when those actions are available in command palette or keybinding registries. Examples that remain excluded are app crash/panic helpers, access-token copy helpers, heap profile dumps, debug reset actions, raw view-tree debugging, and broad internal action-by-string execution.
 ## Branch stacking and delivery model
@@ -350,8 +361,11 @@ The Warp Control CLI work should ship as a raw-git branch stack so the combined 
 - `zach/warp-cli-core-foundation` is the bottom review branch and targets `master`. It owns `specs/warp-control-cli/PRODUCT.md`, `TECH.md`, `SECURITY.md`, and supporting docs alongside the first implementation slice: shared protocol, discovery/auth scaffolding, outside-Warp Settings > Scripting gates, local-control bridge/server, standalone `warpctrl` binary, packaging hooks, and the smallest safe end-to-end action. Verified inside-Warp invocation is documented for future implementation but is not supported by this branch.
 - `zach/warp-cli-readonly-metadata` stacks on `zach/warp-cli-core-foundation` and implements structural metadata reads, including instance/app health, active-chain, windows, tabs, panes, sessions, and action metadata.
 - `zach/warp-cli-readonly-data-settings` stacks on `zach/warp-cli-readonly-metadata` and fills in underlying-data reads plus read-only settings/appearance/docs, including terminal block output, input-buffer reads, history reads, and allowlisted settings metadata.
-- `zach/warp-cli-mutating-layout` stacks on `zach/warp-cli-readonly-data-settings` and implements app/window/tab/pane layout mutations.
-- `zach/warp-cli-mutating-input-settings-surfaces` stacks on `zach/warp-cli-mutating-layout` and fills in approved input/session/settings/surface mutating command families while preserving the initial prohibition on terminal command execution and agent-prompt submission.
+- `zach/warp-cli-authenticated-scripting` stacks on `zach/warp-cli-readonly-data-settings` and implements authenticated-user grant plumbing for both verified Warp-terminal invocations and external API-key scripting identities. It does not broaden action support by itself; it makes later high-risk branches enforceable.
+- `zach/warp-cli-mutating-layout` stacks on `zach/warp-cli-authenticated-scripting` and implements app/window/tab/pane layout mutations.
+- `zach/warp-cli-mutating-input-settings-surfaces` stacks on `zach/warp-cli-mutating-layout` and fills in approved input/session/settings/surface mutating command families while preserving the prohibition on accepted-command submission and agent-prompt submission.
+- `zach/warp-cli-mutating-files-drive-data` stacks on `zach/warp-cli-mutating-input-settings-surfaces` and implements authenticated file and Warp Drive underlying-data mutations from the approved allowlist.
+- `zach/warp-cli-mutating-execution-underlying` stacks on `zach/warp-cli-mutating-files-drive-data` and implements authenticated execution-underlying actions such as `input run` and typed workflow execution where supported.
 The previous `zach/warp-cli-specs` branch is retained only as migration-source/history material. New spec changes originate on `zach/warp-cli-core-foundation` and are propagated upward through the stack with raw git so all higher implementation branches reflect the same product/security contract. Graphite is not part of this stack. If a lower branch merges first, higher branches should rebase onto the merged successor while preserving the approved spec content.
 ## Built-in Warp Agent skill
 Warp should include a built-in Agent skill for `warpctrl`, analogous to the bundled `oz-platform` skill. The skill should teach Warp Agent when to use `warpctrl`, how to discover and target running instances, how to prefer read-only commands before mutating commands, how to request explicit user approval for underlying data mutations, and how to interpret structured errors. The skill should document the stable command hierarchy above, include concise recipes for common automation tasks, and avoid instructing agents to bypass the CLI by calling local-control HTTP endpoints directly.
@@ -378,6 +392,10 @@ Every action definition must include:
 - the required local-control permission category;
 - any target-scope restrictions.
 By default, new actions require an authenticated Warp user. An action may be marked logged-out-safe only after deliberate review confirms it does not touch Warp Drive, AI conversation traces, synced settings, team/account data, cloud-backed user state, terminal content, or other user-sensitive data.
+### Authenticated scripting model
+Authenticated scripting is required for any command that acts on a true Warp user identity or performs underlying-data mutation. Local-control credentials prove that a process may talk to the selected app; authenticated scripting credentials prove which Warp user or automation identity is allowed to request user-backed or high-risk actions.
+Inside Warp, authenticated scripting uses the verified terminal proof flow: the selected app is already logged in, the terminal proof binds the CLI to a live Warp-managed session, and the broker may mint an authenticated-user grant for that app user when Settings > Scripting allows it.
+Outside Warp, authenticated scripting uses a Warp-issued API key or exchanged short-lived token. The API key must be scoped for scripting/local control, optionally constrained to action categories or resource families, and tied to a Warp user subject. The selected app must either be logged in as the same subject or be able to validate that the API key's subject is authorized for the requested local action without exporting cloud auth tokens to the script. External API-key grants default off in Settings > Scripting and should be separable from ordinary outside-Warp logged-out-safe control.
 ### Permission categories
 Every action in the catalog belongs to exactly one of the following permission categories, from least to most sensitive:
 1. **Read-only / metadata.** Actions that return local app structure, app state, or configuration metadata without exposing terminal content, file content, Warp Drive object content, AI conversation content, or other user data.
@@ -396,12 +414,12 @@ Every action in the catalog belongs to exactly one of the following permission c
    - Tab and pane names, tab colors, themes, system-theme settings, font size, zoom, allowlisted app settings, and keybindings.
    Metadata/configuration writes need a stronger permission than app-state-only changes because they persist beyond the current UI interaction, but they are still distinct from data writes.
 5. **Mutating / underlying data.** Actions that can change user data, execute code, submit prompts, or cause external side effects.
-   - Future terminal execution: `input run`, workflow execution in a terminal session, and any command execution path. These are explicitly excluded from the initial public implementation.
-   - Future agent execution: submitting an agent prompt, accepting an agent-proposed command, or otherwise causing an agent to act. These are explicitly excluded from the initial public implementation.
+   - Terminal execution through the explicit `input run` action and typed workflow execution where supported.
    - File writes: create, write, append, delete, rename, or otherwise modify local files.
-   - Warp Drive CRUD: create, update, trash, restore, permanently delete, or otherwise mutate workflows, notebooks, prompts, env-var collections, folders, or other Drive objects.
+   - Warp Drive CRUD: create, update, delete, insert, run, or otherwise mutate workflows, notebooks, prompts, env-var collections, folders, or other Drive objects.
    - AI conversation history mutation and any action that modifies cloud-backed user content.
-   This category must be explicitly separate from app-state mutation. A client allowed to open or focus Warp UI must not automatically be allowed to execute commands, write files, or mutate Warp Drive content.
+   - Future agent execution: submitting an agent prompt, accepting an agent-proposed command, or otherwise causing an agent to act; these remain excluded until separately reviewed.
+   This category must be explicitly separate from app-state mutation and requires authenticated scripting identity. A client allowed to open or focus Warp UI must not automatically be allowed to execute commands, write files, or mutate Warp Drive content.
 ### Authenticated-user requirement
 An authenticated user means a true logged-in Warp user in the selected Warp app, not merely the local OS user or a `warpctrl` process authenticated to localhost.
 The allowlist must clearly indicate `requires_authenticated_user` for every action:
@@ -409,15 +427,15 @@ The allowlist must clearly indicate `requires_authenticated_user` for every acti
 - `true` for actions that read or mutate Warp Drive, AI conversation traces, synced settings, team/account data, user identity data, or any cloud-backed Warp state.
 - `true` for actions that execute user-authored Warp Drive content, even if the execution target is a local terminal session.
 If an authenticated-user action is invoked while the selected app has no logged-in user, the CLI reports a structured authenticated-user error. It must not silently return partial logged-out data as success.
-### Warp Control login protocol
-`warpctrl` must not maintain an independent cloud login that can drift from the Warp process it controls. For authenticated-user actions, the logged-in user is the user currently authenticated in the selected Warp app instance.
-The CLI should expose a small auth/status flow for actions that require a logged-in Warp user:
+### Warp Control authenticated scripting protocol
+`warpctrl` has two authenticated scripting modes. Interactive inside-Warp use relies on the logged-in user in the selected Warp app and verified terminal proof. External or pure scripting use relies on a Warp-issued API key that is separate from local-control credentials and is exchanged for short-lived authenticated grants.
+The CLI should expose auth/status flows for both modes:
 - `warpctrl auth status [selectors]` reports whether the selected Warp app is logged in and returns a stable, non-secret user subject/identity summary when the caller has the required local-control grant.
 - `warpctrl auth login [selectors]` does not collect credentials in the CLI or mint a separate CLI account session. It focuses or opens the selected Warp app's normal sign-in UI and waits, or exits with instructions, until the user completes sign-in in that app.
-- After login completes, the app-side credential broker may mint an authenticated-user grant only for the same user subject that is currently logged in to the selected app.
-- Authenticated-user credentials are bound to the selected app instance and user subject. If the app logs out, switches users, loses auth state, or the grant's subject no longer matches the selected app's logged-in subject, authenticated-user actions fail with a structured authenticated-user error rather than using stale authority.
-- Raw Firebase, server, OAuth, or cloud API tokens are never exported to `warpctrl`, shell scripts, generated docs, logs, or JSON output.
-This login protocol applies only to actions whose allowlist entry requires a true logged-in Warp user. Logged-out-safe local actions continue to use local-control credentials without requiring Warp account login.
+- After app login completes, the app-side credential broker may mint an app-user grant only for the same user subject that is currently logged in to the selected app. For external API-key mode, the broker may mint an API-key-backed grant only after validating the key, scopes, subject, and local Scripting permissions.
+- Authenticated credentials are bound to the selected app instance, subject, grant mode, scopes, expiry, and optional target/resource restrictions. If the app logs out, switches users, loses auth state, or the grant's subject no longer matches a grant that requires the selected app's logged-in subject, authenticated actions fail with a structured authenticated-user error rather than using stale authority.
+- Raw Firebase, server, OAuth, cloud API tokens, and raw scripting API keys are never exported to `warpctrl` output, shell scripts, generated docs, logs, discovery records, or JSON responses.
+This authenticated scripting protocol applies only to actions whose allowlist entry requires a true logged-in Warp user, external API-key identity, or underlying-data-mutation authority. Logged-out-safe local actions continue to use local-control credentials without requiring Warp account login or API-key setup.
 ### Execution context policy
 `warpctrl` should eventually distinguish verified invocations from inside Warp-managed terminal sessions from external invocations. The current foundation branch supports external invocation only and must reject verified Warp-terminal claims until the proof broker is implemented.
 - **Verified Warp-terminal invocation:** a `warpctrl` process started inside a Warp-managed terminal session and able to present an app-issued execution-context proof. The top-level setting for this context should default to on. When the selected app has a logged-in Warp user, this context can receive authenticated-user grants if the user's Scripting permissions allow that grant.
@@ -451,7 +469,7 @@ Scoped credentials should include:
 - revocation/audit identity.
 The bridge, not the CLI frontend, enforces these grants. If a request exceeds its credential, the bridge returns `insufficient_permissions`, `authenticated_user_required`, `authenticated_user_unavailable`, or `execution_context_not_allowed` as appropriate.
 ### Future entity extensibility: files, blocks, and Warp Drive objects
-The selector and action model should be designed to accommodate entity types beyond the current window/tab/pane/session hierarchy. Important entity families are **terminal blocks**, **local files**, **projects/workspaces**, and **Warp Drive objects**. Neither broad file/Drive mutation nor command/agent execution is in scope for the first implementation, but the protocol should not preclude future reviewed additions.
+The selector and action model should accommodate entity types beyond the current window/tab/pane/session hierarchy. Important entity families are **terminal blocks**, **local files**, **projects/workspaces**, and **Warp Drive objects**. Broad file/Drive mutation and command execution are not in scope for the foundation branch, but they are in scope for later authenticated branches in the expanded stack. Agent-prompt submission remains excluded until separately reviewed.
 **Terminal blocks.** Blocks are first-class targetable terminal entities, not just data hanging off a session. Block selectors should support the same addressing primitives as terminal sessions where meaningful: active/current block, opaque block ID, and block index scoped to the resolved session. Block reads can expose command text, output, status, timing, exit code, and metadata, so block content reads are underlying-data reads while block listing that returns only IDs/status/timestamps may be metadata reads. Stale, missing, or ambiguous block selectors must fail rather than selecting a neighboring block.
 **Files.** Warp already supports file opening via deep links and the built-in editor. A future `file` namespace could support:
 - `warpctrl file open <path>` — app-state mutation that opens a file in a Warp editor tab, equivalent to clicking a file link.
@@ -463,10 +481,10 @@ File selectors would use filesystem paths (absolute or relative to the working d
 **Warp Drive objects.** Warp Drive stores typed objects that users can reference, execute, edit, and share. The object taxonomy should include, at minimum, spaces, folders, notebooks, workflows, agent-mode workflows/prompts, environment variable collections, AI facts/rules, MCP servers, MCP server collections, and trash entries where trash operations are exposed. A future `drive` namespace could support:
 - `warpctrl drive list --type workflow` — authenticated metadata read that lists Warp Drive objects by type.
 - `warpctrl drive inspect <id>` — authenticated underlying data read when it returns object content.
-- `warpctrl drive workflow run <workflow-id>` — future authenticated underlying data mutation that executes a workflow in a target session, excluded from the initial public implementation.
+- `warpctrl drive workflow run <workflow-id>` — authenticated underlying data mutation that executes a typed workflow in a target session, implemented only in the execution-underlying branch with authenticated scripting identity and audit coverage.
 - `warpctrl drive object create|update|trash|restore <id>` — authenticated underlying data mutations that change cloud-backed user content.
 - `warpctrl drive notebook open <notebook-id>` — app-state mutation that opens a view of an existing notebook without modifying it.
-Drive object selectors should support both opaque IDs (for automation stability) and human-friendly name/path lookups (for interactive use). The type field (`workflow`, `notebook`, `env_var_collection`, `prompt`, `folder`, `ai_fact`, `mcp_server`, etc.) acts as a namespace filter. Drive actions that execute content in a terminal session (e.g., running a workflow) inherit the underlying-data-mutation permission from the action classification model and remain unavailable until the execution prohibition is lifted by a later spec/review.
+Drive object selectors should support both opaque IDs (for automation stability) and human-friendly name/path lookups (for interactive use). The type field (`workflow`, `notebook`, `env_var_collection`, `prompt`, `folder`, `ai_fact`, `mcp_server`, etc.) acts as a namespace filter. Drive actions that execute content in a terminal session (e.g., running a workflow) inherit the underlying-data-mutation permission from the action classification model and are implemented only in the execution-underlying branch after authenticated scripting identity and audit coverage are in place.
 **Design constraints for these future entity families:**
 - File and Drive selectors are orthogonal to the window/tab/pane hierarchy — a file open action targets an instance (which window to open in), not a specific pane. A Drive workflow execution targets a session (which pane to run in).
 - The `TargetSelector` type in the protocol should be extensible with optional fields for these new selector families without breaking existing requests that omit them.

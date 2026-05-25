@@ -145,7 +145,30 @@ Minimum implementable design:
 - The broker then checks Settings > Scripting and permission-category policy for the requested action. A valid proof raises the maximum eligible grant set; it does not bypass user settings, action metadata, authenticated-user requirements, target scopes, or bridge enforcement.
 - The minted credential records `invocation_context: InsideWarp`, the granted permission category, expiry, instance, and any authenticated-user subject. The app bridge revalidates the grant and current app policy on every control request.
 Hardened follow-ups can strengthen this minimum design by storing secret material in platform secure storage, exposing only opaque handles through the shell, using Unix-domain-socket or named-pipe peer-credential checks, binding proofs to broker challenges, and invalidating proofs on shell/session teardown, app logout, user switch, or Settings > Scripting changes. These hardening layers improve direct-token theft resistance, but they do not create a perfect security boundary against malicious same-user software with process, filesystem, Accessibility, or screen-observation access.
-### 5. App-side request bridge onto the UI/application context
+### 5. Authenticated scripting identity and API-key grants
+The full control catalog includes file writes, Warp Drive data mutation, and execution-underlying actions. Those actions require an authenticated scripting layer in addition to local-control credentials. Local-control credentials prove authority to call the local app; authenticated scripting credentials prove the Warp user or automation identity allowed to request user-backed or high-risk actions.
+#### Inside-Warp authenticated scripting
+For `warpctrl` launched inside a Warp-managed terminal, use the verified terminal proof broker from the previous section. When the proof is valid and the selected app is logged into Warp, the broker may mint an authenticated-user grant bound to the app's current user subject. The grant is available only if Settings > Scripting enables authenticated-user actions for verified Warp terminals and the requested action's permission category is enabled.
+The CLI must not receive raw Firebase, OAuth, server, or session tokens. The app bridge executes authenticated actions through the selected app's existing auth state and rejects the grant if the app logs out, switches users, or the grant subject no longer matches the app user.
+#### External API-key authenticated scripting
+For `warpctrl` launched outside Warp, by cron, or by another pure scripting environment, introduce a separate API-key path. The user creates or supplies a Warp-issued scripting API key with explicit scopes such as local-control authenticated reads, file mutation, Drive mutation, or execution-underlying actions. The CLI may reference the key from a secret manager or environment variable such as `WARPCTRL_API_KEY`, or store it in platform secure storage through `warpctrl auth api-key set --key-stdin`; it must never print or write the raw key to discovery records, logs, JSON output, shell completions, or repo config.
+The local broker exchanges or validates the API key with Warp services, obtains a short-lived signed identity assertion, and mints a local authenticated-user grant only when all of the following hold:
+- outside-Warp scripting is enabled;
+- external authenticated-user grants are enabled separately from logged-out outside-Warp control;
+- the API key is valid, unexpired, unrevoked, and scoped for the requested permission category and action family;
+- the selected app is logged into the same Warp user subject, or the action is explicitly designed to use API-key-backed identity without exporting app cloud tokens;
+- the requested local-control permission category is enabled;
+- any resource or target restrictions in the key and grant are satisfied.
+The grant should record the API-key subject, scopes, credential ID, expiry, invocation context, permission category, and optional target/resource restrictions. The app bridge revalidates the grant before selector resolution and handler dispatch.
+#### Auth command surface and storage
+Add CLI and broker support for:
+- `warpctrl auth status [selectors]` to report selected app login state, configured API-key subject metadata, and available authenticated grant modes without exposing secrets.
+- `warpctrl auth login [selectors]` to focus the selected app's normal sign-in UI for interactive app login.
+- `warpctrl auth api-key set --key-env <env_var>|--key-stdin [selectors]` to store or reference an external scripting key.
+- `warpctrl auth api-key status [selectors]` to show key subject/scope metadata.
+- `warpctrl auth api-key revoke [selectors]` to delete the local reference and revoke the server-side key where supported.
+Store raw API keys only in platform secure storage where available. Environment-variable use is allowed for non-interactive automation, but commands and docs should prefer secret-manager injection over plaintext shell profiles.
+### 6. App-side request bridge onto the UI/application context
 The HTTP handler runs on a Tokio runtime thread owned by the local-control server. It cannot directly access or mutate Warp's UI models, views, or app context because all WarpUI state is single-threaded and owned by the main app event loop. The bridge solves this by sending a closure from the Tokio handler thread to the main thread, executing it in the model's context, and returning the result to the waiting HTTP handler.
 #### Thread model
 - **Tokio runtime thread (HTTP handler):** Owns the Axum router, receives HTTP requests, authenticates, deserializes the `RequestEnvelope`. Cannot touch `AppContext`, views, or models.
@@ -210,7 +233,7 @@ To add a new action to the bridge:
 5. Inside the match arm, use `ctx` (which is a `&mut ModelContext<LocalControlBridge>` that derefs to `&mut AppContext`) to resolve selectors and dispatch the action onto existing app types.
 6. Return a `ResponseEnvelope::ok(...)` or `ResponseEnvelope::error(...)` with the result.
 The bridge closure has access to the full `AppContext` API surface, including `ctx.windows()`, `ctx.window_ids()`, `ctx.views_of_type::<T>(window_id)`, `handle.update(ctx, ...)`, and `handle.read(ctx, ...)`. This makes it straightforward to wire new actions to existing UI behavior without introducing new concurrency concerns.
-### 6. Target resolution model
+### 7. Target resolution model
 Implement target resolution as a reusable component rather than scattering lookup logic across handlers.
 Recommended resolution order:
 1. Select instance in the CLI/discovery layer.
@@ -239,7 +262,7 @@ Implementation references:
 - Session selectors: `--session <active|id:<id>|index:<n>>`, `--session-id <id>`, and `--session-index <n>`, with one form allowed.
 - Block/file/Drive selectors only on commands that need them: `--block-id <id>`, path arguments or `--path <path>` plus `--line`/`--column`, and Drive object ID arguments or `--drive-id <id>`.
 The CLI converts these flags into the protocol `TargetSelector` before sending the request. It must not rely on positional entity IDs for commands like `window close 1`; target entities are selected through the shared selector flags so command arguments remain reserved for action parameters.
-### 7. Allowlisted handler families
+### 8. Allowlisted handler families
 Use one handler module per action family. The protocol layer owns parsing/validation; handler modules own target resolution and delegation to existing app logic.
 Recommended modules/families:
 - Discovery/state:
@@ -270,7 +293,7 @@ Recommended shape:
 - Keep the mapping one-way from internal behavior to public catalog metadata. `WarpCtrlBehavior::Exposed(ControlActionKind::TabCreate)` means the action is represented by the public `tab.create` command; it does not mean raw `WorkspaceAction::AddTerminalTab` is serializable or dispatchable over the protocol.
 - Add tests that collect reviewed action kinds and verify every `ControlActionKind` has protocol metadata, permission metadata, CLI parser coverage, generated-doc coverage, and an app-side handler before it can be advertised as supported.
 The `warpui::Action` trait should not be extended for this purpose because it currently has a blanket implementation for any `Any + Debug + Send + Sync` type. The enforcement point is the concrete user-visible action enums and binding/action registration surfaces, where exhaustive review can be required without weakening the allowlisted protocol boundary.
-### 8. First slice: prove discovery and `tab.create`
+### 9. First slice: prove discovery and `tab.create`
 The first `warpctrl` implementation slice should land the minimum cross-cutting architecture plus a single representative tab mutation:
 - Shared protocol types and error envelopes.
 - `FeatureFlag::WarpControlCli` and Cargo feature `warp_control_cli`, with app-side runtime gating for settings, discovery, bridge registration, and local-control endpoints.
@@ -293,7 +316,7 @@ Why `tab.create` first:
 - It exercises the protected enablement and scoped-grant model before higher-risk action families depend on it.
 - It gives operators a concise end-to-end smoke test: discover a running instance, create a tab, and confirm the live app changed.
 The PR should also introduce the shell-facing CLI command grammar that the remainder of the protocol will reuse and establish a lightweight CLI startup path distinct from GUI startup.
-### 9. Follow-up slices: fill out the remaining protocol in parallel
+### 10. Follow-up slices: fill out the remaining protocol in parallel
 After the first slice validates discovery, auth, selector resolution, CLI syntax, and server-to-app execution, follow-up slices can add the remaining allowlisted catalog in parallelized action-family groups. The baseline code should make new action additions mostly additive:
 - Extend `ControlAction`.
 - Update the relevant `WarpCtrlBehavior` mappings for the internal app actions that implement, overlap with, exclude, or defer the behavior.
@@ -301,7 +324,7 @@ After the first slice validates discovery, auth, selector resolution, CLI syntax
 - Add a handler.
 - Add validation/tests.
 - Add CLI surface/tests.
-### 10. CLI parsing and output libraries
+### 11. CLI parsing and output libraries
 The `warpctrl` CLI must use the same argument parsing and output libraries as the existing Oz CLI so that conventions, derive patterns, and shell-completion generation remain consistent across both binaries.
 - **clap** (with the `derive` feature) for argument parsing, subcommand trees, and help generation. Both binaries share the `warp_cli` crate, so parser types defined there are reused directly.
 - **serde** / **serde_json** for JSON request/response serialization and for `--output-format json` output.
@@ -309,7 +332,7 @@ The `warpctrl` CLI must use the same argument parsing and output libraries as th
 - The `OutputFormat` enum (`Pretty`, `Json`, `Ndjson`, `Text`) is shared from `warp_cli::agent::OutputFormat` so human-readable vs. machine-readable output follows the same conventions.
 - New subcommand types for `warpctrl` live in `warp_cli::local_control` and follow the same `#[derive(Parser)]` / `#[derive(Subcommand)]` / `#[derive(Args)]` patterns used by the Oz CLI's top-level `Args` and `CliCommand` types.
 Do not introduce alternative parsing libraries (e.g., `structopt`, `argh`) or alternative serialization approaches. Keeping one set of libraries across both CLIs reduces dependency weight, ensures consistent `--help` formatting, and lets contributors move between the two surfaces without learning a different stack.
-### 11. CLI packaging and release shape
+### 12. CLI packaging and release shape
 The shipped product shape should be a separate bundled `warpctrl` CLI binary that reuses shared CLI/protocol crates but does not depend on launching the GUI binary in command mode. Follow the Oz CLI release model as closely as practical:
 - macOS:
   - Add a standalone control CLI artifact path next to the existing Oz standalone CLI artifact flow.
@@ -333,23 +356,29 @@ The durable review stack should optimize for reviewability rather than mirroring
 1. `zach/warp-cli-core-foundation` — create this branch from `master`. It owns the specs in `specs/warp-control-cli/PRODUCT.md`, `TECH.md`, `SECURITY.md`, and supporting docs, plus the shared implementation foundation: protocol crate shape, discovery/auth scaffolding, selector and error types, action metadata/catalog structure, Scripting settings surface, protected local-control settings, local-control server/bridge skeleton, standalone `warpctrl` binary skeleton, packaging hooks, module split, `WarpCtrlBehavior` scaffolding, and the minimum `tab.create` smoke path if needed to prove the end-to-end architecture.
 2. `zach/warp-cli-readonly-metadata` — create this branch from `zach/warp-cli-core-foundation`. It implements structural metadata reads: instance/app health and active-chain commands, windows, tabs, panes, sessions, capability/action metadata, opaque IDs, metadata target shapes, and metadata-read permission enforcement. It must not expose terminal output, input buffers, history, file contents, Drive object contents, or other underlying user data.
 3. `zach/warp-cli-readonly-data-settings` — create this branch from `zach/warp-cli-readonly-metadata`. It implements underlying-data reads and read-only settings/appearance/docs: block listing/inspection/output, input-buffer reads, history reads, theme/settings/keybinding/action reads, project/file app-state reads, authenticated Drive metadata/content reads where present, read-only docs, and the read-only `warpctrl` Agent skill.
-4. `zach/warp-cli-mutating-layout` — create this branch from `zach/warp-cli-readonly-data-settings`. It implements layout and app-state mutations for app/window/tab/pane behavior: window create/focus/close, tab create/activate/move/close, tab metadata that belongs with layout review if appropriate, pane split/focus/navigate/resize/maximize/close, app-state mutation permission checks, and layout mutation tests.
-5. `zach/warp-cli-mutating-input-settings-surfaces` — create this branch from `zach/warp-cli-mutating-layout`. It implements the remaining approved mutating command families: session activation/cycling/reopen, input insert/replace/clear, input mode switching, theme/system-theme/font/zoom changes, allowlisted setting set/toggle, settings/palette/search/panel/surface commands, file/project/Drive open commands that are app-state-only, mutating docs, and the mutating-command Agent skill updates. It must preserve the initial public prohibition on terminal command execution, workflow execution, accepted-command submission, and agent-prompt submission.
+4. `zach/warp-cli-authenticated-scripting` — create this branch from `zach/warp-cli-readonly-data-settings`. It implements authenticated-user grant plumbing, the verified Warp-terminal proof broker, external API-key scripting identity, auth command surface, Settings > Scripting controls for authenticated grants, and tests proving high-risk actions cannot run without authenticated grants. It should not implement broad new action families by itself.
+5. `zach/warp-cli-mutating-layout` — create this branch from `zach/warp-cli-authenticated-scripting`. It implements layout and app-state mutations for app/window/tab/pane behavior: window create/focus/close, tab create/activate/move/close, tab metadata that belongs with layout review if appropriate, pane split/focus/navigate/resize/maximize/close, app-state mutation permission checks, and layout mutation tests.
+6. `zach/warp-cli-mutating-input-settings-surfaces` — create this branch from `zach/warp-cli-mutating-layout`. It implements session activation/cycling/reopen, input insert/replace/clear, input mode switching, theme/system-theme/font/zoom changes, allowlisted setting set/toggle, settings/palette/search/panel/surface commands, file/project/Drive open commands that are app-state-only, mutating docs, and the mutating-command Agent skill updates. It must preserve the prohibition on accepted-command submission and agent-prompt submission.
+7. `zach/warp-cli-mutating-files-drive-data` — create this branch from `zach/warp-cli-mutating-input-settings-surfaces`. It implements authenticated underlying-data mutations for local files and Warp Drive objects: file create/write/append/delete, typed Drive object create/update/delete/insert, permission enforcement, authenticated-user/API-key enforcement, and tests using disposable resources.
+8. `zach/warp-cli-mutating-execution-underlying` — create this branch from `zach/warp-cli-mutating-files-drive-data`. It implements authenticated execution-underlying actions such as `input.run` and typed workflow execution where supported. It must require underlying-data-mutation permission plus authenticated scripting identity, audit records, explicit target resolution, and tests proving accepted-command submission and agent-prompt submission remain unavailable.
 The previous `zach/warp-cli-specs` branch is retained only as migration-source/history material. It is no longer a separate review PR or an authoritative branch in the active stack.
 The goal is to keep durable review branches close to roughly 2,000 lines of incremental changes where practical while avoiding a one-branch-per-command maintenance burden. Product phases still matter, but they are not the primary PR boundary. The durable branches are the review spine; short-lived shard branches can feed into them during implementation.
-Spec changes are an important part of the stacking strategy. All new spec changes must originate on `zach/warp-cli-core-foundation`, which is the authoritative source for `specs/warp-control-cli/PRODUCT.md`, `TECH.md`, `SECURITY.md`, and supporting docs. After a spec change lands there, propagate it upward through every stacked branch with raw git so the spec files stay synchronized across `zach/warp-cli-readonly-metadata`, `zach/warp-cli-readonly-data-settings`, `zach/warp-cli-mutating-layout`, and `zach/warp-cli-mutating-input-settings-surfaces`. Do not make independent spec edits directly on higher implementation branches except as part of resolving a propagation conflict in a way that preserves the authoritative bottom-branch content.
+Spec changes are an important part of the stacking strategy. All new spec changes must originate on `zach/warp-cli-core-foundation`, which is the authoritative source for `specs/warp-control-cli/PRODUCT.md`, `TECH.md`, `SECURITY.md`, and supporting docs. After a spec change lands there, propagate it upward through every stacked branch with raw git so the spec files stay synchronized across `zach/warp-cli-readonly-metadata`, `zach/warp-cli-readonly-data-settings`, `zach/warp-cli-authenticated-scripting`, `zach/warp-cli-mutating-layout`, `zach/warp-cli-mutating-input-settings-surfaces`, `zach/warp-cli-mutating-files-drive-data`, and `zach/warp-cli-mutating-execution-underlying`. Do not make independent spec edits directly on higher implementation branches except as part of resolving a propagation conflict in a way that preserves the authoritative bottom-branch content.
 Recommended raw-git setup after `zach/warp-cli-core-foundation` is ready:
 ```bash
 git fetch origin
 git checkout -b zach/warp-cli-core-foundation origin/master
 git checkout -b zach/warp-cli-readonly-metadata
 git checkout -b zach/warp-cli-readonly-data-settings
+git checkout -b zach/warp-cli-authenticated-scripting
 git checkout -b zach/warp-cli-mutating-layout
 git checkout -b zach/warp-cli-mutating-input-settings-surfaces
+git checkout -b zach/warp-cli-mutating-files-drive-data
+git checkout -b zach/warp-cli-mutating-execution-underlying
 ```
 If a lower branch changes after higher branches exist, rebase each higher branch onto its immediate lower branch with raw git and resolve conflicts by preserving both the lower branch's stable API/permission model and the higher branch's owned behavior.
 ### Migrating from the earlier four-branch stack
-The earlier four-branch stack (`zach/warp-cli-specs`, `zach/warp-cli`, `zach/warp-cli-readonly`, `zach/warp-cli-read-write`) should be treated as source material for the five-PR review stack, not as the final review structure.
+The earlier four-branch stack (`zach/warp-cli-specs`, `zach/warp-cli`, `zach/warp-cli-readonly`, `zach/warp-cli-read-write`) should be treated as source material for the expanded eight-PR review stack, not as the final review structure.
 Recommended migration:
 1. Create backup refs before rewriting or replacing anything:
    - `backup/warp-cli-specs` from `zach/warp-cli-specs`.
@@ -359,9 +388,12 @@ Recommended migration:
 2. Create `zach/warp-cli-core-foundation` from latest `origin/master` and bring over both the specs from `zach/warp-cli-specs` and only the foundation pieces from `zach/warp-cli`. Prefer path-level checkout followed by selective editing or `git add -p`; do not preserve every old commit if that makes review boundaries worse.
 3. Create `zach/warp-cli-readonly-metadata` from `zach/warp-cli-core-foundation` and bring over only metadata-read pieces from `zach/warp-cli-readonly`.
 4. Create `zach/warp-cli-readonly-data-settings` from `zach/warp-cli-readonly-metadata` and bring over the remaining read-only underlying-data, settings, docs, and skill pieces from `zach/warp-cli-readonly`.
-5. Create `zach/warp-cli-mutating-layout` from `zach/warp-cli-readonly-data-settings` and bring over only layout/app-state mutations from `zach/warp-cli-read-write`.
-6. Create `zach/warp-cli-mutating-input-settings-surfaces` from `zach/warp-cli-mutating-layout` and bring over the remaining approved mutating input/session/settings/surface pieces from `zach/warp-cli-read-write`.
-7. Recompute incremental diff sizes, validate compilation/tests for each branch, push the new stack, and retire or close the old broad branches once the new review stack is accepted.
+5. Create `zach/warp-cli-authenticated-scripting` from `zach/warp-cli-readonly-data-settings` and bring over or implement the verified terminal proof broker, external API-key scripting identity, authenticated-user grant plumbing, auth command surface, and related Settings > Scripting controls.
+6. Create `zach/warp-cli-mutating-layout` from `zach/warp-cli-authenticated-scripting` and bring over only layout/app-state mutations from `zach/warp-cli-read-write` and its layout shards.
+7. Create `zach/warp-cli-mutating-input-settings-surfaces` from `zach/warp-cli-mutating-layout` and bring over mutating input/session/settings/surface pieces from `zach/warp-cli-read-write`.
+8. Create `zach/warp-cli-mutating-files-drive-data` from `zach/warp-cli-mutating-input-settings-surfaces` and bring over `zach/warp-cli-read-write-file-data` and `zach/warp-cli-read-write-drive-data` functionality.
+9. Create `zach/warp-cli-mutating-execution-underlying` from `zach/warp-cli-mutating-files-drive-data` and bring over `zach/warp-cli-read-write-execution-underlying` functionality while keeping accepted-command and agent-prompt submission excluded.
+10. Recompute incremental diff sizes, validate compilation/tests for each branch, push the new stack, and retire or close the old broad branches once the new review stack is accepted.
 Before redistributing feature work, prefer landing a mechanical module-split commit in `zach/warp-cli-core-foundation` so later branches do not all expand the same large files. The app-side target should be:
 - `app/src/local_control/mod.rs` for registration and top-level exports.
 - `app/src/local_control/bridge.rs` for the app request bridge.
@@ -401,8 +433,11 @@ Keep PR boundaries aligned with the stack:
 - PR1: `zach/warp-cli-core-foundation` into `master` for the combined specs, shared protocol, CLI, settings, bridge, and module scaffolding.
 - PR2: `zach/warp-cli-readonly-metadata` into `zach/warp-cli-core-foundation` or its merged successor for metadata reads.
 - PR3: `zach/warp-cli-readonly-data-settings` into `zach/warp-cli-readonly-metadata` or its merged successor for underlying-data reads, settings reads, docs, and skill updates.
-- PR4: `zach/warp-cli-mutating-layout` into `zach/warp-cli-readonly-data-settings` or its merged successor for app/window/tab/pane layout mutations.
-- PR5: `zach/warp-cli-mutating-input-settings-surfaces` into `zach/warp-cli-mutating-layout` or its merged successor for input/session/settings/surface mutations.
+- PR4: `zach/warp-cli-authenticated-scripting` into `zach/warp-cli-readonly-data-settings` or its merged successor for verified terminal proofs, external API-key scripting auth, and authenticated-user grants.
+- PR5: `zach/warp-cli-mutating-layout` into `zach/warp-cli-authenticated-scripting` or its merged successor for app/window/tab/pane layout mutations.
+- PR6: `zach/warp-cli-mutating-input-settings-surfaces` into `zach/warp-cli-mutating-layout` or its merged successor for input/session/settings/surface mutations.
+- PR7: `zach/warp-cli-mutating-files-drive-data` into `zach/warp-cli-mutating-input-settings-surfaces` or its merged successor for authenticated file and Drive underlying-data mutations.
+- PR8: `zach/warp-cli-mutating-execution-underlying` into `zach/warp-cli-mutating-files-drive-data` or its merged successor for authenticated execution-underlying actions.
 If a lower PR merges before higher branches are ready, rebase the next branch onto the merged successor of its base and continue upward through the stack. Use raw git for all rebases, conflict resolution, cherry-picks, and pushes.
 ## End-to-end flow
 ```mermaid
@@ -446,6 +481,7 @@ Map tests directly to `PRODUCT.md` behavior.
   - Execution-context tests proving external clients cannot receive grants reserved for verified Warp-terminal invocations.
   - Permission-category enforcement tests proving insufficient grants fail with `insufficient_permissions` before selector resolution or handler dispatch, including separate denial cases for app-state mutation, metadata/configuration mutation, and underlying-data mutation.
   - Authenticated-user tests proving user-authenticated actions fail without a logged-in app user or authenticated-user grant.
+  - External API-key tests proving missing, invalid, expired, revoked, wrong-subject, and insufficient-scope keys fail before selector resolution or handler dispatch.
   - Settings > Scripting tests proving both top-level toggles and granular disabled categories invalidate credentials and prevent new grants.
   - Structured-error tests for disabled, unauthenticated, expired, revoked, insufficient-scope, execution-context-denied, authenticated-user-required, authenticated-user-unavailable, unsupported, malformed, ambiguous, missing-target, stale-target, and invalid-selector requests.
 - Behavior 1-6, 29-31:
@@ -498,8 +534,10 @@ Wave 2: mutating fan-out:
 - Suggested shards:
   - `zach/warp-cli-shard/mutating-window-tab-pane` owns window/tab/pane layout mutations and feeds `zach/warp-cli-mutating-layout`.
   - `zach/warp-cli-shard/mutating-input-session` owns session activation/cycling/reopen, input insert/replace/clear, and input mode switching, then feeds `zach/warp-cli-mutating-input-settings-surfaces`.
+  - `zach/warp-cli-shard/authenticated-scripting` owns verified terminal proofs, external API-key auth, authenticated-user grants, and auth command tests, then feeds `zach/warp-cli-authenticated-scripting`.
   - `zach/warp-cli-shard/mutating-settings-surfaces` owns theme/font/zoom/setting mutations and settings/palette/panel/surface commands, then feeds `zach/warp-cli-mutating-input-settings-surfaces`.
-  - `zach/warp-cli-shard/mutating-files-drive` is optional and should be deferred unless the approved scope includes file/Drive app-state opens or future underlying-data mutations.
+  - `zach/warp-cli-shard/mutating-files-drive-data` owns file write/delete and Drive object data mutations, then feeds `zach/warp-cli-mutating-files-drive-data`.
+  - `zach/warp-cli-shard/mutating-execution-underlying` owns `input.run` and typed workflow execution, then feeds `zach/warp-cli-mutating-execution-underlying`.
 Each cloud shard prompt should include:
 - The exact base branch and shard branch name.
 - Owned command families.
@@ -513,21 +551,30 @@ Default file ownership for shards:
 - Metadata shards own metadata handler/protocol/CLI modules and metadata tests.
 - Data shards own data handler/protocol/CLI modules and underlying-data permission tests.
 - Layout shards own layout handler/protocol/CLI modules and app-state mutation tests.
-- Input/session shards own input/session handler/protocol/CLI modules and tests proving staging does not submit or execute.
+- Authenticated-scripting shards own auth broker/protocol/CLI modules, Settings > Scripting authenticated grant controls, API-key storage/exchange tests, and authenticated-user denial tests.
+- Input/session shards own input/session handler/protocol/CLI modules and tests proving staging does not submit or execute unless the branch explicitly owns `input.run`.
 - Settings/surface shards own settings/surface handler/protocol/CLI modules and metadata/configuration mutation tests.
+- Files/Drive data shards own file and Drive underlying-data handler/protocol/CLI modules, authenticated-user/API-key enforcement tests, and disposable-resource tests.
+- Execution-underlying shards own `input.run` and typed workflow execution handler/protocol/CLI modules, audit tests, and denial tests proving accepted-command and agent-prompt submission remain unavailable.
 The lead integrator merges or cherry-picks accepted shard work into the durable stack with raw git, in review order. Shard branches should not become independent long-lived PRs unless the lead intentionally splits review further; their default purpose is to feed the durable stack while preserving parallel implementation and focused context windows.
 ```mermaid
 flowchart LR
     Core["zach/warp-cli-core-foundation<br/>specs + contracts + bridge"] --> ROMeta["zach/warp-cli-readonly-metadata<br/>structural reads"]
     ROMeta --> ROData["zach/warp-cli-readonly-data-settings<br/>data/settings reads"]
-    ROData --> MutLayout["zach/warp-cli-mutating-layout<br/>layout mutations"]
+    ROData --> Auth["zach/warp-cli-authenticated-scripting<br/>terminal proof + API key auth"]
+    Auth --> MutLayout["zach/warp-cli-mutating-layout<br/>layout mutations"]
     MutLayout --> MutInput["zach/warp-cli-mutating-input-settings-surfaces<br/>input/settings/surfaces"]
+    MutInput --> MutData["zach/warp-cli-mutating-files-drive-data<br/>file + Drive data"]
+    MutData --> MutExec["zach/warp-cli-mutating-execution-underlying<br/>execution actions"]
     ROMetaShard["shard/readonly-metadata"] --> ROMeta
     RODataShard["shard/readonly-data"] --> ROData
     ROSettingsShard["shard/readonly-settings-docs"] --> ROData
     MutLayoutShard["shard/mutating-window-tab-pane"] --> MutLayout
     MutInputShard["shard/mutating-input-session"] --> MutInput
     MutSettingsShard["shard/mutating-settings-surfaces"] --> MutInput
+    AuthShard["shard/authenticated-scripting"] --> Auth
+    MutDataShard["shard/mutating-files-drive-data"] --> MutData
+    MutExecShard["shard/mutating-execution-underlying"] --> MutExec
 ```
 ## Risks and mitigations
 - Fixed-port server assumptions:
@@ -549,7 +596,7 @@ flowchart LR
 - Over-broad settings mutation:
   - Mitigation: allowlisted setting keys only, with private/debug/derived settings rejected.
 - Command execution risk:
-  - Mitigation: keep `input.run`/session execution in the catalog but require explicit follow-up product/review decision before broad rollout.
+  - Mitigation: keep `input.run`/typed workflow execution in the catalog but implement it only in `zach/warp-cli-mutating-execution-underlying` after authenticated scripting identity, underlying-data-mutation permission, deterministic target resolution, and audit coverage are in place.
 - Packaging churn due to provisional executable naming:
   - Mitigation: document `warpctrl` as provisional and settle final aliases before broad release workflow rollout.
 - Heavyweight CLI startup caused by sharing the GUI binary's launch path:
