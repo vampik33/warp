@@ -1,8 +1,9 @@
 //! Target and parameter validation for the first local-control action slice.
 use crate::local_control::handlers::metadata::action_metadata_for_name;
 use ::local_control::protocol::{
-    ActionGetParams, BlockGetParams, BlockListParams, HistoryListParams, PaneTarget, SessionTarget,
-    SettingGetParams, TabTarget, TargetSelector, WindowTarget,
+    ActionGetParams, BlockGetParams, BlockListParams, DriveGetParams, DriveListParams,
+    HistoryListParams, KeybindingGetParams, PaneTarget, SessionTarget, SettingGetParams, TabTarget,
+    TargetSelector, WindowTarget,
 };
 use ::local_control::{ActionKind, ControlError, ErrorCode};
 use warpui::ModelContext;
@@ -74,6 +75,17 @@ pub(crate) fn validate_action_params(action: &::local_control::Action) -> Result
             Ok(())
         }
         ActionKind::SettingGet => action.params_as::<SettingGetParams>().map(|_| ()),
+        ActionKind::KeybindingGet => action
+            .params_as::<KeybindingGetParams>()
+            .and_then(|params| {
+                if params.name.is_empty() {
+                    return Err(ControlError::new(
+                        ErrorCode::InvalidParams,
+                        "keybinding.get requires a non-empty name",
+                    ));
+                }
+                Ok(())
+            }),
         ActionKind::AppPing
         | ActionKind::AppInspect
         | ActionKind::AppVersion
@@ -87,7 +99,11 @@ pub(crate) fn validate_action_params(action: &::local_control::Action) -> Result
         | ActionKind::InputGet
         | ActionKind::ThemeList
         | ActionKind::AppearanceGet
-        | ActionKind::SettingList => validate_empty_action_params(action),
+        | ActionKind::SettingList
+        | ActionKind::KeybindingList
+        | ActionKind::FileList
+        | ActionKind::ProjectActive
+        | ActionKind::ProjectList => validate_empty_action_params(action),
         ActionKind::BlockList => action.params_as::<BlockListParams>().map(|_| ()),
         ActionKind::BlockGet => action.params_as::<BlockGetParams>().and_then(|params| {
             if params.block_id.is_empty() {
@@ -99,6 +115,16 @@ pub(crate) fn validate_action_params(action: &::local_control::Action) -> Result
             Ok(())
         }),
         ActionKind::HistoryList => action.params_as::<HistoryListParams>().map(|_| ()),
+        ActionKind::DriveList => action.params_as::<DriveListParams>().map(|_| ()),
+        ActionKind::DriveGet => action.params_as::<DriveGetParams>().and_then(|params| {
+            if params.id.is_empty() {
+                return Err(ControlError::new(
+                    ErrorCode::InvalidParams,
+                    "drive.get requires a non-empty Drive object id",
+                ));
+            }
+            Ok(())
+        }),
         _ => Ok(()),
     }
 }

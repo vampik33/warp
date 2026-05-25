@@ -85,6 +85,47 @@ pub struct HistoryListParams {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputGetParams {}
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileListParams {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectActiveParams {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectListParams {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeybindingListParams {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeybindingGetParams {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DriveObjectType {
+    Workflow,
+    Notebook,
+    EnvVarCollection,
+    Prompt,
+    Folder,
+    AiFact,
+    McpServer,
+    Space,
+    Trash,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DriveListParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object_type: Option<DriveObjectType>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DriveGetParams {
+    pub id: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionListResult {
@@ -262,6 +303,77 @@ pub struct SettingListResult {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SettingGetResult {
     pub setting: SettingSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeybindingSummary {
+    pub name: String,
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keystroke: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalized_keystroke: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeybindingListResult {
+    pub keybindings: Vec<KeybindingSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeybindingGetResult {
+    pub keybinding: KeybindingSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileSummary {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileListResult {
+    pub files: Vec<FileSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectSummary {
+    pub path: String,
+    pub is_active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_opened_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectActiveResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<ProjectSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectListResult {
+    pub projects: Vec<ProjectSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DriveObjectSummary {
+    pub object_type: DriveObjectType,
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DriveListResult {
+    pub objects: Vec<DriveObjectSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DriveGetResult {
+    pub object: DriveObjectSummary,
+    pub content: serde_json::Value,
 }
 impl Action {
     pub fn new(kind: ActionKind) -> Self {

@@ -7,12 +7,13 @@ mod selectors;
 use std::process::ExitCode;
 
 use crate::agent::OutputFormat;
-use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::aot::Shell;
 
 use commands::{
     run_action_command, run_app_command, run_appearance_command, run_block_command,
-    run_history_command, run_input_command, run_instance_command, run_pane_command,
+    run_drive_command, run_file_command, run_history_command, run_input_command,
+    run_instance_command, run_keybinding_command, run_pane_command, run_project_command,
     run_session_command, run_setting_command, run_tab_command, run_theme_command,
     run_window_command,
 };
@@ -117,6 +118,22 @@ pub enum ControlCommand {
     #[command(subcommand)]
     Setting(SettingCommand),
 
+    /// Inspect keybinding metadata.
+    #[command(subcommand)]
+    Keybinding(KeybindingCommand),
+
+    /// Inspect open file app-state metadata.
+    #[command(subcommand)]
+    File(FileCommand),
+
+    /// Inspect project app-state metadata.
+    #[command(subcommand)]
+    Project(ProjectCommand),
+
+    /// Inspect authenticated Warp Drive objects.
+    #[command(subcommand)]
+    Drive(DriveCommand),
+
     /// Generate shell completions for your shell to stdout.
     ///
     /// For bash, add the following to ~/.bashrc:
@@ -209,6 +226,9 @@ pub enum BlockCommand {
 
     /// Read one terminal block.
     Get(BlockGetArgs),
+
+    /// Read one terminal block's output.
+    Output(BlockGetArgs),
 }
 
 #[derive(Debug, Clone, Subcommand)]
@@ -244,6 +264,40 @@ pub enum SettingCommand {
 
     /// Read one allowlisted setting.
     Get(SettingGetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum KeybindingCommand {
+    /// List keybindings.
+    List(TargetArgs),
+
+    /// Read one keybinding by name.
+    Get(KeybindingGetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum FileCommand {
+    /// List files currently open in Warp editor state.
+    List(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum ProjectCommand {
+    /// Read the active project.
+    Active(TargetArgs),
+
+    /// List known projects.
+    List(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum DriveCommand {
+    /// List authenticated Warp Drive objects.
+    List(DriveListArgs),
+
+    /// Read one authenticated Warp Drive object by id.
+    #[command(alias = "get")]
+    Inspect(DriveInspectArgs),
 }
 
 /// Common flags for selecting which running Warp instance receives a command.
@@ -295,6 +349,63 @@ pub struct SettingGetArgs {
     pub key: String,
 }
 
+#[derive(Debug, Clone, Args)]
+pub struct KeybindingGetArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    /// Keybinding action name.
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DriveListArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    /// Filter by Drive object type.
+    #[arg(long = "type", value_enum)]
+    pub object_type: Option<CliDriveObjectType>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DriveInspectArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    /// Opaque Drive object id returned by drive list.
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CliDriveObjectType {
+    Workflow,
+    Notebook,
+    EnvVarCollection,
+    Prompt,
+    Folder,
+    AiFact,
+    McpServer,
+    Space,
+    Trash,
+}
+
+impl From<CliDriveObjectType> for local_control::DriveObjectType {
+    fn from(value: CliDriveObjectType) -> Self {
+        match value {
+            CliDriveObjectType::Workflow => Self::Workflow,
+            CliDriveObjectType::Notebook => Self::Notebook,
+            CliDriveObjectType::EnvVarCollection => Self::EnvVarCollection,
+            CliDriveObjectType::Prompt => Self::Prompt,
+            CliDriveObjectType::Folder => Self::Folder,
+            CliDriveObjectType::AiFact => Self::AiFact,
+            CliDriveObjectType::McpServer => Self::McpServer,
+            CliDriveObjectType::Space => Self::Space,
+            CliDriveObjectType::Trash => Self::Trash,
+        }
+    }
+}
+
 pub fn run(args: ControlArgs) -> ExitCode {
     let output_format = args.output_format;
     match run_inner(args) {
@@ -327,6 +438,10 @@ fn run_inner(args: ControlArgs) -> Result<(), local_control::protocol::ControlEr
         ControlCommand::Theme(command) => run_theme_command(command, output_format),
         ControlCommand::Appearance(command) => run_appearance_command(command, output_format),
         ControlCommand::Setting(command) => run_setting_command(command, output_format),
+        ControlCommand::Keybinding(command) => run_keybinding_command(command, output_format),
+        ControlCommand::File(command) => run_file_command(command, output_format),
+        ControlCommand::Project(command) => run_project_command(command, output_format),
+        ControlCommand::Drive(command) => run_drive_command(command, output_format),
         ControlCommand::Completions { shell } => generate_completions_to_stdout(shell),
     }
 }

@@ -100,6 +100,11 @@ fn structural_metadata_actions_are_logged_out_safe_read_metadata() {
         ActionKind::AppearanceGet,
         ActionKind::SettingGet,
         ActionKind::SettingList,
+        ActionKind::KeybindingList,
+        ActionKind::KeybindingGet,
+        ActionKind::FileList,
+        ActionKind::ProjectActive,
+        ActionKind::ProjectList,
     ] {
         let metadata = action.metadata();
         assert_eq!(
@@ -176,6 +181,26 @@ fn structural_metadata_actions_have_expected_target_scopes() {
         ActionKind::SettingGet.metadata().target_scope,
         TargetScope::Settings
     );
+    assert_eq!(
+        ActionKind::KeybindingList.metadata().target_scope,
+        TargetScope::Keybinding
+    );
+    assert_eq!(
+        ActionKind::KeybindingGet.metadata().target_scope,
+        TargetScope::Keybinding
+    );
+    assert_eq!(
+        ActionKind::FileList.metadata().target_scope,
+        TargetScope::File
+    );
+    assert_eq!(
+        ActionKind::ProjectActive.metadata().target_scope,
+        TargetScope::Project
+    );
+    assert_eq!(
+        ActionKind::ProjectList.metadata().target_scope,
+        TargetScope::Project
+    );
 }
 
 #[test]
@@ -204,12 +229,48 @@ fn underlying_data_actions_require_underlying_data_permission_and_authenticated_
         assert!(metadata.authenticated_user.required);
         assert_eq!(
             metadata.allowed_invocation_contexts,
-            vec![
-                InvocationContext::InsideWarp,
-                InvocationContext::OutsideWarp
-            ]
+            vec![InvocationContext::OutsideWarp]
         );
     }
+}
+
+#[test]
+fn drive_read_actions_have_authenticated_read_categories() {
+    let list_metadata = ActionKind::DriveList.metadata();
+    assert_eq!(
+        list_metadata.implementation_status,
+        ActionImplementationStatus::Implemented
+    );
+    assert_eq!(list_metadata.risk_tier, RiskTier::ReadOnlyMetadata);
+    assert_eq!(
+        list_metadata.state_data_category,
+        StateDataCategory::MetadataRead
+    );
+    assert_eq!(
+        list_metadata.permission_category,
+        PermissionCategory::ReadMetadata
+    );
+    assert!(list_metadata.requires_authenticated_user);
+    assert!(list_metadata.authenticated_user.required);
+    assert_eq!(list_metadata.target_scope, TargetScope::Drive);
+
+    let get_metadata = ActionKind::DriveGet.metadata();
+    assert_eq!(
+        get_metadata.implementation_status,
+        ActionImplementationStatus::Implemented
+    );
+    assert_eq!(get_metadata.risk_tier, RiskTier::ReadOnlyTerminalData);
+    assert_eq!(
+        get_metadata.state_data_category,
+        StateDataCategory::UnderlyingDataRead
+    );
+    assert_eq!(
+        get_metadata.permission_category,
+        PermissionCategory::ReadUnderlyingData
+    );
+    assert!(get_metadata.requires_authenticated_user);
+    assert!(get_metadata.authenticated_user.required);
+    assert_eq!(get_metadata.target_scope, TargetScope::Drive);
 }
 
 #[test]

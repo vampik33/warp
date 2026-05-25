@@ -1,9 +1,9 @@
 ---
 name: warpctrl-read-only
-description: Use implemented read-only warpctrl metadata commands safely to inspect running local Warp app instances, choose explicit targets, and read appearance/settings metadata without reading underlying terminal or user data.
+description: Use implemented read-only warpctrl commands safely to inspect running local Warp app instances, choose explicit targets, read app metadata, and perform permissioned underlying-data reads without mutating Warp state.
 ---
 
-# warpctrl Read-Only Metadata Recipes
+# warpctrl Read-Only Recipes
 
 Use this skill when a task asks you to inspect or reason about a running local Warp app through the provisional `warpctrl` CLI without changing app state.
 
@@ -13,6 +13,8 @@ Use this skill when a task asks you to inspect or reason about a running local W
 - Do not call mutating commands from this skill. `warpctrl tab create` exists as a first-slice app-state mutation smoke test, but it is not read-only.
 - Do not treat parser support as proof that the selected app build has a live handler. If a command returns `unsupported_action`, report that the handler is not implemented in the running app and stop that recipe.
 - Keep metadata reads separate from underlying-data reads. Metadata read permission does not authorize reading terminal output, input buffers, command history, file contents, Drive object contents, or AI conversation content.
+- Do not read local filesystem file contents through `warpctrl`. `file list` reports files already open in Warp editor state only.
+- Authenticated Drive reads require a logged-in Warp user in the selected app. `drive list` returns object metadata; `drive inspect` returns object content and requires underlying-data-read permission.
 - Prefer `--output-format json` for Agent workflows so errors and returned IDs can be parsed reliably.
 
 ## Select a target safely
@@ -76,11 +78,54 @@ warpctrl --output-format json setting get --instance <instance_id> appearance.te
 
 `setting get` intentionally exposes only allowlisted local configuration metadata. If it returns `not_allowlisted`, do not try to read the same setting through a broader data command.
 
+### Keybinding metadata
+
+```bash
+warpctrl --output-format json keybinding list --instance <instance_id>
+warpctrl --output-format json keybinding get --instance <instance_id> <binding_name>
+```
+
+Keybinding reads return binding names, descriptions, groups, and keystrokes. They do not execute actions or mutate keybindings.
+
+### Open file and project metadata
+
+```bash
+warpctrl --output-format json file list --instance <instance_id>
+warpctrl --output-format json project active --instance <instance_id>
+warpctrl --output-format json project list --instance <instance_id>
+```
+
+These commands report Warp app/editor state only. Do not use them as filesystem traversal or file-content reads.
+
+## Underlying-data read recipes
+
+Underlying-data reads may expose user content or secrets. Use them only when the task requires the specific content and the selected action metadata reports `permission_category: read_underlying_data`.
+
+```bash
+warpctrl --output-format json block list --instance <instance_id> --limit 10
+warpctrl --output-format json block get --instance <instance_id> <block_id>
+warpctrl --output-format json block output --instance <instance_id> <block_id>
+warpctrl --output-format json input get --instance <instance_id>
+warpctrl --output-format json history list --instance <instance_id> --limit 20
+```
+
+`block output` is a CLI alias for the implemented block read response. Prefer it when the user explicitly asks for terminal block output.
+
+## Authenticated Warp Drive read recipes
+
+```bash
+warpctrl --output-format json drive list --instance <instance_id>
+warpctrl --output-format json drive list --instance <instance_id> --type notebook
+warpctrl --output-format json drive inspect --instance <instance_id> <object_id>
+```
+
+Use `drive list` to discover object IDs and types. Use `drive inspect` only when Drive object content is needed and the selected app is logged in.
+
 ## Commands this skill must not use
 
 Do not use or document these as implemented read-only metadata recipes:
 
-- terminal or user-content reads such as `block`, `input`, `history`, file contents, Drive object contents, AI conversation contents, pane output, scrollback, or transcripts;
+- file contents, AI conversation contents, pane output, scrollback, or transcripts beyond the implemented `block`, `input`, `history`, and authenticated Drive read commands;
 - window, tab, or pane mutations such as create, focus, close, split, activate, move, rename, maximize, resize, or navigate;
 - theme, appearance, or setting writes such as set, toggle, font-size, or zoom changes;
 - app surface toggles or opens such as settings, command palette, Warp Drive, resource center, AI assistant, code review, or vertical tabs;

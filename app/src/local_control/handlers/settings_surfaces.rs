@@ -1,11 +1,13 @@
 use ::local_control::protocol::{
-    AppearanceStateResult, SettingGetParams, SettingGetResult, SettingListResult, SettingSummary,
+    AppearanceStateResult, KeybindingGetParams, KeybindingGetResult, KeybindingListResult,
+    KeybindingSummary, SettingGetParams, SettingGetResult, SettingListResult, SettingSummary,
     ThemeListResult, ThemeSummary,
 };
 use ::local_control::{ControlError, ErrorCode};
 use serde::Serialize;
 use serde_json::{json, Value};
 use settings::Setting as _;
+use warpui::keymap::DescriptionContext;
 use warpui::{ModelContext, SingletonEntity};
 
 use crate::local_control::LocalControlBridge;
@@ -14,6 +16,7 @@ use crate::settings::{
 };
 use crate::themes::theme::ThemeKind;
 use crate::user_config::WarpConfig;
+use crate::util::bindings::trigger_to_keystroke;
 use crate::WindowSettings;
 
 const ALLOWLISTED_SETTING_KEYS: &[&str] = &[
@@ -73,6 +76,31 @@ pub(crate) fn setting_get(
 ) -> Result<serde_json::Value, ControlError> {
     let params = action.params_as::<SettingGetParams>()?;
     to_control_data(setting_get_result(&params.key, ctx)?)
+}
+
+pub(crate) fn keybinding_list(
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<serde_json::Value, ControlError> {
+    to_control_data(KeybindingListResult {
+        keybindings: keybinding_summaries(ctx),
+    })
+}
+
+pub(crate) fn keybinding_get(
+    action: &::local_control::Action,
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<serde_json::Value, ControlError> {
+    let params = action.params_as::<KeybindingGetParams>()?;
+    let keybinding = keybinding_summaries(ctx)
+        .into_iter()
+        .find(|summary| summary.name == params.name)
+        .ok_or_else(|| {
+            ControlError::new(
+                ErrorCode::MissingTarget,
+                format!("keybinding.get could not find {}", params.name),
+            )
+        })?;
+    to_control_data(KeybindingGetResult { keybinding })
 }
 
 pub(crate) fn theme_list_result(
@@ -239,6 +267,34 @@ fn rounded_u32(value: f32) -> Option<u32> {
         return Some(value.round() as u32);
     }
     None
+}
+
+fn keybinding_summaries(ctx: &mut ModelContext<LocalControlBridge>) -> Vec<KeybindingSummary> {
+    let mut keybindings = ctx
+        .editable_bindings()
+        .map(|binding| {
+            let keystroke = trigger_to_keystroke(binding.trigger);
+            KeybindingSummary {
+                name: binding.name.to_owned(),
+                description: binding
+                    .description
+                    .materialized(ctx)
+                    .in_context(DescriptionContext::Default)
+                    .to_owned(),
+                group: binding.group.map(str::to_owned),
+                keystroke: keystroke.as_ref().map(|keystroke| keystroke.displayed()),
+                normalized_keystroke: keystroke.map(|keystroke| keystroke.normalized()),
+            }
+        })
+        .collect::<Vec<_>>();
+    keybindings.sort_by(|left, right| {
+        left.description
+            .cmp(&right.description)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    keybindings
+        .dedup_by(|left, right| left.name == right.name && left.description == right.description);
+    keybindings
 }
 
 fn to_control_data<T: Serialize>(value: T) -> Result<serde_json::Value, ControlError> {

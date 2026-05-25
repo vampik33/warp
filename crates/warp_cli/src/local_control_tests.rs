@@ -156,6 +156,12 @@ fn parses_underlying_data_read_commands() {
         ControlCommand::Block(BlockCommand::Get(_))
     ));
     assert!(matches!(
+        ControlArgs::try_parse_from(["warpctrl", "block", "output", "block_123"])
+            .expect("block output parses")
+            .command,
+        ControlCommand::Block(BlockCommand::Output(_))
+    ));
+    assert!(matches!(
         ControlArgs::try_parse_from(["warpctrl", "input", "get"])
             .expect("input get parses")
             .command,
@@ -182,8 +188,64 @@ fn parses_completion_generation_command() {
 }
 
 #[test]
-fn rejects_non_metadata_and_future_catalog_commands_not_in_this_shard() {
-    assert!(ControlArgs::try_parse_from(["warpctrl", "drive", "list"]).is_err());
+fn parses_product_metadata_and_drive_commands() {
+    assert!(matches!(
+        ControlArgs::try_parse_from(["warpctrl", "keybinding", "list"])
+            .expect("keybinding list parses")
+            .command,
+        ControlCommand::Keybinding(KeybindingCommand::List(_))
+    ));
+    let args = ControlArgs::try_parse_from([
+        "warpctrl",
+        "keybinding",
+        "get",
+        "--instance",
+        "inst_123",
+        "workspace::new_tab",
+    ])
+    .expect("keybinding get parses");
+    let ControlCommand::Keybinding(KeybindingCommand::Get(keybinding)) = args.command else {
+        panic!("expected keybinding get command");
+    };
+    assert_eq!(keybinding.target.instance.as_deref(), Some("inst_123"));
+    assert_eq!(keybinding.name, "workspace::new_tab");
+
+    assert!(matches!(
+        ControlArgs::try_parse_from(["warpctrl", "file", "list"])
+            .expect("file list parses")
+            .command,
+        ControlCommand::File(FileCommand::List(_))
+    ));
+    assert!(matches!(
+        ControlArgs::try_parse_from(["warpctrl", "project", "active"])
+            .expect("project active parses")
+            .command,
+        ControlCommand::Project(ProjectCommand::Active(_))
+    ));
+    assert!(matches!(
+        ControlArgs::try_parse_from(["warpctrl", "project", "list"])
+            .expect("project list parses")
+            .command,
+        ControlCommand::Project(ProjectCommand::List(_))
+    ));
+
+    let args =
+        ControlArgs::try_parse_from(["warpctrl", "drive", "list", "--type", "env-var-collection"])
+            .expect("drive list parses");
+    let ControlCommand::Drive(DriveCommand::List(drive)) = args.command else {
+        panic!("expected drive list command");
+    };
+    assert_eq!(
+        drive.object_type.map(local_control::DriveObjectType::from),
+        Some(local_control::DriveObjectType::EnvVarCollection)
+    );
+
+    let args = ControlArgs::try_parse_from(["warpctrl", "drive", "inspect", "object_123"])
+        .expect("drive inspect parses");
+    let ControlCommand::Drive(DriveCommand::Inspect(drive)) = args.command else {
+        panic!("expected drive inspect command");
+    };
+    assert_eq!(drive.id, "object_123");
 }
 
 #[test]
@@ -203,6 +265,10 @@ fn generated_bash_completions_include_metadata_commands() {
     assert!(completions.contains("theme"));
     assert!(completions.contains("appearance"));
     assert!(completions.contains("setting"));
+    assert!(completions.contains("keybinding"));
+    assert!(completions.contains("file"));
+    assert!(completions.contains("project"));
+    assert!(completions.contains("drive"));
     assert!(completions.contains("completions"));
 }
 

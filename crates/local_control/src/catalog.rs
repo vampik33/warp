@@ -77,6 +77,10 @@ pub enum TargetScope {
     Appearance,
     Surface,
     Action,
+    Keybinding,
+    File,
+    Project,
+    Drive,
 }
 
 /// Whether an action has an app-side implementation in this stack layer.
@@ -215,6 +219,20 @@ pub enum ActionKind {
     SettingSet,
     #[serde(rename = "setting.toggle")]
     SettingToggle,
+    #[serde(rename = "keybinding.list")]
+    KeybindingList,
+    #[serde(rename = "keybinding.get")]
+    KeybindingGet,
+    #[serde(rename = "file.list")]
+    FileList,
+    #[serde(rename = "project.active")]
+    ProjectActive,
+    #[serde(rename = "project.list")]
+    ProjectList,
+    #[serde(rename = "drive.list")]
+    DriveList,
+    #[serde(rename = "drive.get")]
+    DriveGet,
 }
 
 impl ActionKind {
@@ -274,6 +292,13 @@ impl ActionKind {
         Self::SettingList,
         Self::SettingSet,
         Self::SettingToggle,
+        Self::KeybindingList,
+        Self::KeybindingGet,
+        Self::FileList,
+        Self::ProjectActive,
+        Self::ProjectList,
+        Self::DriveList,
+        Self::DriveGet,
     ];
     pub fn as_str(self) -> &'static str {
         match self {
@@ -332,6 +357,13 @@ impl ActionKind {
             Self::SettingList => "setting.list",
             Self::SettingSet => "setting.set",
             Self::SettingToggle => "setting.toggle",
+            Self::KeybindingList => "keybinding.list",
+            Self::KeybindingGet => "keybinding.get",
+            Self::FileList => "file.list",
+            Self::ProjectActive => "project.active",
+            Self::ProjectList => "project.list",
+            Self::DriveList => "drive.list",
+            Self::DriveGet => "drive.get",
         }
     }
 
@@ -356,7 +388,14 @@ impl ActionKind {
             | Self::ThemeList
             | Self::AppearanceGet
             | Self::SettingGet
-            | Self::SettingList => ActionImplementationStatus::Implemented,
+            | Self::SettingList
+            | Self::KeybindingList
+            | Self::KeybindingGet
+            | Self::FileList
+            | Self::ProjectActive
+            | Self::ProjectList
+            | Self::DriveList
+            | Self::DriveGet => ActionImplementationStatus::Implemented,
             _ => ActionImplementationStatus::Stub,
         };
         let requires_authenticated_user = self.default_requires_authenticated_user();
@@ -413,10 +452,18 @@ impl ActionKind {
             | Self::ThemeList
             | Self::AppearanceGet
             | Self::SettingGet
-            | Self::SettingList => RiskTier::ReadOnlyMetadata,
-            Self::BlockList | Self::BlockGet | Self::InputGet | Self::HistoryList => {
-                RiskTier::ReadOnlyTerminalData
-            }
+            | Self::SettingList
+            | Self::KeybindingList
+            | Self::KeybindingGet
+            | Self::FileList
+            | Self::ProjectActive
+            | Self::ProjectList
+            | Self::DriveList => RiskTier::ReadOnlyMetadata,
+            Self::BlockList
+            | Self::BlockGet
+            | Self::InputGet
+            | Self::HistoryList
+            | Self::DriveGet => RiskTier::ReadOnlyTerminalData,
             Self::InputInsert
             | Self::InputReplace
             | Self::InputClear
@@ -472,10 +519,18 @@ impl ActionKind {
             | Self::ThemeList
             | Self::AppearanceGet
             | Self::SettingGet
-            | Self::SettingList => StateDataCategory::MetadataRead,
-            Self::BlockList | Self::BlockGet | Self::InputGet | Self::HistoryList => {
-                StateDataCategory::UnderlyingDataRead
-            }
+            | Self::SettingList
+            | Self::KeybindingList
+            | Self::KeybindingGet
+            | Self::FileList
+            | Self::ProjectActive
+            | Self::ProjectList
+            | Self::DriveList => StateDataCategory::MetadataRead,
+            Self::BlockList
+            | Self::BlockGet
+            | Self::InputGet
+            | Self::HistoryList
+            | Self::DriveGet => StateDataCategory::UnderlyingDataRead,
             Self::SettingSet
             | Self::SettingToggle
             | Self::ThemeSet
@@ -527,7 +582,12 @@ impl ActionKind {
     }
     fn default_requires_authenticated_user(self) -> bool {
         match self {
-            Self::BlockList | Self::BlockGet | Self::InputGet | Self::HistoryList => true,
+            Self::BlockList
+            | Self::BlockGet
+            | Self::InputGet
+            | Self::HistoryList
+            | Self::DriveList
+            | Self::DriveGet => true,
             Self::InstanceList
             | Self::AppPing
             | Self::AppInspect
@@ -543,7 +603,12 @@ impl ActionKind {
             | Self::ThemeList
             | Self::AppearanceGet
             | Self::SettingGet
-            | Self::SettingList => false,
+            | Self::SettingList
+            | Self::KeybindingList
+            | Self::KeybindingGet
+            | Self::FileList
+            | Self::ProjectActive
+            | Self::ProjectList => false,
             _ => true,
         }
     }
@@ -585,6 +650,10 @@ impl ActionKind {
             Self::SettingGet | Self::SettingList | Self::SettingSet | Self::SettingToggle => {
                 TargetScope::Settings
             }
+            Self::KeybindingList | Self::KeybindingGet => TargetScope::Keybinding,
+            Self::FileList => TargetScope::File,
+            Self::ProjectActive | Self::ProjectList => TargetScope::Project,
+            Self::DriveList | Self::DriveGet => TargetScope::Drive,
             Self::ActionList | Self::ActionGet => TargetScope::Action,
             Self::AppSettingsOpen
             | Self::AppCommandPaletteOpen

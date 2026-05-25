@@ -11,9 +11,9 @@ use crate::agent::OutputFormat;
 use crate::local_control::output::{write_json, write_json_line};
 use crate::local_control::selectors::instance_selector;
 use crate::local_control::{
-    ActionCommand, AppCommand, AppearanceCommand, BlockCommand, HistoryCommand, InputCommand,
-    InstanceCommand, PaneCommand, SessionCommand, SettingCommand, TabCommand, TargetArgs,
-    ThemeCommand, WindowCommand,
+    ActionCommand, AppCommand, AppearanceCommand, BlockCommand, DriveCommand, FileCommand,
+    HistoryCommand, InputCommand, InstanceCommand, KeybindingCommand, PaneCommand, ProjectCommand,
+    SessionCommand, SettingCommand, TabCommand, TargetArgs, ThemeCommand, WindowCommand,
 };
 
 /// Display-oriented projection of a discoverable Warp instance.
@@ -194,6 +194,14 @@ pub(super) fn run_block_command(
             },
             output_format,
         ),
+        BlockCommand::Output(args) => run_action_with_params(
+            args.target,
+            ActionKind::BlockGet,
+            local_control::BlockGetParams {
+                block_id: args.block_id,
+            },
+            output_format,
+        ),
     }
 }
 
@@ -264,6 +272,82 @@ pub(super) fn run_setting_command(
             args.target,
             ActionKind::SettingGet,
             local_control::SettingGetParams { key: args.key },
+            output_format,
+        ),
+    }
+}
+
+pub(super) fn run_keybinding_command(
+    command: KeybindingCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        KeybindingCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::KeybindingList,
+            local_control::KeybindingListParams::default(),
+            output_format,
+        ),
+        KeybindingCommand::Get(args) => run_action_with_params(
+            args.target,
+            ActionKind::KeybindingGet,
+            local_control::KeybindingGetParams { name: args.name },
+            output_format,
+        ),
+    }
+}
+
+pub(super) fn run_file_command(
+    command: FileCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        FileCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::FileList,
+            local_control::FileListParams::default(),
+            output_format,
+        ),
+    }
+}
+
+pub(super) fn run_project_command(
+    command: ProjectCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        ProjectCommand::Active(args) => run_action_with_params(
+            args,
+            ActionKind::ProjectActive,
+            local_control::ProjectActiveParams::default(),
+            output_format,
+        ),
+        ProjectCommand::List(args) => run_action_with_params(
+            args,
+            ActionKind::ProjectList,
+            local_control::ProjectListParams::default(),
+            output_format,
+        ),
+    }
+}
+
+pub(super) fn run_drive_command(
+    command: DriveCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        DriveCommand::List(args) => run_action_with_params(
+            args.target,
+            ActionKind::DriveList,
+            local_control::DriveListParams {
+                object_type: args.object_type.map(Into::into),
+            },
+            output_format,
+        ),
+        DriveCommand::Inspect(args) => run_action_with_params(
+            args.target,
+            ActionKind::DriveGet,
+            local_control::DriveGetParams { id: args.id },
             output_format,
         ),
     }

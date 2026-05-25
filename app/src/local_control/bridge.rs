@@ -9,7 +9,9 @@ use ::local_control::{
 };
 use warpui::{Entity, ModelContext, SingletonEntity};
 
-use crate::local_control::handlers::{data, layout, metadata, settings_surfaces};
+use crate::local_control::handlers::{
+    data, drive, layout, metadata, product_metadata, settings_surfaces,
+};
 use crate::local_control::permissions::{
     ensure_action_allowed, ensure_authenticated_user_matches, ensure_feature_enabled,
 };
@@ -225,6 +227,61 @@ impl LocalControlBridge {
                     Err(error) => ResponseEnvelope::error(request.request_id, error),
                 }
             }
+            ActionKind::KeybindingList => {
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match settings_surfaces::keybinding_list(ctx) {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
+            ActionKind::KeybindingGet => {
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match settings_surfaces::keybinding_get(&request.action, ctx) {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
+            ActionKind::FileList => {
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match product_metadata::file_list(&request.target, ctx) {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
+            ActionKind::ProjectActive => {
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match product_metadata::project_active(&request.target, ctx) {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
+            ActionKind::ProjectList => {
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match product_metadata::project_list(&request.target, ctx) {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
             ActionKind::TabCreate => {
                 if let Err(error) =
                     ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
@@ -288,6 +345,28 @@ impl LocalControlBridge {
                     .params_as()
                     .and_then(|params| data::list_history(&request.target, params, ctx))
                 {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
+            ActionKind::DriveList => {
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match drive::drive_list(&request.target, &request.action, ctx) {
+                    Ok(data) => ResponseEnvelope::ok(request.request_id, data),
+                    Err(error) => ResponseEnvelope::error(request.request_id, error),
+                }
+            }
+            ActionKind::DriveGet => {
+                if let Err(error) =
+                    ensure_action_allowed(grant.invocation_context, request.action.kind, ctx)
+                {
+                    return ResponseEnvelope::error(request.request_id, error);
+                }
+                match drive::drive_get(&request.target, &request.action, ctx) {
                     Ok(data) => ResponseEnvelope::ok(request.request_id, data),
                     Err(error) => ResponseEnvelope::error(request.request_id, error),
                 }

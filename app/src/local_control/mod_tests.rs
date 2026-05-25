@@ -195,6 +195,13 @@ fn capabilities_advertises_core_and_metadata_slice_actions() {
             ActionKind::AppearanceGet,
             ActionKind::SettingGet,
             ActionKind::SettingList,
+            ActionKind::KeybindingList,
+            ActionKind::KeybindingGet,
+            ActionKind::FileList,
+            ActionKind::ProjectActive,
+            ActionKind::ProjectList,
+            ActionKind::DriveList,
+            ActionKind::DriveGet,
         ]
     );
 }
@@ -425,6 +432,12 @@ fn metadata_actions_require_metadata_permission_not_app_state_mutation_permissio
         ActionKind::AppearanceGet,
         ActionKind::SettingGet,
         ActionKind::SettingList,
+        ActionKind::KeybindingList,
+        ActionKind::KeybindingGet,
+        ActionKind::FileList,
+        ActionKind::ProjectActive,
+        ActionKind::ProjectList,
+        ActionKind::DriveList,
     ] {
         assert_eq!(
             action.metadata().permission_category,
@@ -469,6 +482,7 @@ fn data_actions_require_underlying_data_permission_not_metadata_permission() {
         ActionKind::BlockGet,
         ActionKind::InputGet,
         ActionKind::HistoryList,
+        ActionKind::DriveGet,
     ] {
         assert_eq!(
             action.metadata().permission_category,
@@ -545,6 +559,11 @@ fn app_target_metadata_reads_reject_malformed_params() {
         params: serde_json::json!({ "key": "appearance.themes.theme" }),
     })
     .expect("setting.get accepts a key parameter");
+    validate_action_params(&Action {
+        kind: ActionKind::KeybindingGet,
+        params: serde_json::json!({ "name": "workspace::new_tab" }),
+    })
+    .expect("keybinding.get accepts a name parameter");
 }
 
 #[test]
