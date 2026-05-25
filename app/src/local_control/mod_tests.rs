@@ -146,6 +146,9 @@ fn enable_outside_warp_underlying_data_mutations(app: &mut App) {
             let _ = settings
                 .allow_outside_warp_underlying_data_mutations
                 .set_value(true, ctx);
+            let _ = settings
+                .allow_outside_warp_authenticated_user_actions
+                .set_value(true, ctx);
         });
     });
 }
@@ -275,6 +278,7 @@ fn authenticated_grant(
     grant.authenticated_user.subject =
         super::permissions::authenticated_user_subject_for_action(action, ctx)
             .expect("authenticated subject check succeeds");
+    grant.scripting_grant = Some(scripting_grant());
     grant
 }
 
