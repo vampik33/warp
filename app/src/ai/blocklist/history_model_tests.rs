@@ -2371,6 +2371,80 @@ fn test_fork_then_bind_handoff_token_updates_cached_metadata_and_emits_refresh_e
         );
     });
 }
+
+#[test]
+fn test_fork_conversation_preserves_autoexecute_override_for_handoff_materialization() {
+    use crate::ai::agent::conversation::{AIConversation, AIConversationAutoexecuteMode};
+    use crate::persistence::model::AgentConversationData;
+    use crate::test_util::ai_agent_tasks::{create_api_task, create_message};
+
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        let _remember_fast_forward_flag =
+            FeatureFlag::RememberFastForwardState.override_enabled(false);
+
+        let (sender, receiver) = std::sync::mpsc::sync_channel(2);
+        let mut global_resource_handles = GlobalResourceHandles::mock(&mut app);
+        global_resource_handles.model_event_sender = Some(sender);
+        app.add_singleton_model(|_| GlobalResourceHandlesProvider::new(global_resource_handles));
+
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
+
+        let mut source = AIConversation::new_restored(
+            AIConversationId::new(),
+            vec![create_api_task(
+                "root-task",
+                vec![create_message("root-task-message", "root-task")],
+            )],
+            Some(AgentConversationData {
+                server_conversation_token: Some("src-token".to_string()),
+                conversation_usage_metadata: None,
+                reverted_action_ids: None,
+                forked_from_server_conversation_token: None,
+                artifacts_json: None,
+                parent_agent_id: None,
+                agent_name: None,
+                orchestration_harness_type: None,
+                parent_conversation_id: None,
+                is_remote_child: false,
+                root_task_is_optimistic: None,
+                run_id: None,
+                autoexecute_override: None,
+                last_event_sequence: None,
+                pinned: false,
+            }),
+        )
+        .expect("restored source conversation should build");
+        source.set_autoexecute_override(AIConversationAutoexecuteMode::RunToCompletion);
+
+        let forked = history_model.update(&mut app, |model, ctx| {
+            model
+                .fork_conversation(&source, "[Fork] ", true, None, ctx)
+                .expect("fork must succeed when sqlite sender is wired up")
+        });
+
+        assert_eq!(
+            forked.autoexecute_override(),
+            AIConversationAutoexecuteMode::RunToCompletion,
+            "local handoff fork should inherit the source fast-forward state even when session-restore persistence is disabled",
+        );
+
+        let persisted_event = receiver
+            .try_recv()
+            .expect("fork should persist the copied conversation state");
+        let ModelEvent::UpdateMultiAgentConversation {
+            conversation_data, ..
+        } = persisted_event
+        else {
+            panic!("expected fork persistence event");
+        };
+        assert_eq!(
+            conversation_data.autoexecute_override,
+            Some(PersistedAutoexecuteMode::RunToCompletion),
+        );
+    });
+}
+
 /// REMOTE-1519 local-to-cloud handoff requires `preserve_task_ids: true` so the local fork's
 /// task store matches the cloud-side fork (a byte-for-byte GCS copy of the source). Verifies
 /// that root and subtask ids are preserved across the fork, the subtask's `parent_task_id`

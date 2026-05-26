@@ -3170,6 +3170,13 @@ impl AIConversation {
         self.autoexecute_override
     }
 
+    pub fn set_autoexecute_override(
+        &mut self,
+        autoexecute_override: AIConversationAutoexecuteMode,
+    ) {
+        self.autoexecute_override = autoexecute_override;
+    }
+
     pub fn autoexecute_any_action(&self) -> bool {
         self.autoexecute_override.is_autoexecute_any_action()
     }

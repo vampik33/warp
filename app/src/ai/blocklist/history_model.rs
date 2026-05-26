@@ -2289,8 +2289,12 @@ impl BlocklistAIHistoryModel {
         tasks: Vec<warp_multi_agent_api::Task>,
         conversation_data: AgentConversationData,
     ) -> anyhow::Result<AIConversation> {
+        let autoexecute_override = conversation_data.autoexecute_override.map(Into::into);
         let mut conversation =
             AIConversation::new_restored(conversation_id, tasks, Some(conversation_data))?;
+        if let Some(autoexecute_override) = autoexecute_override {
+            conversation.set_autoexecute_override(autoexecute_override);
+        }
 
         // Assign fresh exchange IDs so persisted blocks do not collide.
         conversation.reassign_exchange_ids();
