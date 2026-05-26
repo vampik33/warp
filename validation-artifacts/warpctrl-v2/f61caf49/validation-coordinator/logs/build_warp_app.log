@@ -1,0 +1,60 @@
+ Downloading crates ...
+  Downloaded primal-check v0.3.4
+  Downloaded dasp_sample v0.11.0
+  Downloaded alsa-sys v0.3.1
+  Downloaded transpose v0.2.3
+  Downloaded realfft v3.4.0
+  Downloaded hound v3.5.1
+  Downloaded strength_reduce v0.2.4
+  Downloaded alsa v0.10.0
+  Downloaded rubato v0.16.1
+  Downloaded cpal v0.17.1
+  Downloaded rustfft v6.2.0
+   Compiling num-complex v0.4.6
+   Compiling num v0.4.3
+   Compiling secret-service v5.0.0
+   Compiling warpui_extras v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warpui_extras)
+   Compiling settings v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/settings)
+   Compiling warp_core v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warp_core)
+   Compiling http_client v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/http_client)
+   Compiling warp_cli v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warp_cli)
+   Compiling vim v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/vim)
+   Compiling repo_metadata v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/repo_metadata)
+   Compiling alsa-sys v0.3.1
+   Compiling rustfft v6.2.0
+   Compiling strength_reduce v0.2.4
+   Compiling warp_editor v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/editor)
+   Compiling transpose v0.2.3
+   Compiling warp_completer v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warp_completer)
+   Compiling warp_graphql v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/graphql)
+   Compiling primal-check v0.3.4
+   Compiling languages v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/languages)
+   Compiling cpal v0.17.1
+   Compiling warp_terminal v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warp_terminal)
+   Compiling alsa v0.10.0
+   Compiling syntax_tree v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/syntax_tree)
+   Compiling realfft v3.4.0
+   Compiling dasp_sample v0.11.0
+   Compiling ai v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/ai)
+   Compiling warp_logging v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warp_logging)
+   Compiling rubato v0.16.1
+   Compiling remote_server v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/remote_server)
+   Compiling node_runtime v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/node_runtime)
+   Compiling ui_components v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/ui_components)
+   Compiling warp_isolation_platform v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/isolation_platform)
+   Compiling simple_logger v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/simple_logger)
+   Compiling warp v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/app)
+   Compiling hound v3.5.1
+   Compiling voice_input v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/voice_input)
+   Compiling warp_server_client v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warp_server_client)
+   Compiling lsp v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/lsp)
+   Compiling warp_managed_secrets v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/managed_secrets)
+   Compiling onboarding v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/onboarding)
+   Compiling input_classifier v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/input_classifier)
+   Compiling warp_files v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warp_files)
+   Compiling warp_ripgrep v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warp_ripgrep)
+   Compiling warp_assets v0.0.0 (/workspace/warpctrl-validation/validation-coordinator/crates/warp_assets)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5m 12s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.87s
+   Compiling warp v0.1.0 (/workspace/warpctrl-validation/validation-coordinator/app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.93s

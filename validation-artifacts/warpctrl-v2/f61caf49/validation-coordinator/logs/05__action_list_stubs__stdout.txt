@@ -1,0 +1,40 @@
+[
+  {
+    "kind": "auth.status",
+    "name": "auth.status",
+    "implementation_status": "stub",
+    "risk_tier": "read_only_metadata",
+    "state_data_category": "metadata_read",
+    "requires_authenticated_user": false,
+    "authenticated_user": {
+      "required": false
+    },
+    "allowed_invocation_contexts": [
+      "inside_warp",
+      "outside_warp"
+    ],
+    "permission_category": "read_metadata",
+    "target_scope": "auth",
+    "parameter_spec": "none",
+    "result_spec": "auth_status"
+  },
+  {
+    "kind": "auth.login",
+    "name": "auth.login",
+    "implementation_status": "stub",
+    "risk_tier": "mutating_non_destructive",
+    "state_data_category": "app_state_mutation",
+    "requires_authenticated_user": false,
+    "authenticated_user": {
+      "required": false
+    },
+    "allowed_invocation_contexts": [
+      "inside_warp",
+      "outside_warp"
+    ],
+    "permission_category": "mutate_app_state",
+    "target_scope": "auth",
+    "parameter_spec": "none",
+    "result_spec": "acknowledgement"
+  }
+]

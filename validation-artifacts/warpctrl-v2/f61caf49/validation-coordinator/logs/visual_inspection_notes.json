@@ -1,0 +1,98 @@
+[
+  {
+    "command": "$WARPCTRL --help",
+    "screenshot_paths": [
+      "screenshots/01__outside-staggered__catalog__help__terminal_ui.png"
+    ],
+    "visual_status": "blocked",
+    "observed": "Screenshot is readable but the output is taller than the xterm; the exact command/status header scrolled off, so the screenshot alone does not prove the full terminal output. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs."
+  },
+  {
+    "command": "$WARPCTRL completions bash",
+    "screenshot_paths": [
+      "screenshots/02__outside-staggered__catalog__completions_bash__terminal_ui.png"
+    ],
+    "visual_status": "blocked",
+    "observed": "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 6,987-line completion output cannot fit in one screenshot. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs."
+  },
+  {
+    "command": "$WARPCTRL completions zsh",
+    "screenshot_paths": [
+      "screenshots/03__outside-staggered__catalog__completions_zsh__terminal_ui.png"
+    ],
+    "visual_status": "blocked",
+    "observed": "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 4,491-line completion output cannot fit in one screenshot. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs."
+  },
+  {
+    "command": "$WARPCTRL --output-format json action list --implemented-only",
+    "screenshot_paths": [
+      "screenshots/04__outside-staggered__catalog__action_list_implemented__terminal_ui.png"
+    ],
+    "visual_status": "blocked",
+    "observed": "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 1,866-line JSON catalog cannot fit in one screenshot. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs."
+  },
+  {
+    "command": "$WARPCTRL --output-format json action list --stubs-only",
+    "screenshot_paths": [
+      "screenshots/05__outside-staggered__catalog__action_list_stubs__terminal_ui.png"
+    ],
+    "visual_status": "pass",
+    "observed": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed."
+  },
+  {
+    "command": "$WARPCTRL --output-format json action inspect tab.create",
+    "screenshot_paths": [
+      "screenshots/06__outside-staggered__catalog__action_inspect_tab_create__terminal_ui.png"
+    ],
+    "visual_status": "pass",
+    "observed": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed."
+  },
+  {
+    "command": "$WARPCTRL --output-format json action inspect input.run",
+    "screenshot_paths": [
+      "screenshots/07__outside-staggered__catalog__action_inspect_input_run__terminal_ui.png"
+    ],
+    "visual_status": "pass",
+    "observed": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed."
+  },
+  {
+    "command": "$WARPCTRL --output-format json action inspect drive.workflow.run",
+    "screenshot_paths": [
+      "screenshots/08__outside-staggered__catalog__action_inspect_drive_workflow_run__terminal_ui.png"
+    ],
+    "visual_status": "pass",
+    "observed": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed."
+  },
+  {
+    "command": "$WARPCTRL --output-format json action inspect auth.api_key.set",
+    "screenshot_paths": [
+      "screenshots/09__outside-staggered__catalog__action_inspect_auth_api_key_set__terminal_ui.png"
+    ],
+    "visual_status": "pass",
+    "observed": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed."
+  },
+  {
+    "command": "$WARPCTRL --output-format json capability list --implemented-only",
+    "screenshot_paths": [
+      "screenshots/10__outside-staggered__catalog__capability_list_implemented__terminal_ui.png"
+    ],
+    "visual_status": "blocked",
+    "observed": "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 1,866-line JSON catalog cannot fit in one screenshot. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs."
+  },
+  {
+    "command": "$WARPCTRL --output-format json capability inspect tab.create",
+    "screenshot_paths": [
+      "screenshots/11__outside-staggered__catalog__capability_inspect_tab_create__terminal_ui.png"
+    ],
+    "visual_status": "pass",
+    "observed": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed."
+  },
+  {
+    "command": "$WARPCTRL --output-format json capability inspect auth.status",
+    "screenshot_paths": [
+      "screenshots/12__outside-staggered__catalog__capability_inspect_auth_status__terminal_ui.png"
+    ],
+    "visual_status": "pass",
+    "observed": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed."
+  }
+]

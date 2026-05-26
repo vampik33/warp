@@ -1,0 +1,65 @@
+# warpctrl validation summary
+- Validated SHA: `f61caf49400dc5c0d37d57a553d27733700e5204`
+- Validation ref: `zach/warpctrl-validation/f61caf49`
+- Agent: `validation-coordinator`
+- Build status: standalone `warpctrl` pass; graphical `warp-oss` pass
+- Command counts: pass=7, fail=0, blocked=5, skip=0
+- Visual-inspection failures/blockers: 5
+## Visual inspection blockers
+- `$WARPCTRL --help`
+- `$WARPCTRL completions bash`
+- `$WARPCTRL completions zsh`
+- `$WARPCTRL --output-format json action list --implemented-only`
+- `$WARPCTRL --output-format json capability list --implemented-only`
+## Blockers
+- 43 implemented catalog actions lack a reachable standalone CLI parser command.
+- Five parser/catalog outputs are too large or too tall to prove the full raw terminal output in one screenshot; complete stdout is stored in logs and screenshots show invocation/status/counts/excerpts or readable terminal output only.
+## Catalog-to-CLI gap detection
+- Implemented catalog actions: 99
+- Reachable parser mappings found: 56
+- Implemented actions without reachable standalone parser commands: 43
+  - `window.create`
+  - `window.focus`
+  - `window.close`
+  - `tab.activate`
+  - `tab.move`
+  - `tab.close`
+  - `pane.split`
+  - `pane.focus`
+  - `pane.navigate`
+  - `pane.resize`
+  - `pane.maximize`
+  - `pane.unmaximize`
+  - `pane.close`
+  - `session.activate`
+  - `session.previous`
+  - `session.next`
+  - `session.reopen_closed`
+  - `input.insert`
+  - `input.replace`
+  - `input.clear`
+  - `input.mode.set`
+  - `surface.settings.open`
+  - `surface.command_palette.open`
+  - `surface.command_search.open`
+  - `surface.warp_drive.open`
+  - `surface.warp_drive.toggle`
+  - `surface.resource_center.toggle`
+  - `surface.ai_assistant.toggle`
+  - `surface.code_review.toggle`
+  - `surface.left_panel.toggle`
+  - `surface.right_panel.toggle`
+  - `surface.vertical_tabs.toggle`
+  - `file.open`
+  - `project.open`
+  - `drive.open`
+  - `drive.notebook.open`
+  - `drive.env_var_collection.open`
+  - `drive.object.share.open`
+  - `drive.object.create`
+  - `drive.object.update`
+  - `drive.object.delete`
+  - `drive.object.insert`
+  - `drive.object.share_to_team`
+## Skipped commands
+- None

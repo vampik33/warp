@@ -1,0 +1,19 @@
+{
+  "kind": "auth.status",
+  "name": "auth.status",
+  "implementation_status": "stub",
+  "risk_tier": "read_only_metadata",
+  "state_data_category": "metadata_read",
+  "requires_authenticated_user": false,
+  "authenticated_user": {
+    "required": false
+  },
+  "allowed_invocation_contexts": [
+    "inside_warp",
+    "outside_warp"
+  ],
+  "permission_category": "read_metadata",
+  "target_scope": "auth",
+  "parameter_spec": "none",
+  "result_spec": "auth_status"
+}

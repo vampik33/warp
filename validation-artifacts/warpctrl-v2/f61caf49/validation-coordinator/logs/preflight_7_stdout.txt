@@ -1,0 +1,18 @@
+{
+  "kind": "input.run",
+  "name": "input.run",
+  "implementation_status": "implemented",
+  "risk_tier": "mutating_destructive_or_execution",
+  "state_data_category": "underlying_data_mutation",
+  "requires_authenticated_user": true,
+  "authenticated_user": {
+    "required": true
+  },
+  "allowed_invocation_contexts": [
+    "inside_warp"
+  ],
+  "permission_category": "mutate_underlying_data",
+  "target_scope": "input",
+  "parameter_spec": "text",
+  "result_spec": "acknowledgement"
+}

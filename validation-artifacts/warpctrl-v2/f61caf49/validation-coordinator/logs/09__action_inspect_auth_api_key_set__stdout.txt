@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "error": {
+    "code": "not_allowlisted",
+    "message": "auth.api_key.set is not in the public warpctrl action catalog",
+    "details": "Use `warpctrl action list` to inspect allowlisted actions."
+  }
+}

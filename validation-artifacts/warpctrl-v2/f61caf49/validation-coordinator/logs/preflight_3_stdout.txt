@@ -1,0 +1,4491 @@
+#compdef warpctrl
+
+autoload -U is-at-least
+
+_warpctrl() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_warpctrl_commands" \
+"*::: :->warpctrl" \
+&& ret=0
+    case $state in
+    (warpctrl)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-command-$line[1]:"
+        case $line[1] in
+            (instance)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__instance_commands" \
+"*::: :->instance" \
+&& ret=0
+
+    case $state in
+    (instance)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-instance-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__instance__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-instance-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(app)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__app_commands" \
+"*::: :->app" \
+&& ret=0
+
+    case $state in
+    (app)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-app-command-$line[1]:"
+        case $line[1] in
+            (ping)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(version)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(active)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(focus)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__app__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-app-help-command-$line[1]:"
+        case $line[1] in
+            (ping)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(version)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(active)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(focus)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(capability)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__capability_commands" \
+"*::: :->capability" \
+&& ret=0
+
+    case $state in
+    (capability)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-capability-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'(--stubs-only)--implemented-only[Show only actions with app-side handlers in this implementation slice]' \
+'--stubs-only[Show only allowlisted catalog entries that currently return \`unsupported_action\`]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':action -- Canonical action name, such as `tab.create` or `surface.settings.open`:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__capability__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-capability-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(action)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__action_commands" \
+"*::: :->action" \
+&& ret=0
+
+    case $state in
+    (action)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-action-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'(--stubs-only)--implemented-only[Show only actions with app-side handlers in this implementation slice]' \
+'--stubs-only[Show only allowlisted catalog entries that currently return \`unsupported_action\`]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':action -- Canonical action name, such as `tab.create` or `surface.settings.open`:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__action__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-action-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(window)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__window_commands" \
+"*::: :->window" \
+&& ret=0
+
+    case $state in
+    (window)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-window-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__window__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-window-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(tab)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__tab_commands" \
+"*::: :->tab" \
+&& ret=0
+
+    case $state in
+    (tab)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-tab-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(create)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(rename)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':title:_default' \
+&& ret=0
+;;
+(reset-name)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(color)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__tab__color_commands" \
+"*::: :->color" \
+&& ret=0
+
+    case $state in
+    (color)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-tab-color-command-$line[1]:"
+        case $line[1] in
+            (set)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':color:_default' \
+&& ret=0
+;;
+(clear)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__tab__color__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-tab-color-help-command-$line[1]:"
+        case $line[1] in
+            (set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(clear)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__tab__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-tab-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(rename)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(reset-name)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(color)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__tab__help__color_commands" \
+"*::: :->color" \
+&& ret=0
+
+    case $state in
+    (color)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-tab-help-color-command-$line[1]:"
+        case $line[1] in
+            (set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(clear)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(pane)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__pane_commands" \
+"*::: :->pane" \
+&& ret=0
+
+    case $state in
+    (pane)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-pane-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(rename)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':title:_default' \
+&& ret=0
+;;
+(reset-name)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__pane__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-pane-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(rename)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(reset-name)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(session)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__session_commands" \
+"*::: :->session" \
+&& ret=0
+
+    case $state in
+    (session)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-session-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__session__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-session-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(block)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__block_commands" \
+"*::: :->block" \
+&& ret=0
+
+    case $state in
+    (block)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-block-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--limit=[Maximum number of items to return]:LIMIT:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':block_id -- Opaque block id returned by block list:_default' \
+&& ret=0
+;;
+(output)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':block_id -- Opaque block id returned by block list:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__block__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-block-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(output)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(input)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__input_commands" \
+"*::: :->input" \
+&& ret=0
+
+    case $state in
+    (input)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-input-command-$line[1]:"
+        case $line[1] in
+            (get)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(run)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':text -- Text to run in the target terminal:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__input__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-input-help-command-$line[1]:"
+        case $line[1] in
+            (get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(run)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(history)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__history_commands" \
+"*::: :->history" \
+&& ret=0
+
+    case $state in
+    (history)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-history-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--limit=[Maximum number of items to return]:LIMIT:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__history__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-history-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(theme)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__theme_commands" \
+"*::: :->theme" \
+&& ret=0
+
+    case $state in
+    (theme)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-theme-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(get)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':name:_default' \
+&& ret=0
+;;
+(system-set)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':enabled:(true false)' \
+&& ret=0
+;;
+(light-set)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':name:_default' \
+&& ret=0
+;;
+(dark-set)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':name:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__theme__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-theme-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(system-set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(light-set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(dark-set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(appearance)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__appearance_commands" \
+"*::: :->appearance" \
+&& ret=0
+
+    case $state in
+    (appearance)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-appearance-command-$line[1]:"
+        case $line[1] in
+            (get)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(font-size-increase)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(font-size-decrease)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(font-size-reset)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(zoom-increase)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(zoom-decrease)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(zoom-reset)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__appearance__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-appearance-help-command-$line[1]:"
+        case $line[1] in
+            (get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(font-size-increase)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(font-size-decrease)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(font-size-reset)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(zoom-increase)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(zoom-decrease)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(zoom-reset)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(setting)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__setting_commands" \
+"*::: :->setting" \
+&& ret=0
+
+    case $state in
+    (setting)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-setting-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(get)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':key -- Allowlisted setting key:_default' \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':key:_default' \
+':value:_default' \
+&& ret=0
+;;
+(toggle)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':key:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__setting__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-setting-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(toggle)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(keybinding)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__keybinding_commands" \
+"*::: :->keybinding" \
+&& ret=0
+
+    case $state in
+    (keybinding)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-keybinding-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(get)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':name -- Keybinding action name:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__keybinding__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-keybinding-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(file)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__file_commands" \
+"*::: :->file" \
+&& ret=0
+
+    case $state in
+    (file)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-file-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__file__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-file-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(project)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__project_commands" \
+"*::: :->project" \
+&& ret=0
+
+    case $state in
+    (project)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-project-command-$line[1]:"
+        case $line[1] in
+            (active)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__project__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-project-help-command-$line[1]:"
+        case $line[1] in
+            (active)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(drive)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__drive_commands" \
+"*::: :->drive" \
+&& ret=0
+
+    case $state in
+    (drive)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-drive-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--type=[Filter by Drive object type]:OBJECT_TYPE:(workflow notebook env-var-collection prompt folder ai-fact mcp-server space trash)' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':id -- Opaque Drive object id returned by drive list:_default' \
+&& ret=0
+;;
+(workflow)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_warpctrl__drive__workflow_commands" \
+"*::: :->workflow" \
+&& ret=0
+
+    case $state in
+    (workflow)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-drive-workflow-command-$line[1]:"
+        case $line[1] in
+            (run)
+_arguments "${_arguments_options[@]}" : \
+'*--arg=[Name=value workflow argument. Repeat for multiple arguments]:ARGS:_default' \
+'--instance=[Target a specific local Warp instance id from \`warp instance list\`]:INSTANCE:_default' \
+'(--instance)--pid=[Target a specific local Warp process id]:PID:_default' \
+'(--window-index --window-title)--window=[Target the active window or an opaque window id]:WINDOW:_default' \
+'(--window --window-title)--window-index=[Target a window by scoped index when the handler supports it]:WINDOW_INDEX:_default' \
+'(--window --window-index)--window-title=[Target a window by exact title when the handler supports it]:WINDOW_TITLE:_default' \
+'(--tab-index --tab-title)--tab=[Target the active tab or an opaque tab id]:TAB:_default' \
+'(--tab --tab-title)--tab-index=[Target a tab by scoped index when the handler supports it]:TAB_INDEX:_default' \
+'(--tab --tab-index)--tab-title=[Target a tab by exact title when the handler supports it]:TAB_TITLE:_default' \
+'(--pane-index)--pane=[Target the active pane or an opaque pane id]:PANE:_default' \
+'(--pane)--pane-index=[Target a pane by scoped index when the handler supports it]:PANE_INDEX:_default' \
+'--session=[Target the active session or an opaque session id]:SESSION:_default' \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':id -- Workflow object ID to run:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__drive__workflow__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-drive-workflow-help-command-$line[1]:"
+        case $line[1] in
+            (run)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__drive__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-drive-help-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(workflow)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__drive__help__workflow_commands" \
+"*::: :->workflow" \
+&& ret=0
+
+    case $state in
+    (workflow)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-drive-help-workflow-command-$line[1]:"
+        case $line[1] in
+            (run)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+'--output-format=[Set the output format]:OUTPUT_FORMAT:((json\:"Output as JSON"
+ndjson\:"Output as newline-delimited JSON"
+pretty\:"Output as human-readable text"
+text\:"Output as plain text"))' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'::shell -- Shell to generate completions for:(bash elvish fish powershell zsh)' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-command-$line[1]:"
+        case $line[1] in
+            (instance)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__instance_commands" \
+"*::: :->instance" \
+&& ret=0
+
+    case $state in
+    (instance)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-instance-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(app)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__app_commands" \
+"*::: :->app" \
+&& ret=0
+
+    case $state in
+    (app)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-app-command-$line[1]:"
+        case $line[1] in
+            (ping)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(version)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(active)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(focus)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(capability)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__capability_commands" \
+"*::: :->capability" \
+&& ret=0
+
+    case $state in
+    (capability)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-capability-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(action)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__action_commands" \
+"*::: :->action" \
+&& ret=0
+
+    case $state in
+    (action)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-action-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(window)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__window_commands" \
+"*::: :->window" \
+&& ret=0
+
+    case $state in
+    (window)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-window-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(tab)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__tab_commands" \
+"*::: :->tab" \
+&& ret=0
+
+    case $state in
+    (tab)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-tab-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(rename)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(reset-name)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(color)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__tab__color_commands" \
+"*::: :->color" \
+&& ret=0
+
+    case $state in
+    (color)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-tab-color-command-$line[1]:"
+        case $line[1] in
+            (set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(clear)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(pane)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__pane_commands" \
+"*::: :->pane" \
+&& ret=0
+
+    case $state in
+    (pane)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-pane-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(rename)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(reset-name)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(session)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__session_commands" \
+"*::: :->session" \
+&& ret=0
+
+    case $state in
+    (session)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-session-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(block)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__block_commands" \
+"*::: :->block" \
+&& ret=0
+
+    case $state in
+    (block)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-block-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(output)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(input)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__input_commands" \
+"*::: :->input" \
+&& ret=0
+
+    case $state in
+    (input)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-input-command-$line[1]:"
+        case $line[1] in
+            (get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(run)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(history)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__history_commands" \
+"*::: :->history" \
+&& ret=0
+
+    case $state in
+    (history)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-history-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(theme)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__theme_commands" \
+"*::: :->theme" \
+&& ret=0
+
+    case $state in
+    (theme)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-theme-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(system-set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(light-set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(dark-set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(appearance)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__appearance_commands" \
+"*::: :->appearance" \
+&& ret=0
+
+    case $state in
+    (appearance)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-appearance-command-$line[1]:"
+        case $line[1] in
+            (get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(font-size-increase)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(font-size-decrease)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(font-size-reset)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(zoom-increase)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(zoom-decrease)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(zoom-reset)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(setting)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__setting_commands" \
+"*::: :->setting" \
+&& ret=0
+
+    case $state in
+    (setting)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-setting-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(toggle)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(keybinding)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__keybinding_commands" \
+"*::: :->keybinding" \
+&& ret=0
+
+    case $state in
+    (keybinding)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-keybinding-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(get)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(file)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__file_commands" \
+"*::: :->file" \
+&& ret=0
+
+    case $state in
+    (file)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-file-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(project)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__project_commands" \
+"*::: :->project" \
+&& ret=0
+
+    case $state in
+    (project)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-project-command-$line[1]:"
+        case $line[1] in
+            (active)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(drive)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__drive_commands" \
+"*::: :->drive" \
+&& ret=0
+
+    case $state in
+    (drive)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-drive-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(inspect)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(workflow)
+_arguments "${_arguments_options[@]}" : \
+":: :_warpctrl__help__drive__workflow_commands" \
+"*::: :->workflow" \
+&& ret=0
+
+    case $state in
+    (workflow)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:warpctrl-help-drive-workflow-command-$line[1]:"
+        case $line[1] in
+            (run)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_warpctrl_commands] )) ||
+_warpctrl_commands() {
+    local commands; commands=(
+'instance:Inspect local Warp app instances' \
+'app:Inspect a selected local Warp app' \
+'capability:Inspect local-control capabilities' \
+'action:Inspect public action metadata and implementation status' \
+'window:Inspect local Warp windows' \
+'tab:Control local Warp tabs' \
+'pane:Inspect local Warp panes' \
+'session:Inspect local Warp sessions' \
+'block:Inspect terminal blocks' \
+'input:Inspect terminal input state' \
+'history:Inspect terminal command history' \
+'theme:Inspect Warp themes' \
+'appearance:Inspect appearance state' \
+'setting:Inspect allowlisted settings' \
+'keybinding:Inspect keybinding metadata' \
+'file:Inspect open file app-state metadata' \
+'project:Inspect project app-state metadata' \
+'drive:Inspect authenticated Warp Drive objects' \
+'completions:Generate shell completions for your shell to stdout.' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl commands' commands "$@"
+}
+(( $+functions[_warpctrl__action_commands] )) ||
+_warpctrl__action_commands() {
+    local commands; commands=(
+'list:List allowlisted catalog actions with implementation status' \
+'inspect:Inspect a single allowlisted catalog action' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl action commands' commands "$@"
+}
+(( $+functions[_warpctrl__action__help_commands] )) ||
+_warpctrl__action__help_commands() {
+    local commands; commands=(
+'list:List allowlisted catalog actions with implementation status' \
+'inspect:Inspect a single allowlisted catalog action' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl action help commands' commands "$@"
+}
+(( $+functions[_warpctrl__action__help__help_commands] )) ||
+_warpctrl__action__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl action help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__action__help__inspect_commands] )) ||
+_warpctrl__action__help__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl action help inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__action__help__list_commands] )) ||
+_warpctrl__action__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl action help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__action__inspect_commands] )) ||
+_warpctrl__action__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl action inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__action__list_commands] )) ||
+_warpctrl__action__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl action list commands' commands "$@"
+}
+(( $+functions[_warpctrl__app_commands] )) ||
+_warpctrl__app_commands() {
+    local commands; commands=(
+'ping:Check that the selected local Warp app responds' \
+'version:Print protocol and app version metadata for the selected local Warp app' \
+'active:Print the active window/tab/pane/session chain' \
+'focus:Focus the selected local Warp app' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl app commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__active_commands] )) ||
+_warpctrl__app__active_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl app active commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__focus_commands] )) ||
+_warpctrl__app__focus_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl app focus commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__help_commands] )) ||
+_warpctrl__app__help_commands() {
+    local commands; commands=(
+'ping:Check that the selected local Warp app responds' \
+'version:Print protocol and app version metadata for the selected local Warp app' \
+'active:Print the active window/tab/pane/session chain' \
+'focus:Focus the selected local Warp app' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl app help commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__help__active_commands] )) ||
+_warpctrl__app__help__active_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl app help active commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__help__focus_commands] )) ||
+_warpctrl__app__help__focus_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl app help focus commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__help__help_commands] )) ||
+_warpctrl__app__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl app help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__help__ping_commands] )) ||
+_warpctrl__app__help__ping_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl app help ping commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__help__version_commands] )) ||
+_warpctrl__app__help__version_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl app help version commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__ping_commands] )) ||
+_warpctrl__app__ping_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl app ping commands' commands "$@"
+}
+(( $+functions[_warpctrl__app__version_commands] )) ||
+_warpctrl__app__version_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl app version commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance_commands] )) ||
+_warpctrl__appearance_commands() {
+    local commands; commands=(
+'get:Read appearance state' \
+'font-size-increase:Increase terminal font size' \
+'font-size-decrease:Decrease terminal font size' \
+'font-size-reset:Reset terminal font size' \
+'zoom-increase:Increase UI zoom' \
+'zoom-decrease:Decrease UI zoom' \
+'zoom-reset:Reset UI zoom' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl appearance commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__font-size-decrease_commands] )) ||
+_warpctrl__appearance__font-size-decrease_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance font-size-decrease commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__font-size-increase_commands] )) ||
+_warpctrl__appearance__font-size-increase_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance font-size-increase commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__font-size-reset_commands] )) ||
+_warpctrl__appearance__font-size-reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance font-size-reset commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__get_commands] )) ||
+_warpctrl__appearance__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance get commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__help_commands] )) ||
+_warpctrl__appearance__help_commands() {
+    local commands; commands=(
+'get:Read appearance state' \
+'font-size-increase:Increase terminal font size' \
+'font-size-decrease:Decrease terminal font size' \
+'font-size-reset:Reset terminal font size' \
+'zoom-increase:Increase UI zoom' \
+'zoom-decrease:Decrease UI zoom' \
+'zoom-reset:Reset UI zoom' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl appearance help commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__help__font-size-decrease_commands] )) ||
+_warpctrl__appearance__help__font-size-decrease_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance help font-size-decrease commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__help__font-size-increase_commands] )) ||
+_warpctrl__appearance__help__font-size-increase_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance help font-size-increase commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__help__font-size-reset_commands] )) ||
+_warpctrl__appearance__help__font-size-reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance help font-size-reset commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__help__get_commands] )) ||
+_warpctrl__appearance__help__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance help get commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__help__help_commands] )) ||
+_warpctrl__appearance__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__help__zoom-decrease_commands] )) ||
+_warpctrl__appearance__help__zoom-decrease_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance help zoom-decrease commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__help__zoom-increase_commands] )) ||
+_warpctrl__appearance__help__zoom-increase_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance help zoom-increase commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__help__zoom-reset_commands] )) ||
+_warpctrl__appearance__help__zoom-reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance help zoom-reset commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__zoom-decrease_commands] )) ||
+_warpctrl__appearance__zoom-decrease_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance zoom-decrease commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__zoom-increase_commands] )) ||
+_warpctrl__appearance__zoom-increase_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance zoom-increase commands' commands "$@"
+}
+(( $+functions[_warpctrl__appearance__zoom-reset_commands] )) ||
+_warpctrl__appearance__zoom-reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl appearance zoom-reset commands' commands "$@"
+}
+(( $+functions[_warpctrl__block_commands] )) ||
+_warpctrl__block_commands() {
+    local commands; commands=(
+'list:List terminal blocks' \
+'inspect:Inspect one terminal block' \
+'output:Read one terminal block'\''s output' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl block commands' commands "$@"
+}
+(( $+functions[_warpctrl__block__help_commands] )) ||
+_warpctrl__block__help_commands() {
+    local commands; commands=(
+'list:List terminal blocks' \
+'inspect:Inspect one terminal block' \
+'output:Read one terminal block'\''s output' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl block help commands' commands "$@"
+}
+(( $+functions[_warpctrl__block__help__help_commands] )) ||
+_warpctrl__block__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl block help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__block__help__inspect_commands] )) ||
+_warpctrl__block__help__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl block help inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__block__help__list_commands] )) ||
+_warpctrl__block__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl block help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__block__help__output_commands] )) ||
+_warpctrl__block__help__output_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl block help output commands' commands "$@"
+}
+(( $+functions[_warpctrl__block__inspect_commands] )) ||
+_warpctrl__block__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl block inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__block__list_commands] )) ||
+_warpctrl__block__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl block list commands' commands "$@"
+}
+(( $+functions[_warpctrl__block__output_commands] )) ||
+_warpctrl__block__output_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl block output commands' commands "$@"
+}
+(( $+functions[_warpctrl__capability_commands] )) ||
+_warpctrl__capability_commands() {
+    local commands; commands=(
+'list:List allowlisted local-control capabilities with implementation status' \
+'inspect:Inspect a single local-control capability by canonical action name' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl capability commands' commands "$@"
+}
+(( $+functions[_warpctrl__capability__help_commands] )) ||
+_warpctrl__capability__help_commands() {
+    local commands; commands=(
+'list:List allowlisted local-control capabilities with implementation status' \
+'inspect:Inspect a single local-control capability by canonical action name' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl capability help commands' commands "$@"
+}
+(( $+functions[_warpctrl__capability__help__help_commands] )) ||
+_warpctrl__capability__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl capability help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__capability__help__inspect_commands] )) ||
+_warpctrl__capability__help__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl capability help inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__capability__help__list_commands] )) ||
+_warpctrl__capability__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl capability help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__capability__inspect_commands] )) ||
+_warpctrl__capability__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl capability inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__capability__list_commands] )) ||
+_warpctrl__capability__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl capability list commands' commands "$@"
+}
+(( $+functions[_warpctrl__completions_commands] )) ||
+_warpctrl__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl completions commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive_commands] )) ||
+_warpctrl__drive_commands() {
+    local commands; commands=(
+'list:List authenticated Warp Drive objects' \
+'inspect:Read one authenticated Warp Drive object by id' \
+'workflow:Operate on Warp Drive workflows' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl drive commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__help_commands] )) ||
+_warpctrl__drive__help_commands() {
+    local commands; commands=(
+'list:List authenticated Warp Drive objects' \
+'inspect:Read one authenticated Warp Drive object by id' \
+'workflow:Operate on Warp Drive workflows' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl drive help commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__help__help_commands] )) ||
+_warpctrl__drive__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl drive help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__help__inspect_commands] )) ||
+_warpctrl__drive__help__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl drive help inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__help__list_commands] )) ||
+_warpctrl__drive__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl drive help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__help__workflow_commands] )) ||
+_warpctrl__drive__help__workflow_commands() {
+    local commands; commands=(
+'run:Run a Warp Drive workflow by ID' \
+    )
+    _describe -t commands 'warpctrl drive help workflow commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__help__workflow__run_commands] )) ||
+_warpctrl__drive__help__workflow__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl drive help workflow run commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__inspect_commands] )) ||
+_warpctrl__drive__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl drive inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__list_commands] )) ||
+_warpctrl__drive__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl drive list commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__workflow_commands] )) ||
+_warpctrl__drive__workflow_commands() {
+    local commands; commands=(
+'run:Run a Warp Drive workflow by ID' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl drive workflow commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__workflow__help_commands] )) ||
+_warpctrl__drive__workflow__help_commands() {
+    local commands; commands=(
+'run:Run a Warp Drive workflow by ID' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl drive workflow help commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__workflow__help__help_commands] )) ||
+_warpctrl__drive__workflow__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl drive workflow help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__workflow__help__run_commands] )) ||
+_warpctrl__drive__workflow__help__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl drive workflow help run commands' commands "$@"
+}
+(( $+functions[_warpctrl__drive__workflow__run_commands] )) ||
+_warpctrl__drive__workflow__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl drive workflow run commands' commands "$@"
+}
+(( $+functions[_warpctrl__file_commands] )) ||
+_warpctrl__file_commands() {
+    local commands; commands=(
+'list:List files currently open in Warp editor state' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl file commands' commands "$@"
+}
+(( $+functions[_warpctrl__file__help_commands] )) ||
+_warpctrl__file__help_commands() {
+    local commands; commands=(
+'list:List files currently open in Warp editor state' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl file help commands' commands "$@"
+}
+(( $+functions[_warpctrl__file__help__help_commands] )) ||
+_warpctrl__file__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl file help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__file__help__list_commands] )) ||
+_warpctrl__file__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl file help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__file__list_commands] )) ||
+_warpctrl__file__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl file list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help_commands] )) ||
+_warpctrl__help_commands() {
+    local commands; commands=(
+'instance:Inspect local Warp app instances' \
+'app:Inspect a selected local Warp app' \
+'capability:Inspect local-control capabilities' \
+'action:Inspect public action metadata and implementation status' \
+'window:Inspect local Warp windows' \
+'tab:Control local Warp tabs' \
+'pane:Inspect local Warp panes' \
+'session:Inspect local Warp sessions' \
+'block:Inspect terminal blocks' \
+'input:Inspect terminal input state' \
+'history:Inspect terminal command history' \
+'theme:Inspect Warp themes' \
+'appearance:Inspect appearance state' \
+'setting:Inspect allowlisted settings' \
+'keybinding:Inspect keybinding metadata' \
+'file:Inspect open file app-state metadata' \
+'project:Inspect project app-state metadata' \
+'drive:Inspect authenticated Warp Drive objects' \
+'completions:Generate shell completions for your shell to stdout.' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl help commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__action_commands] )) ||
+_warpctrl__help__action_commands() {
+    local commands; commands=(
+'list:List allowlisted catalog actions with implementation status' \
+'inspect:Inspect a single allowlisted catalog action' \
+    )
+    _describe -t commands 'warpctrl help action commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__action__inspect_commands] )) ||
+_warpctrl__help__action__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help action inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__action__list_commands] )) ||
+_warpctrl__help__action__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help action list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__app_commands] )) ||
+_warpctrl__help__app_commands() {
+    local commands; commands=(
+'ping:Check that the selected local Warp app responds' \
+'version:Print protocol and app version metadata for the selected local Warp app' \
+'active:Print the active window/tab/pane/session chain' \
+'focus:Focus the selected local Warp app' \
+    )
+    _describe -t commands 'warpctrl help app commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__app__active_commands] )) ||
+_warpctrl__help__app__active_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help app active commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__app__focus_commands] )) ||
+_warpctrl__help__app__focus_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help app focus commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__app__ping_commands] )) ||
+_warpctrl__help__app__ping_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help app ping commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__app__version_commands] )) ||
+_warpctrl__help__app__version_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help app version commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__appearance_commands] )) ||
+_warpctrl__help__appearance_commands() {
+    local commands; commands=(
+'get:Read appearance state' \
+'font-size-increase:Increase terminal font size' \
+'font-size-decrease:Decrease terminal font size' \
+'font-size-reset:Reset terminal font size' \
+'zoom-increase:Increase UI zoom' \
+'zoom-decrease:Decrease UI zoom' \
+'zoom-reset:Reset UI zoom' \
+    )
+    _describe -t commands 'warpctrl help appearance commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__appearance__font-size-decrease_commands] )) ||
+_warpctrl__help__appearance__font-size-decrease_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help appearance font-size-decrease commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__appearance__font-size-increase_commands] )) ||
+_warpctrl__help__appearance__font-size-increase_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help appearance font-size-increase commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__appearance__font-size-reset_commands] )) ||
+_warpctrl__help__appearance__font-size-reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help appearance font-size-reset commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__appearance__get_commands] )) ||
+_warpctrl__help__appearance__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help appearance get commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__appearance__zoom-decrease_commands] )) ||
+_warpctrl__help__appearance__zoom-decrease_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help appearance zoom-decrease commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__appearance__zoom-increase_commands] )) ||
+_warpctrl__help__appearance__zoom-increase_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help appearance zoom-increase commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__appearance__zoom-reset_commands] )) ||
+_warpctrl__help__appearance__zoom-reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help appearance zoom-reset commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__block_commands] )) ||
+_warpctrl__help__block_commands() {
+    local commands; commands=(
+'list:List terminal blocks' \
+'inspect:Inspect one terminal block' \
+'output:Read one terminal block'\''s output' \
+    )
+    _describe -t commands 'warpctrl help block commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__block__inspect_commands] )) ||
+_warpctrl__help__block__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help block inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__block__list_commands] )) ||
+_warpctrl__help__block__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help block list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__block__output_commands] )) ||
+_warpctrl__help__block__output_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help block output commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__capability_commands] )) ||
+_warpctrl__help__capability_commands() {
+    local commands; commands=(
+'list:List allowlisted local-control capabilities with implementation status' \
+'inspect:Inspect a single local-control capability by canonical action name' \
+    )
+    _describe -t commands 'warpctrl help capability commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__capability__inspect_commands] )) ||
+_warpctrl__help__capability__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help capability inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__capability__list_commands] )) ||
+_warpctrl__help__capability__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help capability list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__completions_commands] )) ||
+_warpctrl__help__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help completions commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__drive_commands] )) ||
+_warpctrl__help__drive_commands() {
+    local commands; commands=(
+'list:List authenticated Warp Drive objects' \
+'inspect:Read one authenticated Warp Drive object by id' \
+'workflow:Operate on Warp Drive workflows' \
+    )
+    _describe -t commands 'warpctrl help drive commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__drive__inspect_commands] )) ||
+_warpctrl__help__drive__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help drive inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__drive__list_commands] )) ||
+_warpctrl__help__drive__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help drive list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__drive__workflow_commands] )) ||
+_warpctrl__help__drive__workflow_commands() {
+    local commands; commands=(
+'run:Run a Warp Drive workflow by ID' \
+    )
+    _describe -t commands 'warpctrl help drive workflow commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__drive__workflow__run_commands] )) ||
+_warpctrl__help__drive__workflow__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help drive workflow run commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__file_commands] )) ||
+_warpctrl__help__file_commands() {
+    local commands; commands=(
+'list:List files currently open in Warp editor state' \
+    )
+    _describe -t commands 'warpctrl help file commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__file__list_commands] )) ||
+_warpctrl__help__file__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help file list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__help_commands] )) ||
+_warpctrl__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__history_commands] )) ||
+_warpctrl__help__history_commands() {
+    local commands; commands=(
+'list:List command history entries' \
+    )
+    _describe -t commands 'warpctrl help history commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__history__list_commands] )) ||
+_warpctrl__help__history__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help history list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__input_commands] )) ||
+_warpctrl__help__input_commands() {
+    local commands; commands=(
+'get:Read the current input buffer' \
+'run:Run text in the targeted terminal session' \
+    )
+    _describe -t commands 'warpctrl help input commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__input__get_commands] )) ||
+_warpctrl__help__input__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help input get commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__input__run_commands] )) ||
+_warpctrl__help__input__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help input run commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__instance_commands] )) ||
+_warpctrl__help__instance_commands() {
+    local commands; commands=(
+'list:List locally discoverable Warp instances' \
+'inspect:Print app, protocol, active target, and action metadata for the selected instance' \
+    )
+    _describe -t commands 'warpctrl help instance commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__instance__inspect_commands] )) ||
+_warpctrl__help__instance__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help instance inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__instance__list_commands] )) ||
+_warpctrl__help__instance__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help instance list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__keybinding_commands] )) ||
+_warpctrl__help__keybinding_commands() {
+    local commands; commands=(
+'list:List keybindings' \
+'get:Read one keybinding by name' \
+    )
+    _describe -t commands 'warpctrl help keybinding commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__keybinding__get_commands] )) ||
+_warpctrl__help__keybinding__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help keybinding get commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__keybinding__list_commands] )) ||
+_warpctrl__help__keybinding__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help keybinding list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__pane_commands] )) ||
+_warpctrl__help__pane_commands() {
+    local commands; commands=(
+'list:List panes in the selected local Warp app' \
+'inspect:Inspect one pane in the selected local Warp app' \
+'rename:Rename a pane' \
+'reset-name:Reset a pane name' \
+    )
+    _describe -t commands 'warpctrl help pane commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__pane__inspect_commands] )) ||
+_warpctrl__help__pane__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help pane inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__pane__list_commands] )) ||
+_warpctrl__help__pane__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help pane list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__pane__rename_commands] )) ||
+_warpctrl__help__pane__rename_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help pane rename commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__pane__reset-name_commands] )) ||
+_warpctrl__help__pane__reset-name_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help pane reset-name commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__project_commands] )) ||
+_warpctrl__help__project_commands() {
+    local commands; commands=(
+'active:Read the active project' \
+'list:List known projects' \
+    )
+    _describe -t commands 'warpctrl help project commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__project__active_commands] )) ||
+_warpctrl__help__project__active_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help project active commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__project__list_commands] )) ||
+_warpctrl__help__project__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help project list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__session_commands] )) ||
+_warpctrl__help__session_commands() {
+    local commands; commands=(
+'list:List sessions in the selected local Warp app' \
+'inspect:Inspect one session in the selected local Warp app' \
+    )
+    _describe -t commands 'warpctrl help session commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__session__inspect_commands] )) ||
+_warpctrl__help__session__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help session inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__session__list_commands] )) ||
+_warpctrl__help__session__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help session list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__setting_commands] )) ||
+_warpctrl__help__setting_commands() {
+    local commands; commands=(
+'list:List allowlisted settings' \
+'get:Read one allowlisted setting' \
+'set:Set one allowlisted setting' \
+'toggle:Toggle one allowlisted boolean setting' \
+    )
+    _describe -t commands 'warpctrl help setting commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__setting__get_commands] )) ||
+_warpctrl__help__setting__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help setting get commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__setting__list_commands] )) ||
+_warpctrl__help__setting__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help setting list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__setting__set_commands] )) ||
+_warpctrl__help__setting__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help setting set commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__setting__toggle_commands] )) ||
+_warpctrl__help__setting__toggle_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help setting toggle commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__tab_commands] )) ||
+_warpctrl__help__tab_commands() {
+    local commands; commands=(
+'list:List tabs in the selected local Warp app' \
+'inspect:Inspect one tab in the selected local Warp app' \
+'create:Create a new terminal tab in the active window' \
+'rename:Rename a tab' \
+'reset-name:Reset a tab name' \
+'color:Set or clear a tab color' \
+    )
+    _describe -t commands 'warpctrl help tab commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__tab__color_commands] )) ||
+_warpctrl__help__tab__color_commands() {
+    local commands; commands=(
+'set:Set a tab color' \
+'clear:Clear a tab color' \
+    )
+    _describe -t commands 'warpctrl help tab color commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__tab__color__clear_commands] )) ||
+_warpctrl__help__tab__color__clear_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help tab color clear commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__tab__color__set_commands] )) ||
+_warpctrl__help__tab__color__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help tab color set commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__tab__create_commands] )) ||
+_warpctrl__help__tab__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help tab create commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__tab__inspect_commands] )) ||
+_warpctrl__help__tab__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help tab inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__tab__list_commands] )) ||
+_warpctrl__help__tab__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help tab list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__tab__rename_commands] )) ||
+_warpctrl__help__tab__rename_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help tab rename commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__tab__reset-name_commands] )) ||
+_warpctrl__help__tab__reset-name_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help tab reset-name commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__theme_commands] )) ||
+_warpctrl__help__theme_commands() {
+    local commands; commands=(
+'list:List available themes' \
+'get:Read current theme state' \
+'set:Set the current theme' \
+'system-set:Set whether Warp follows the system theme' \
+'light-set:Set the light theme used when following the system theme' \
+'dark-set:Set the dark theme used when following the system theme' \
+    )
+    _describe -t commands 'warpctrl help theme commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__theme__dark-set_commands] )) ||
+_warpctrl__help__theme__dark-set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help theme dark-set commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__theme__get_commands] )) ||
+_warpctrl__help__theme__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help theme get commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__theme__light-set_commands] )) ||
+_warpctrl__help__theme__light-set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help theme light-set commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__theme__list_commands] )) ||
+_warpctrl__help__theme__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help theme list commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__theme__set_commands] )) ||
+_warpctrl__help__theme__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help theme set commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__theme__system-set_commands] )) ||
+_warpctrl__help__theme__system-set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help theme system-set commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__window_commands] )) ||
+_warpctrl__help__window_commands() {
+    local commands; commands=(
+'list:List windows in the selected local Warp app' \
+'inspect:Inspect one window in the selected local Warp app' \
+    )
+    _describe -t commands 'warpctrl help window commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__window__inspect_commands] )) ||
+_warpctrl__help__window__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help window inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__help__window__list_commands] )) ||
+_warpctrl__help__window__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl help window list commands' commands "$@"
+}
+(( $+functions[_warpctrl__history_commands] )) ||
+_warpctrl__history_commands() {
+    local commands; commands=(
+'list:List command history entries' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl history commands' commands "$@"
+}
+(( $+functions[_warpctrl__history__help_commands] )) ||
+_warpctrl__history__help_commands() {
+    local commands; commands=(
+'list:List command history entries' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl history help commands' commands "$@"
+}
+(( $+functions[_warpctrl__history__help__help_commands] )) ||
+_warpctrl__history__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl history help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__history__help__list_commands] )) ||
+_warpctrl__history__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl history help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__history__list_commands] )) ||
+_warpctrl__history__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl history list commands' commands "$@"
+}
+(( $+functions[_warpctrl__input_commands] )) ||
+_warpctrl__input_commands() {
+    local commands; commands=(
+'get:Read the current input buffer' \
+'run:Run text in the targeted terminal session' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl input commands' commands "$@"
+}
+(( $+functions[_warpctrl__input__get_commands] )) ||
+_warpctrl__input__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl input get commands' commands "$@"
+}
+(( $+functions[_warpctrl__input__help_commands] )) ||
+_warpctrl__input__help_commands() {
+    local commands; commands=(
+'get:Read the current input buffer' \
+'run:Run text in the targeted terminal session' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl input help commands' commands "$@"
+}
+(( $+functions[_warpctrl__input__help__get_commands] )) ||
+_warpctrl__input__help__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl input help get commands' commands "$@"
+}
+(( $+functions[_warpctrl__input__help__help_commands] )) ||
+_warpctrl__input__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl input help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__input__help__run_commands] )) ||
+_warpctrl__input__help__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl input help run commands' commands "$@"
+}
+(( $+functions[_warpctrl__input__run_commands] )) ||
+_warpctrl__input__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl input run commands' commands "$@"
+}
+(( $+functions[_warpctrl__instance_commands] )) ||
+_warpctrl__instance_commands() {
+    local commands; commands=(
+'list:List locally discoverable Warp instances' \
+'inspect:Print app, protocol, active target, and action metadata for the selected instance' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl instance commands' commands "$@"
+}
+(( $+functions[_warpctrl__instance__help_commands] )) ||
+_warpctrl__instance__help_commands() {
+    local commands; commands=(
+'list:List locally discoverable Warp instances' \
+'inspect:Print app, protocol, active target, and action metadata for the selected instance' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl instance help commands' commands "$@"
+}
+(( $+functions[_warpctrl__instance__help__help_commands] )) ||
+_warpctrl__instance__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl instance help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__instance__help__inspect_commands] )) ||
+_warpctrl__instance__help__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl instance help inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__instance__help__list_commands] )) ||
+_warpctrl__instance__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl instance help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__instance__inspect_commands] )) ||
+_warpctrl__instance__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl instance inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__instance__list_commands] )) ||
+_warpctrl__instance__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl instance list commands' commands "$@"
+}
+(( $+functions[_warpctrl__keybinding_commands] )) ||
+_warpctrl__keybinding_commands() {
+    local commands; commands=(
+'list:List keybindings' \
+'get:Read one keybinding by name' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl keybinding commands' commands "$@"
+}
+(( $+functions[_warpctrl__keybinding__get_commands] )) ||
+_warpctrl__keybinding__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl keybinding get commands' commands "$@"
+}
+(( $+functions[_warpctrl__keybinding__help_commands] )) ||
+_warpctrl__keybinding__help_commands() {
+    local commands; commands=(
+'list:List keybindings' \
+'get:Read one keybinding by name' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl keybinding help commands' commands "$@"
+}
+(( $+functions[_warpctrl__keybinding__help__get_commands] )) ||
+_warpctrl__keybinding__help__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl keybinding help get commands' commands "$@"
+}
+(( $+functions[_warpctrl__keybinding__help__help_commands] )) ||
+_warpctrl__keybinding__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl keybinding help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__keybinding__help__list_commands] )) ||
+_warpctrl__keybinding__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl keybinding help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__keybinding__list_commands] )) ||
+_warpctrl__keybinding__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl keybinding list commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane_commands] )) ||
+_warpctrl__pane_commands() {
+    local commands; commands=(
+'list:List panes in the selected local Warp app' \
+'inspect:Inspect one pane in the selected local Warp app' \
+'rename:Rename a pane' \
+'reset-name:Reset a pane name' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl pane commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__help_commands] )) ||
+_warpctrl__pane__help_commands() {
+    local commands; commands=(
+'list:List panes in the selected local Warp app' \
+'inspect:Inspect one pane in the selected local Warp app' \
+'rename:Rename a pane' \
+'reset-name:Reset a pane name' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl pane help commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__help__help_commands] )) ||
+_warpctrl__pane__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl pane help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__help__inspect_commands] )) ||
+_warpctrl__pane__help__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl pane help inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__help__list_commands] )) ||
+_warpctrl__pane__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl pane help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__help__rename_commands] )) ||
+_warpctrl__pane__help__rename_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl pane help rename commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__help__reset-name_commands] )) ||
+_warpctrl__pane__help__reset-name_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl pane help reset-name commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__inspect_commands] )) ||
+_warpctrl__pane__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl pane inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__list_commands] )) ||
+_warpctrl__pane__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl pane list commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__rename_commands] )) ||
+_warpctrl__pane__rename_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl pane rename commands' commands "$@"
+}
+(( $+functions[_warpctrl__pane__reset-name_commands] )) ||
+_warpctrl__pane__reset-name_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl pane reset-name commands' commands "$@"
+}
+(( $+functions[_warpctrl__project_commands] )) ||
+_warpctrl__project_commands() {
+    local commands; commands=(
+'active:Read the active project' \
+'list:List known projects' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl project commands' commands "$@"
+}
+(( $+functions[_warpctrl__project__active_commands] )) ||
+_warpctrl__project__active_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl project active commands' commands "$@"
+}
+(( $+functions[_warpctrl__project__help_commands] )) ||
+_warpctrl__project__help_commands() {
+    local commands; commands=(
+'active:Read the active project' \
+'list:List known projects' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl project help commands' commands "$@"
+}
+(( $+functions[_warpctrl__project__help__active_commands] )) ||
+_warpctrl__project__help__active_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl project help active commands' commands "$@"
+}
+(( $+functions[_warpctrl__project__help__help_commands] )) ||
+_warpctrl__project__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl project help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__project__help__list_commands] )) ||
+_warpctrl__project__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl project help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__project__list_commands] )) ||
+_warpctrl__project__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl project list commands' commands "$@"
+}
+(( $+functions[_warpctrl__session_commands] )) ||
+_warpctrl__session_commands() {
+    local commands; commands=(
+'list:List sessions in the selected local Warp app' \
+'inspect:Inspect one session in the selected local Warp app' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl session commands' commands "$@"
+}
+(( $+functions[_warpctrl__session__help_commands] )) ||
+_warpctrl__session__help_commands() {
+    local commands; commands=(
+'list:List sessions in the selected local Warp app' \
+'inspect:Inspect one session in the selected local Warp app' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl session help commands' commands "$@"
+}
+(( $+functions[_warpctrl__session__help__help_commands] )) ||
+_warpctrl__session__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl session help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__session__help__inspect_commands] )) ||
+_warpctrl__session__help__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl session help inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__session__help__list_commands] )) ||
+_warpctrl__session__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl session help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__session__inspect_commands] )) ||
+_warpctrl__session__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl session inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__session__list_commands] )) ||
+_warpctrl__session__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl session list commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting_commands] )) ||
+_warpctrl__setting_commands() {
+    local commands; commands=(
+'list:List allowlisted settings' \
+'get:Read one allowlisted setting' \
+'set:Set one allowlisted setting' \
+'toggle:Toggle one allowlisted boolean setting' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl setting commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__get_commands] )) ||
+_warpctrl__setting__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl setting get commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__help_commands] )) ||
+_warpctrl__setting__help_commands() {
+    local commands; commands=(
+'list:List allowlisted settings' \
+'get:Read one allowlisted setting' \
+'set:Set one allowlisted setting' \
+'toggle:Toggle one allowlisted boolean setting' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl setting help commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__help__get_commands] )) ||
+_warpctrl__setting__help__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl setting help get commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__help__help_commands] )) ||
+_warpctrl__setting__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl setting help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__help__list_commands] )) ||
+_warpctrl__setting__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl setting help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__help__set_commands] )) ||
+_warpctrl__setting__help__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl setting help set commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__help__toggle_commands] )) ||
+_warpctrl__setting__help__toggle_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl setting help toggle commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__list_commands] )) ||
+_warpctrl__setting__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl setting list commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__set_commands] )) ||
+_warpctrl__setting__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl setting set commands' commands "$@"
+}
+(( $+functions[_warpctrl__setting__toggle_commands] )) ||
+_warpctrl__setting__toggle_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl setting toggle commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab_commands] )) ||
+_warpctrl__tab_commands() {
+    local commands; commands=(
+'list:List tabs in the selected local Warp app' \
+'inspect:Inspect one tab in the selected local Warp app' \
+'create:Create a new terminal tab in the active window' \
+'rename:Rename a tab' \
+'reset-name:Reset a tab name' \
+'color:Set or clear a tab color' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl tab commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__color_commands] )) ||
+_warpctrl__tab__color_commands() {
+    local commands; commands=(
+'set:Set a tab color' \
+'clear:Clear a tab color' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl tab color commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__color__clear_commands] )) ||
+_warpctrl__tab__color__clear_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab color clear commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__color__help_commands] )) ||
+_warpctrl__tab__color__help_commands() {
+    local commands; commands=(
+'set:Set a tab color' \
+'clear:Clear a tab color' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl tab color help commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__color__help__clear_commands] )) ||
+_warpctrl__tab__color__help__clear_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab color help clear commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__color__help__help_commands] )) ||
+_warpctrl__tab__color__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab color help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__color__help__set_commands] )) ||
+_warpctrl__tab__color__help__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab color help set commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__color__set_commands] )) ||
+_warpctrl__tab__color__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab color set commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__create_commands] )) ||
+_warpctrl__tab__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab create commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help_commands] )) ||
+_warpctrl__tab__help_commands() {
+    local commands; commands=(
+'list:List tabs in the selected local Warp app' \
+'inspect:Inspect one tab in the selected local Warp app' \
+'create:Create a new terminal tab in the active window' \
+'rename:Rename a tab' \
+'reset-name:Reset a tab name' \
+'color:Set or clear a tab color' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl tab help commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help__color_commands] )) ||
+_warpctrl__tab__help__color_commands() {
+    local commands; commands=(
+'set:Set a tab color' \
+'clear:Clear a tab color' \
+    )
+    _describe -t commands 'warpctrl tab help color commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help__color__clear_commands] )) ||
+_warpctrl__tab__help__color__clear_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab help color clear commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help__color__set_commands] )) ||
+_warpctrl__tab__help__color__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab help color set commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help__create_commands] )) ||
+_warpctrl__tab__help__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab help create commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help__help_commands] )) ||
+_warpctrl__tab__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help__inspect_commands] )) ||
+_warpctrl__tab__help__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab help inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help__list_commands] )) ||
+_warpctrl__tab__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help__rename_commands] )) ||
+_warpctrl__tab__help__rename_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab help rename commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__help__reset-name_commands] )) ||
+_warpctrl__tab__help__reset-name_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab help reset-name commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__inspect_commands] )) ||
+_warpctrl__tab__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__list_commands] )) ||
+_warpctrl__tab__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab list commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__rename_commands] )) ||
+_warpctrl__tab__rename_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab rename commands' commands "$@"
+}
+(( $+functions[_warpctrl__tab__reset-name_commands] )) ||
+_warpctrl__tab__reset-name_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl tab reset-name commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme_commands] )) ||
+_warpctrl__theme_commands() {
+    local commands; commands=(
+'list:List available themes' \
+'get:Read current theme state' \
+'set:Set the current theme' \
+'system-set:Set whether Warp follows the system theme' \
+'light-set:Set the light theme used when following the system theme' \
+'dark-set:Set the dark theme used when following the system theme' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl theme commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__dark-set_commands] )) ||
+_warpctrl__theme__dark-set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme dark-set commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__get_commands] )) ||
+_warpctrl__theme__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme get commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__help_commands] )) ||
+_warpctrl__theme__help_commands() {
+    local commands; commands=(
+'list:List available themes' \
+'get:Read current theme state' \
+'set:Set the current theme' \
+'system-set:Set whether Warp follows the system theme' \
+'light-set:Set the light theme used when following the system theme' \
+'dark-set:Set the dark theme used when following the system theme' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl theme help commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__help__dark-set_commands] )) ||
+_warpctrl__theme__help__dark-set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme help dark-set commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__help__get_commands] )) ||
+_warpctrl__theme__help__get_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme help get commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__help__help_commands] )) ||
+_warpctrl__theme__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__help__light-set_commands] )) ||
+_warpctrl__theme__help__light-set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme help light-set commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__help__list_commands] )) ||
+_warpctrl__theme__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__help__set_commands] )) ||
+_warpctrl__theme__help__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme help set commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__help__system-set_commands] )) ||
+_warpctrl__theme__help__system-set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme help system-set commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__light-set_commands] )) ||
+_warpctrl__theme__light-set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme light-set commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__list_commands] )) ||
+_warpctrl__theme__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme list commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__set_commands] )) ||
+_warpctrl__theme__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme set commands' commands "$@"
+}
+(( $+functions[_warpctrl__theme__system-set_commands] )) ||
+_warpctrl__theme__system-set_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl theme system-set commands' commands "$@"
+}
+(( $+functions[_warpctrl__window_commands] )) ||
+_warpctrl__window_commands() {
+    local commands; commands=(
+'list:List windows in the selected local Warp app' \
+'inspect:Inspect one window in the selected local Warp app' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl window commands' commands "$@"
+}
+(( $+functions[_warpctrl__window__help_commands] )) ||
+_warpctrl__window__help_commands() {
+    local commands; commands=(
+'list:List windows in the selected local Warp app' \
+'inspect:Inspect one window in the selected local Warp app' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'warpctrl window help commands' commands "$@"
+}
+(( $+functions[_warpctrl__window__help__help_commands] )) ||
+_warpctrl__window__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl window help help commands' commands "$@"
+}
+(( $+functions[_warpctrl__window__help__inspect_commands] )) ||
+_warpctrl__window__help__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl window help inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__window__help__list_commands] )) ||
+_warpctrl__window__help__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl window help list commands' commands "$@"
+}
+(( $+functions[_warpctrl__window__inspect_commands] )) ||
+_warpctrl__window__inspect_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl window inspect commands' commands "$@"
+}
+(( $+functions[_warpctrl__window__list_commands] )) ||
+_warpctrl__window__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'warpctrl window list commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_warpctrl" ]; then
+    _warpctrl "$@"
+else
+    compdef _warpctrl warpctrl
+fi

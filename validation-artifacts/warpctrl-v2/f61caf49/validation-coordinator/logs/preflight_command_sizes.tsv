@@ -1,0 +1,12 @@
+01	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --help	status=0	stdout_lines=57	stdout_bytes=1831	stderr_lines=0
+02	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl completions bash	status=0	stdout_lines=6987	stdout_bytes=243099	stderr_lines=0
+03	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl completions zsh	status=0	stdout_lines=4491	stdout_bytes=186642	stderr_lines=0
+04	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --output-format json action list --implemented-only	status=0	stdout_lines=1866	stdout_bytes=53701	stderr_lines=0
+05	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --output-format json action list --stubs-only	status=0	stdout_lines=40	stdout_bytes=1029	stderr_lines=0
+06	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --output-format json action inspect tab.create	status=0	stdout_lines=18	stdout_bytes=475	stderr_lines=0
+07	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --output-format json action inspect input.run	status=0	stdout_lines=18	stdout_bytes=487	stderr_lines=0
+08	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --output-format json action inspect drive.workflow.run	status=0	stdout_lines=18	stdout_bytes=520	stderr_lines=0
+09	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --output-format json action inspect auth.api_key.set	status=1	stdout_lines=8	stdout_bytes=223	stderr_lines=0
+10	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --output-format json capability list --implemented-only	status=0	stdout_lines=1866	stdout_bytes=53701	stderr_lines=0
+11	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --output-format json capability inspect tab.create	status=0	stdout_lines=18	stdout_bytes=475	stderr_lines=0
+12	/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl --output-format json capability inspect auth.status	status=0	stdout_lines=19	stdout_bytes=466	stderr_lines=0

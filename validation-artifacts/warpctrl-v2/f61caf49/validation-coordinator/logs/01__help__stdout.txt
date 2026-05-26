@@ -1,0 +1,57 @@
+Control a running local Warp app instance
+
+Usage: warpctrl [OPTIONS] <COMMAND>
+
+Commands:
+  instance     Inspect local Warp app instances
+  app          Inspect a selected local Warp app
+  capability   Inspect local-control capabilities
+  action       Inspect public action metadata and implementation status
+  window       Inspect local Warp windows
+  tab          Control local Warp tabs
+  pane         Inspect local Warp panes
+  session      Inspect local Warp sessions
+  block        Inspect terminal blocks
+  input        Inspect terminal input state
+  history      Inspect terminal command history
+  theme        Inspect Warp themes
+  appearance   Inspect appearance state
+  setting      Inspect allowlisted settings
+  keybinding   Inspect keybinding metadata
+  file         Inspect open file app-state metadata
+  project      Inspect project app-state metadata
+  drive        Inspect authenticated Warp Drive objects
+  completions  Generate shell completions for your shell to stdout.
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+      --output-format <OUTPUT_FORMAT>
+          Set the output format
+
+          Possible values:
+          - json:   Output as JSON
+          - ndjson: Output as newline-delimited JSON
+          - pretty: Output as human-readable text
+          - text:   Output as plain text
+          
+          [env: WARP_OUTPUT_FORMAT=]
+          [default: pretty]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Examples:
+
+  $ warpctrl instance list
+
+  $ warpctrl tab create
+  $ warpctrl action list --stubs-only
+
+  $ warpctrl action inspect surface.settings.open
+
+Learn more:
+* Use warpctrl help to learn more about each command
+* Use warpctrl action list to distinguish implemented commands from catalog stubs

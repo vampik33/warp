@@ -1,0 +1,552 @@
+{
+  "agent_name": "validation-coordinator",
+  "validated_sha": "f61caf49400dc5c0d37d57a553d27733700e5204",
+  "validation_ref": "zach/warpctrl-validation/f61caf49",
+  "timestamp_utc": "2026-05-26T23:16:16.379210+00:00",
+  "artifact_root": "validation-artifacts/warpctrl-v2/f61caf49/validation-coordinator",
+  "builds": {
+    "warpctrl": {
+      "command": "CARGO_BUILD_JOBS=1 cargo build -p warp --bin warpctrl --features standalone,warp_control_cli",
+      "log": "logs/build_warpctrl.log",
+      "status": "pass"
+    },
+    "warp_app": {
+      "command": "CARGO_BUILD_JOBS=1 cargo build -p warp --bin warp-oss --features gui,warp_control_cli,skip_firebase_anonymous_user",
+      "log": "logs/build_warp_app.log",
+      "status": "pass"
+    }
+  },
+  "graphical_environment": {
+    "display": ":94",
+    "xvfb": "Xvfb :94 -screen 0 2400x1600x24",
+    "window_manager": "openbox",
+    "external_terminal": "xterm staggered left; Warp app staggered right when window was available",
+    "home": "/tmp/warpctrl-validation/validation-coordinator/home",
+    "xdg_runtime_dir": "/tmp/warpctrl-validation/validation-coordinator/home/runtime",
+    "warp_data_profile": "validation-coordinator-f61caf49",
+    "discovery_dir": "/tmp/warpctrl-validation/validation-coordinator/home/discovery",
+    "warp_ready_detected": true,
+    "setup_screenshot": "screenshots/00__outside-staggered__setup__warp_app_visible__terminal_ui.png"
+  },
+  "commands": [
+    {
+      "ordinal": "01",
+      "command": "$WARPCTRL --help",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--help"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it and render help output directly enough to show command groups and legibility.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 57,
+        "stdout_bytes": 1831,
+        "stderr_lines": 0,
+        "json_valid": null
+      },
+      "expected_exit_code": 0,
+      "status": "blocked",
+      "stdout_log": "logs/01__help__stdout.txt",
+      "stderr_log": "logs/01__help__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/01__outside-staggered__catalog__help__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Screenshot is readable but the output is taller than the xterm; the exact command/status header scrolled off, so the screenshot alone does not prove the full terminal output. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": [
+          "Raw command output exceeded one-screen screenshot capacity; full output is preserved in stdout/stderr logs, and screenshot shows command, exit code, counts, and excerpts only.",
+          "Screenshot is readable but the output is taller than the xterm; the exact command/status header scrolled off, so the screenshot alone does not prove the full terminal output."
+        ]
+      }
+    },
+    {
+      "ordinal": "02",
+      "command": "$WARPCTRL completions bash",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "completions",
+        "bash"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, store the thousands-line completion output in durable logs, and show command, exit code, line/byte counts, and readable excerpts in the screenshot.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 6987,
+        "stdout_bytes": 243099,
+        "stderr_lines": 0,
+        "json_valid": null
+      },
+      "expected_exit_code": 0,
+      "status": "blocked",
+      "stdout_log": "logs/02__completions_bash__stdout.txt",
+      "stderr_log": "logs/02__completions_bash__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/02__outside-staggered__catalog__completions_bash__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 6,987-line completion output cannot fit in one screenshot. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": [
+          "Raw command output exceeded one-screen screenshot capacity; full output is preserved in stdout/stderr logs, and screenshot shows command, exit code, counts, and excerpts only.",
+          "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 6,987-line completion output cannot fit in one screenshot."
+        ]
+      }
+    },
+    {
+      "ordinal": "03",
+      "command": "$WARPCTRL completions zsh",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "completions",
+        "zsh"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, store the thousands-line completion output in durable logs, and show command, exit code, line/byte counts, and readable excerpts in the screenshot.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 4491,
+        "stdout_bytes": 186642,
+        "stderr_lines": 0,
+        "json_valid": null
+      },
+      "expected_exit_code": 0,
+      "status": "blocked",
+      "stdout_log": "logs/03__completions_zsh__stdout.txt",
+      "stderr_log": "logs/03__completions_zsh__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/03__outside-staggered__catalog__completions_zsh__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 4,491-line completion output cannot fit in one screenshot. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": [
+          "Raw command output exceeded one-screen screenshot capacity; full output is preserved in stdout/stderr logs, and screenshot shows command, exit code, counts, and excerpts only.",
+          "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 4,491-line completion output cannot fit in one screenshot."
+        ]
+      }
+    },
+    {
+      "ordinal": "04",
+      "command": "$WARPCTRL --output-format json action list --implemented-only",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--output-format",
+        "json",
+        "action",
+        "list",
+        "--implemented-only"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, store the long JSON catalog in durable logs, and show command, exit code, JSON validity, count, and readable excerpts in the screenshot.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 1866,
+        "stdout_bytes": 53701,
+        "stderr_lines": 0,
+        "json_valid": true
+      },
+      "expected_exit_code": 0,
+      "status": "blocked",
+      "stdout_log": "logs/04__action_list_implemented__stdout.txt",
+      "stderr_log": "logs/04__action_list_implemented__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/04__outside-staggered__catalog__action_list_implemented__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 1,866-line JSON catalog cannot fit in one screenshot. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": [
+          "Raw command output exceeded one-screen screenshot capacity; full output is preserved in stdout/stderr logs, and screenshot shows command, exit code, counts, and excerpts only.",
+          "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 1,866-line JSON catalog cannot fit in one screenshot."
+        ]
+      }
+    },
+    {
+      "ordinal": "05",
+      "command": "$WARPCTRL --output-format json action list --stubs-only",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--output-format",
+        "json",
+        "action",
+        "list",
+        "--stubs-only"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, render the complete small JSON response in the terminal, and keep the app window visible as the instance under test.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 40,
+        "stdout_bytes": 1029,
+        "stderr_lines": 0,
+        "json_valid": true
+      },
+      "expected_exit_code": 0,
+      "status": "pass",
+      "stdout_log": "logs/05__action_list_stubs__stdout.txt",
+      "stderr_log": "logs/05__action_list_stubs__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/05__outside-staggered__catalog__action_list_stubs__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed.",
+        "status": "pass",
+        "unexpected_ui_changes_or_ambiguity": []
+      }
+    },
+    {
+      "ordinal": "06",
+      "command": "$WARPCTRL --output-format json action inspect tab.create",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--output-format",
+        "json",
+        "action",
+        "inspect",
+        "tab.create"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, render the complete small JSON response in the terminal, and keep the app window visible as the instance under test.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 18,
+        "stdout_bytes": 475,
+        "stderr_lines": 0,
+        "json_valid": true
+      },
+      "expected_exit_code": 0,
+      "status": "pass",
+      "stdout_log": "logs/06__action_inspect_tab_create__stdout.txt",
+      "stderr_log": "logs/06__action_inspect_tab_create__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/06__outside-staggered__catalog__action_inspect_tab_create__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed.",
+        "status": "pass",
+        "unexpected_ui_changes_or_ambiguity": []
+      }
+    },
+    {
+      "ordinal": "07",
+      "command": "$WARPCTRL --output-format json action inspect input.run",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--output-format",
+        "json",
+        "action",
+        "inspect",
+        "input.run"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, render the complete small JSON response in the terminal, and keep the app window visible as the instance under test.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 18,
+        "stdout_bytes": 487,
+        "stderr_lines": 0,
+        "json_valid": true
+      },
+      "expected_exit_code": 0,
+      "status": "pass",
+      "stdout_log": "logs/07__action_inspect_input_run__stdout.txt",
+      "stderr_log": "logs/07__action_inspect_input_run__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/07__outside-staggered__catalog__action_inspect_input_run__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed.",
+        "status": "pass",
+        "unexpected_ui_changes_or_ambiguity": []
+      }
+    },
+    {
+      "ordinal": "08",
+      "command": "$WARPCTRL --output-format json action inspect drive.workflow.run",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--output-format",
+        "json",
+        "action",
+        "inspect",
+        "drive.workflow.run"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, render the complete small JSON response in the terminal, and keep the app window visible as the instance under test.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 18,
+        "stdout_bytes": 520,
+        "stderr_lines": 0,
+        "json_valid": true
+      },
+      "expected_exit_code": 0,
+      "status": "pass",
+      "stdout_log": "logs/08__action_inspect_drive_workflow_run__stdout.txt",
+      "stderr_log": "logs/08__action_inspect_drive_workflow_run__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/08__outside-staggered__catalog__action_inspect_drive_workflow_run__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed.",
+        "status": "pass",
+        "unexpected_ui_changes_or_ambiguity": []
+      }
+    },
+    {
+      "ordinal": "09",
+      "command": "$WARPCTRL --output-format json action inspect auth.api_key.set",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--output-format",
+        "json",
+        "action",
+        "inspect",
+        "auth.api_key.set"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, render the complete small JSON response in the terminal, and keep the app window visible as the instance under test.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 1,
+        "stdout_lines": 8,
+        "stdout_bytes": 223,
+        "stderr_lines": 0,
+        "json_valid": true,
+        "error_code": "not_allowlisted"
+      },
+      "expected_exit_code": 1,
+      "status": "pass",
+      "stdout_log": "logs/09__action_inspect_auth_api_key_set__stdout.txt",
+      "stderr_log": "logs/09__action_inspect_auth_api_key_set__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/09__outside-staggered__catalog__action_inspect_auth_api_key_set__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed.",
+        "status": "pass",
+        "unexpected_ui_changes_or_ambiguity": []
+      }
+    },
+    {
+      "ordinal": "10",
+      "command": "$WARPCTRL --output-format json capability list --implemented-only",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--output-format",
+        "json",
+        "capability",
+        "list",
+        "--implemented-only"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, store the long JSON catalog in durable logs, and show command, exit code, JSON validity, count, and readable excerpts in the screenshot.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 1866,
+        "stdout_bytes": 53701,
+        "stderr_lines": 0,
+        "json_valid": true
+      },
+      "expected_exit_code": 0,
+      "status": "blocked",
+      "stdout_log": "logs/10__capability_list_implemented__stdout.txt",
+      "stderr_log": "logs/10__capability_list_implemented__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/10__outside-staggered__catalog__capability_list_implemented__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 1,866-line JSON catalog cannot fit in one screenshot. The staggered screenshot still shows the external terminal and the Warp app window; complete stdout/stderr are preserved in logs.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": [
+          "Raw command output exceeded one-screen screenshot capacity; full output is preserved in stdout/stderr logs, and screenshot shows command, exit code, counts, and excerpts only.",
+          "Screenshot is readable but only shows command/status/counts and head/tail excerpts; full 1,866-line JSON catalog cannot fit in one screenshot."
+        ]
+      }
+    },
+    {
+      "ordinal": "11",
+      "command": "$WARPCTRL --output-format json capability inspect tab.create",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--output-format",
+        "json",
+        "capability",
+        "inspect",
+        "tab.create"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, render the complete small JSON response in the terminal, and keep the app window visible as the instance under test.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 18,
+        "stdout_bytes": 475,
+        "stderr_lines": 0,
+        "json_valid": true
+      },
+      "expected_exit_code": 0,
+      "status": "pass",
+      "stdout_log": "logs/11__capability_inspect_tab_create__stdout.txt",
+      "stderr_log": "logs/11__capability_inspect_tab_create__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/11__outside-staggered__catalog__capability_inspect_tab_create__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed.",
+        "status": "pass",
+        "unexpected_ui_changes_or_ambiguity": []
+      }
+    },
+    {
+      "ordinal": "12",
+      "command": "$WARPCTRL --output-format json capability inspect auth.status",
+      "argv": [
+        "/workspace/warpctrl-validation/validation-coordinator/target/debug/warpctrl",
+        "--output-format",
+        "json",
+        "capability",
+        "inspect",
+        "auth.status"
+      ],
+      "context": "outside_warp_external_xterm_with_graphical_warp_app_visible",
+      "permission_state": "Settings > Scripting private preferences preseeded true for outside-Warp control and all granular categories in isolated profile; parser/catalog commands themselves do not dispatch to the app bridge.",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a wide external terminal with the built Warp app visible beside it, render the complete small JSON response in the terminal, and keep the app window visible as the instance under test.",
+      "expected_result": "Exit code matches expected and output is valid/readable; auth.api_key.set is expected to return not_allowlisted; auth.status is expected to return stub metadata if present.",
+      "actual_result": {
+        "exit_code": 0,
+        "stdout_lines": 19,
+        "stdout_bytes": 466,
+        "stderr_lines": 0,
+        "json_valid": true,
+        "implementation_status": "stub"
+      },
+      "expected_exit_code": 0,
+      "status": "pass",
+      "stdout_log": "logs/12__capability_inspect_auth_status__stdout.txt",
+      "stderr_log": "logs/12__capability_inspect_auth_status__stderr.txt",
+      "screenshot_paths": [
+        "screenshots/12__outside-staggered__catalog__capability_inspect_auth_status__terminal_ui.png"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "The external terminal should visibly show the exact command, exit status, output evidence, and the target Warp app window should remain visible/running in the same staggered screenshot.",
+        "observed_visual_effect": "Computer-vision inspection: the screenshot is readable, shows the exact command/status header in the xterm, shows the full small JSON response or denial result, and keeps the Warp app window visible on the right. No unexpected UI changes observed.",
+        "status": "pass",
+        "unexpected_ui_changes_or_ambiguity": []
+      }
+    }
+  ],
+  "catalog_to_cli_gap_detection": {
+    "implemented_action_count": 99,
+    "mapped_reachable_parser_count": 56,
+    "implemented_actions_without_reachable_standalone_cli_command": [
+      "window.create",
+      "window.focus",
+      "window.close",
+      "tab.activate",
+      "tab.move",
+      "tab.close",
+      "pane.split",
+      "pane.focus",
+      "pane.navigate",
+      "pane.resize",
+      "pane.maximize",
+      "pane.unmaximize",
+      "pane.close",
+      "session.activate",
+      "session.previous",
+      "session.next",
+      "session.reopen_closed",
+      "input.insert",
+      "input.replace",
+      "input.clear",
+      "input.mode.set",
+      "surface.settings.open",
+      "surface.command_palette.open",
+      "surface.command_search.open",
+      "surface.warp_drive.open",
+      "surface.warp_drive.toggle",
+      "surface.resource_center.toggle",
+      "surface.ai_assistant.toggle",
+      "surface.code_review.toggle",
+      "surface.left_panel.toggle",
+      "surface.right_panel.toggle",
+      "surface.vertical_tabs.toggle",
+      "file.open",
+      "project.open",
+      "drive.open",
+      "drive.notebook.open",
+      "drive.env_var_collection.open",
+      "drive.object.share.open",
+      "drive.object.create",
+      "drive.object.update",
+      "drive.object.delete",
+      "drive.object.insert",
+      "drive.object.share_to_team"
+    ],
+    "justification": "Compared catalog names from action list --implemented-only against explicit clap command groups in crates/warp_cli/src/local_control/mod.rs. Missing items are catalog-implemented but not exposed as reachable standalone parser commands in this checkout."
+  },
+  "counts": {
+    "pass": 7,
+    "fail": 0,
+    "skip": 0,
+    "blocked": 5
+  },
+  "visual_inspection_failures_or_blockers": [
+    "$WARPCTRL --help",
+    "$WARPCTRL completions bash",
+    "$WARPCTRL completions zsh",
+    "$WARPCTRL --output-format json action list --implemented-only",
+    "$WARPCTRL --output-format json capability list --implemented-only"
+  ],
+  "blockers": [
+    "43 implemented catalog actions lack a reachable standalone CLI parser command.",
+    "Five parser/catalog outputs are too large or too tall to prove the full raw terminal output in one screenshot; complete stdout is stored in logs and screenshots show invocation/status/counts/excerpts or readable terminal output only."
+  ],
+  "skipped_commands": []
+}

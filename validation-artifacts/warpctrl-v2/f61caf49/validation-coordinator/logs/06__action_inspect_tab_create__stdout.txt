@@ -1,0 +1,18 @@
+{
+  "kind": "tab.create",
+  "name": "tab.create",
+  "implementation_status": "implemented",
+  "risk_tier": "mutating_non_destructive",
+  "state_data_category": "app_state_mutation",
+  "requires_authenticated_user": false,
+  "authenticated_user": {
+    "required": false
+  },
+  "allowed_invocation_contexts": [
+    "outside_warp"
+  ],
+  "permission_category": "mutate_app_state",
+  "target_scope": "tab",
+  "parameter_spec": "tab_create",
+  "result_spec": "acknowledgement"
+}
