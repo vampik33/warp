@@ -1,0 +1,14 @@
+{
+  "paths": [
+    "/tmp/warpctrl-validation/readonly-metadata/home/.config/warp-oss-readonly-metadata/user_preferences.json",
+    "/tmp/warpctrl-validation/readonly-metadata/home/.config/warp-oss/user_preferences.json"
+  ],
+  "prefs": {
+    "prefs": {
+      "LocalControlAllowOutsideWarp": "true",
+      "LocalControlOutsideWarpMetadataReads": "true",
+      "HasCompletedOnboarding": "true"
+    }
+  },
+  "note": "Private Linux Settings > Scripting gates preseeded in isolated profile before app launch."
+}
