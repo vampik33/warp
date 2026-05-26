@@ -633,16 +633,15 @@ impl ActionKind {
             | Self::DriveOpen
             | Self::DriveNotebookOpen
             | Self::DriveEnvVarCollectionOpen
-            | Self::DriveObjectShareOpen => ActionImplementationStatus::Implemented,
-            Self::AuthStatus
-            | Self::AuthLogin
-            | Self::InputRun
+            | Self::DriveObjectShareOpen
             | Self::DriveObjectCreate
             | Self::DriveObjectUpdate
             | Self::DriveObjectDelete
             | Self::DriveObjectInsert
-            | Self::DriveObjectShareToTeam
-            | Self::DriveWorkflowRun => ActionImplementationStatus::Stub,
+            | Self::DriveObjectShareToTeam => ActionImplementationStatus::Implemented,
+            Self::AuthStatus | Self::AuthLogin | Self::InputRun | Self::DriveWorkflowRun => {
+                ActionImplementationStatus::Stub
+            }
         }
     }
 

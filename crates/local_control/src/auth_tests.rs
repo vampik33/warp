@@ -93,6 +93,44 @@ fn mismatched_permission_metadata_is_rejected() {
 }
 
 #[test]
+fn authenticated_drive_mutation_requires_authenticated_user_grant() {
+    let grant = CredentialGrant::new(
+        InstanceId("inst_test".to_owned()),
+        ActionKind::DriveObjectCreate,
+        InvocationContext::InsideWarp,
+        Duration::minutes(5),
+    );
+    assert!(grant.authenticated_user.required);
+    assert!(grant.authenticated_user.subject.is_none());
+    let err = grant
+        .verify_for_action(ActionKind::DriveObjectCreate)
+        .expect_err("missing authenticated user subject is rejected");
+    assert_eq!(err.code, ErrorCode::AuthenticatedUserRequired);
+}
+
+#[test]
+fn authenticated_drive_mutation_grant_carries_underlying_data_mutation_metadata() {
+    let mut grant = CredentialGrant::new(
+        InstanceId("inst_test".to_owned()),
+        ActionKind::DriveObjectCreate,
+        InvocationContext::InsideWarp,
+        Duration::minutes(5),
+    );
+    grant.authenticated_user.subject = Some("user_123".to_owned());
+    assert_eq!(
+        grant.permission_category,
+        PermissionCategory::MutateUnderlyingData
+    );
+    assert_eq!(
+        grant.state_data_category,
+        StateDataCategory::UnderlyingDataMutation
+    );
+    grant
+        .verify_for_action(ActionKind::DriveObjectCreate)
+        .expect("authenticated Drive mutation grant is accepted");
+}
+
+#[test]
 fn credential_request_rejects_unverified_inside_warp_context() {
     let request = CredentialRequest::new(ActionKind::TabCreate, InvocationContext::InsideWarp);
     let err = request

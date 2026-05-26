@@ -51,6 +51,27 @@ fn settings_with_values(
     }
 }
 
+#[test]
+fn drive_object_mutations_require_underlying_data_mutation_permission() {
+    let settings = settings_with_values(true, true, true, false, false);
+
+    let err = ensure_settings_allow_action(
+        &settings,
+        InvocationContext::OutsideWarp,
+        ActionKind::DriveObjectCreate,
+    )
+    .expect_err("underlying-data mutation permission is disabled");
+    assert_eq!(err.code, ErrorCode::InsufficientPermissions);
+
+    let settings = settings_with_values(true, true, true, false, true);
+    ensure_settings_allow_action(
+        &settings,
+        InvocationContext::OutsideWarp,
+        ActionKind::DriveObjectCreate,
+    )
+    .expect("underlying-data mutation permission allows the action helper");
+}
+
 fn settings_with_outside_warp(
     outside_control: bool,
     outside_app_state_mutations: bool,
@@ -129,7 +150,7 @@ fn tab_create_rejects_unsupported_selector_forms() {
 }
 
 #[test]
-fn capabilities_advertises_implemented_readonly_app_state_and_metadata_config_actions() {
+fn capabilities_advertises_implemented_readonly_app_state_metadata_config_and_drive_actions() {
     let actions = capabilities();
 
     for action in [
@@ -220,17 +241,16 @@ fn capabilities_advertises_implemented_readonly_app_state_and_metadata_config_ac
         ActionKind::DriveNotebookOpen,
         ActionKind::DriveEnvVarCollectionOpen,
         ActionKind::DriveObjectShareOpen,
+        ActionKind::DriveObjectCreate,
+        ActionKind::DriveObjectUpdate,
+        ActionKind::DriveObjectDelete,
+        ActionKind::DriveObjectInsert,
+        ActionKind::DriveObjectShareToTeam,
     ] {
         assert!(actions.contains(&action), "missing {}", action.as_str());
     }
 
-    for action in [
-        ActionKind::InputRun,
-        ActionKind::DriveWorkflowRun,
-        ActionKind::DriveObjectCreate,
-        ActionKind::DriveObjectUpdate,
-        ActionKind::DriveObjectDelete,
-    ] {
+    for action in [ActionKind::InputRun, ActionKind::DriveWorkflowRun] {
         assert!(!actions.contains(&action), "unexpected {}", action.as_str());
     }
 }
@@ -351,7 +371,7 @@ fn inside_warp_context_is_not_implemented() {
 
 #[test]
 fn outside_warp_authenticated_actions_are_execution_context_denied() {
-    let settings = settings_with_values(true, true, true);
+    let settings = settings_with_values(true, true, true, false, false);
 
     let err = ensure_settings_allow_action(
         &settings,
@@ -378,7 +398,7 @@ fn disabled_granular_permission_denies_with_insufficient_permissions() {
 
 #[test]
 fn disabled_metadata_read_permission_denies_readonly_metadata_actions() {
-    let settings = settings_with_values(true, false, true);
+    let settings = settings_with_values(true, false, true, false, false);
 
     let err = ensure_settings_allow_action(
         &settings,
@@ -391,7 +411,7 @@ fn disabled_metadata_read_permission_denies_readonly_metadata_actions() {
 
 #[test]
 fn disabled_underlying_data_read_permission_denies_content_reads() {
-    let settings = settings_with_values(true, true, true);
+    let settings = settings_with_values(true, true, true, false, false);
 
     let err = ensure_settings_allow_action(
         &settings,

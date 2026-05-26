@@ -2,6 +2,7 @@
 use crate::auth::AuthStateProvider;
 use crate::features::FeatureFlag;
 use crate::settings::{LocalControlPermissionCategory, LocalControlSettings};
+use ::local_control::auth::CredentialGrant;
 use ::local_control::{ActionKind, ControlError, ErrorCode, InvocationContext, PermissionCategory};
 use warpui::{ModelContext, SingletonEntity};
 
@@ -70,6 +71,64 @@ pub(super) fn ensure_action_allowed(
 ) -> Result<(), ControlError> {
     let settings = LocalControlSettings::as_ref(ctx);
     ensure_settings_allow_action(settings, context, action)
+}
+pub(super) fn authenticated_user_subject_for_action(
+    action: ActionKind,
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<Option<String>, ControlError> {
+    if !action.metadata().authenticated_user.required {
+        return Ok(None);
+    }
+    let auth_state = AuthStateProvider::as_ref(ctx).get();
+    if auth_state.is_anonymous_or_logged_out() {
+        return Err(ControlError::new(
+            ErrorCode::AuthenticatedUserUnavailable,
+            format!("{} requires a logged-in Warp user", action.as_str()),
+        ));
+    }
+    auth_state
+        .user_id()
+        .map(|user_uid| Some(user_uid.as_string()))
+        .ok_or_else(|| {
+            ControlError::new(
+                ErrorCode::AuthenticatedUserUnavailable,
+                format!("{} requires a logged-in Warp user", action.as_str()),
+            )
+        })
+}
+
+pub(super) fn ensure_authenticated_user_matches(
+    grant: &CredentialGrant,
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<(), ControlError> {
+    if !grant.authenticated_user.required {
+        return Ok(());
+    }
+    let Some(subject) = grant.authenticated_user.subject.as_ref() else {
+        return Err(ControlError::new(
+            ErrorCode::AuthenticatedUserRequired,
+            format!(
+                "{} requires an authenticated Warp user grant",
+                grant.action.as_str()
+            ),
+        ));
+    };
+    let current_subject = authenticated_user_subject_for_action(grant.action, ctx)?.ok_or_else(|| {
+        ControlError::new(
+            ErrorCode::AuthenticatedUserUnavailable,
+            format!("{} requires a logged-in Warp user", grant.action.as_str()),
+        )
+    })?;
+    if subject != &current_subject {
+        return Err(ControlError::new(
+            ErrorCode::AuthenticatedUserUnavailable,
+            format!(
+                "{} authenticated user grant does not match the selected Warp app user",
+                grant.action.as_str()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn ensure_settings_allow_action(
