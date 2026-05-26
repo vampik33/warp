@@ -1,0 +1,774 @@
+{
+  "validation": {
+    "agent_name": "discovery-auth-denials",
+    "validated_sha": "f61caf49400dc5c0d37d57a553d27733700e5204",
+    "short_sha": "f61caf49",
+    "repository": "git@github.com:warpdotdev/warp.git",
+    "validation_ref": "zach/warpctrl-validation/f61caf49",
+    "artifact_directory": "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials",
+    "built_binaries": {
+      "warp_oss": "target/debug/warp-oss built with --features gui,warp_control_cli",
+      "warpctrl": "target/debug/warpctrl built with --features standalone,warp_control_cli"
+    },
+    "build_logs": [
+      "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/build_warp_oss.log",
+      "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/build_warpctrl.log"
+    ],
+    "run_environment": {
+      "display": ":99",
+      "window_manager": "openbox",
+      "app_instance_id_final": "inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+      "app_pid_final": 7675,
+      "profile": "warpctrl-f61caf49-discovery-auth-denials"
+    },
+    "permissions_setup": {
+      "method": "Isolated user_preferences.json was edited to reflect Settings > Scripting permissions because onboarding/sign-in prevented reliable manual UI toggling in the headless app.",
+      "preferences_excerpt_log": "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/permissions_enabled_preferences_excerpt.json",
+      "enabled": [
+        "LocalControlAllowOutsideWarp",
+        "LocalControlOutsideWarpMetadataReads",
+        "LocalControlOutsideWarpAppStateMutations"
+      ],
+      "disabled": [
+        "LocalControlOutsideWarpUnderlyingDataReads",
+        "LocalControlOutsideWarpMetadataConfigurationMutations",
+        "LocalControlOutsideWarpUnderlyingDataMutations",
+        "LocalControlInsideWarpAuthenticatedUserActions"
+      ]
+    },
+    "counts": {
+      "all_attempts": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 11,
+        "skip": 0
+      },
+      "primary_required_attempt_entries": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 3,
+        "skip": 0
+      },
+      "final_required_validation": {
+        "pass": 14,
+        "fail": 0,
+        "skip": 0,
+        "blocked_retry_attempts": 3
+      }
+    },
+    "visual_inspection_failures_or_blockers": [
+      "025 enabled tab create initial attempt: blocked by active-window focus conflict while xterm had focus; retry 026 succeeded and visually proved two tabs.",
+      "029 inside-Warp app ping initial attempt: blocked by stale zombie discovery record causing ambiguous_instance.",
+      "030 inside-Warp app ping after cleanup: log succeeded, but screenshot did not clearly prove fresh output; repeated as 031 with visible success."
+    ],
+    "blockers": [],
+    "skipped_commands": []
+  },
+  "command_attempts": [
+    {
+      "ordinal": "013",
+      "name": "metadata__instance_list",
+      "command_string": "$WARPCTRL --output-format json instance list",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control disabled in discovered instance record",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "JSON list contains discoverable Warp instance with outside_warp_control_enabled false",
+      "actual_result": "Command returned JSON instance list for pid 6523 with endpoint null and outside_warp_control_enabled false.",
+      "exit_code": 0,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/013__outside-staggered__metadata__instance_list__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/013__metadata__instance_list.log",
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/013__metadata__instance_list_slim.json"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows JSON instance discovery and target Warp is visible.",
+        "observed_visual_effect": "Screenshot shows external terminal output next to Warp workspace; discovered instance is disabled for outside-Warp control.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "014",
+      "name": "default-off__instance_inspect",
+      "command_string": "$WARPCTRL --output-format json instance inspect",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control disabled",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should be denied with local_control_disabled and the visible Warp workspace should not change.",
+      "actual_result": "Command returned {\"ok\": false, \"error\": {\"code\": \"local_control_disabled\"}}.",
+      "exit_code": 1,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/014__outside-staggered__default-off__instance_inspect__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/014__default-off__instance_inspect.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Denied command output visible; target Warp workspace remains unchanged.",
+        "observed_visual_effect": "Screenshot shows denial JSON in xterm and no visible target state mutation in Warp.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "015",
+      "name": "default-off__app_ping",
+      "command_string": "$WARPCTRL --output-format json app ping",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control disabled",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should be denied with local_control_disabled and the visible Warp workspace should not change.",
+      "actual_result": "Command returned {\"ok\": false, \"error\": {\"code\": \"local_control_disabled\"}}.",
+      "exit_code": 1,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/015__outside-staggered__default-off__app_ping__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/015__default-off__app_ping.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Denied command output visible; target Warp workspace remains unchanged.",
+        "observed_visual_effect": "Screenshot shows denial JSON in xterm and no visible target state mutation in Warp.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "016",
+      "name": "default-off__app_version",
+      "command_string": "$WARPCTRL --output-format json app version",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control disabled",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should be denied with local_control_disabled and the visible Warp workspace should not change.",
+      "actual_result": "Command returned {\"ok\": false, \"error\": {\"code\": \"local_control_disabled\"}}.",
+      "exit_code": 1,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/016__outside-staggered__default-off__app_version__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/016__default-off__app_version.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Denied command output visible; target Warp workspace remains unchanged.",
+        "observed_visual_effect": "Screenshot shows denial JSON in xterm and no visible target state mutation in Warp.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "017",
+      "name": "default-off__app_active",
+      "command_string": "$WARPCTRL --output-format json app active",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control disabled",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should be denied with local_control_disabled and the visible Warp workspace should not change.",
+      "actual_result": "Command returned {\"ok\": false, \"error\": {\"code\": \"local_control_disabled\"}}.",
+      "exit_code": 1,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/017__outside-staggered__default-off__app_active__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/017__default-off__app_active.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Denied command output visible; target Warp workspace remains unchanged.",
+        "observed_visual_effect": "Screenshot shows denial JSON in xterm and no visible target state mutation in Warp.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "018",
+      "name": "default-off__tab_create",
+      "command_string": "$WARPCTRL --output-format json tab create",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control disabled",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should be denied with local_control_disabled and the visible Warp workspace should not change.",
+      "actual_result": "Command returned {\"ok\": false, \"error\": {\"code\": \"local_control_disabled\"}}.",
+      "exit_code": 1,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/018__outside-staggered__default-off__tab_create__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/018__default-off__tab_create.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Denied command output visible; target Warp workspace remains unchanged.",
+        "observed_visual_effect": "Screenshot shows denial JSON in xterm and no visible target state mutation in Warp.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "022",
+      "name": "enabled__instance_list",
+      "command_string": "$WARPCTRL --output-format json instance list",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "LocalControlAllowOutsideWarp and metadata/app-state preferences enabled by isolated preferences file",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should list discoverable instances after enabling permissions.",
+      "actual_result": "Command returned JSON instance list; stale zombie record still appeared alongside/around the enabled instance and later caused ambiguous-selection retries.",
+      "exit_code": 0,
+      "status": "pass",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/022__outside-staggered__enabled__instance_list__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/022__enabled__instance_list.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows instance-list JSON and Warp remains visible.",
+        "observed_visual_effect": "Screenshot/log show discovery output; stale disabled zombie discovery record was still present.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "023",
+      "name": "enabled__instance_inspect",
+      "command_string": "$WARPCTRL --output-format json instance inspect",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control enabled, but stale zombie discovery record present",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should target the active enabled instance or request explicit instance disambiguation.",
+      "actual_result": "Command returned ambiguous_instance: multiple local Warp control instances were discovered; pass --instance.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/023__outside-staggered__enabled__instance_inspect__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/023__enabled__instance_inspect.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal should show success for metadata read or a clear selector error; target Warp remains visible.",
+        "observed_visual_effect": "Terminal showed ambiguous_instance because a stale zombie discovery record remained.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Stale zombie instance record from an earlier crashed/defunct Warp process masked active instance selection."
+      },
+      "blocker_reason": "stale zombie discovery record caused ambiguous_instance; explicit --instance targeting used for final validation."
+    },
+    {
+      "ordinal": "024",
+      "name": "enabled__app_ping",
+      "command_string": "$WARPCTRL --output-format json app ping",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control enabled, but stale zombie discovery record present",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should target the active enabled instance or request explicit instance disambiguation.",
+      "actual_result": "Command returned ambiguous_instance: multiple local Warp control instances were discovered; pass --instance.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/024__outside-staggered__enabled__app_ping__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/024__enabled__app_ping.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal should show success for metadata read or a clear selector error; target Warp remains visible.",
+        "observed_visual_effect": "Terminal showed ambiguous_instance because a stale zombie discovery record remained.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Stale zombie instance record from an earlier crashed/defunct Warp process masked active instance selection."
+      },
+      "blocker_reason": "stale zombie discovery record caused ambiguous_instance; explicit --instance targeting used for final validation."
+    },
+    {
+      "ordinal": "025",
+      "name": "enabled__app_version",
+      "command_string": "$WARPCTRL --output-format json app version",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control enabled, but stale zombie discovery record present",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should target the active enabled instance or request explicit instance disambiguation.",
+      "actual_result": "Command returned ambiguous_instance: multiple local Warp control instances were discovered; pass --instance.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/025__outside-staggered__enabled__app_version__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/025__enabled__app_version.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal should show success for metadata read or a clear selector error; target Warp remains visible.",
+        "observed_visual_effect": "Terminal showed ambiguous_instance because a stale zombie discovery record remained.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Stale zombie instance record from an earlier crashed/defunct Warp process masked active instance selection."
+      },
+      "blocker_reason": "stale zombie discovery record caused ambiguous_instance; explicit --instance targeting used for final validation."
+    },
+    {
+      "ordinal": "026",
+      "name": "enabled__app_active",
+      "command_string": "$WARPCTRL --output-format json app active",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control enabled, but stale zombie discovery record present",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should target the active enabled instance or request explicit instance disambiguation.",
+      "actual_result": "Command returned ambiguous_instance: multiple local Warp control instances were discovered; pass --instance.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/026__outside-staggered__enabled__app_active__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/026__enabled__app_active.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal should show success for metadata read or a clear selector error; target Warp remains visible.",
+        "observed_visual_effect": "Terminal showed ambiguous_instance because a stale zombie discovery record remained.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Stale zombie instance record from an earlier crashed/defunct Warp process masked active instance selection."
+      },
+      "blocker_reason": "stale zombie discovery record caused ambiguous_instance; explicit --instance targeting used for final validation."
+    },
+    {
+      "ordinal": "021",
+      "name": "enabled__instance_inspect",
+      "command_string": "$WARPCTRL --output-format json instance inspect --instance inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control, metadata reads, and app-state mutations enabled; explicit instance selected",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should succeed for the selected instance.",
+      "actual_result": "Command returned action instance.inspect metadata for the selected enabled instance.",
+      "exit_code": 0,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/021__outside-staggered__enabled__instance_inspect__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/021__enabled__instance_inspect.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows JSON success and target Warp remains visible.",
+        "observed_visual_effect": "Screenshot shows command/output next to the target Warp window.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "022",
+      "name": "enabled__app_ping",
+      "command_string": "$WARPCTRL --output-format json app ping --instance inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control, metadata reads, and app-state mutations enabled; explicit instance selected",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should succeed for the selected instance.",
+      "actual_result": "Command returned ok true for app.ping on the selected enabled instance.",
+      "exit_code": 0,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/022__outside-staggered__enabled__app_ping__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/022__enabled__app_ping.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows JSON success and target Warp remains visible.",
+        "observed_visual_effect": "Screenshot shows command/output next to the target Warp window.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "023",
+      "name": "enabled__app_version",
+      "command_string": "$WARPCTRL --output-format json app version --instance inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control, metadata reads, and app-state mutations enabled; explicit instance selected",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should succeed for the selected instance.",
+      "actual_result": "Command returned app.version metadata with app_id dev.warp.WarpOss and channel warp-oss.",
+      "exit_code": 0,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/023__outside-staggered__enabled__app_version__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/023__enabled__app_version.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows JSON success and target Warp remains visible.",
+        "observed_visual_effect": "Screenshot shows command/output next to the target Warp window.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "024",
+      "name": "enabled__app_active",
+      "command_string": "$WARPCTRL --output-format json app active --instance inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control, metadata reads, and app-state mutations enabled; explicit instance selected",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should succeed for the selected instance.",
+      "actual_result": "Command returned app.active with the selected instance_id.",
+      "exit_code": 0,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/024__outside-staggered__enabled__app_active__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/024__enabled__app_active.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows JSON success and target Warp remains visible.",
+        "observed_visual_effect": "Screenshot shows command/output next to the target Warp window.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "025",
+      "name": "enabled__tab_create_initial_missing_target",
+      "command_string": "$WARPCTRL --output-format json tab create --instance inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp app-state mutations enabled; explicit instance selected; xterm had focus",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should create a new tab in the active Warp window.",
+      "actual_result": "Command returned missing_target: tab.create requires an active Warp window.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/025a__outside-staggered__enabled_tab_create_before__terminal_ui.png",
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/025__outside-staggered__enabled__tab_create__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/025__enabled__tab_create.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Before and after should prove a new tab appears.",
+        "observed_visual_effect": "After screenshot showed the JSON missing_target error and no new tab.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "The external terminal held OS focus, so the active Warp window selector could not resolve."
+      },
+      "blocker_reason": "active-window focus conflict in staggered outside-Warp layout; command was retried while focusing Warp during execution."
+    },
+    {
+      "ordinal": "026",
+      "name": "enabled__tab_create_focus_warp",
+      "command_string": "/workspace/warpctrl-validation/discovery-auth-denials/target/debug/warpctrl --output-format json tab create --instance inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+      "context": "outside_warp_external_terminal_with_warp_focused_during_execution",
+      "permission_state": "outside-Warp app-state mutations enabled; explicit instance selected; Warp window focused while command ran",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a before/after staggered composition; focus Warp during command execution so active-window selection resolves, then capture terminal output and tab strip together.",
+      "expected_result": "Command should create a new visible terminal tab.",
+      "actual_result": "Command returned created true with previous_count 1 and count 2.",
+      "exit_code": 0,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/026a__outside-staggered__enabled_tab_create_focus_before__terminal_ui.png",
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/026__outside-staggered__enabled__tab_create_focus_warp__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/026__enabled__tab_create_focus_warp.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "After screenshot should show the command output and a second tab in the Warp tab strip.",
+        "observed_visual_effect": "After screenshot shows created=true JSON in xterm and two bash tabs visible in the Warp tab strip.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "027",
+      "name": "denied__input_run_no_underlying_data",
+      "command_string": "$WARPCTRL --output-format json input run \"printf warpctrl-validation\" --instance inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "underlying data authority disabled; command invoked outside Warp",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should deny rather than run text in the target terminal.",
+      "actual_result": "Command returned execution_context_not_allowed: input.run cannot run from the requested invocation context.",
+      "exit_code": 1,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/027__outside-staggered__denied__input_run_no_underlying_data__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/027__denied__input_run_no_underlying_data.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows denial JSON; target Warp terminal should not display/run printf output.",
+        "observed_visual_effect": "Screenshot shows denial JSON and no warpctrl-validation output appeared in the visible Warp terminal.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "027",
+      "name": "enabled-clean__instance_list",
+      "command_string": "$WARPCTRL --output-format json instance list",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control enabled; stale record still present before final cleanup",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Diagnostic instance list should reveal discovery records.",
+      "actual_result": "Command returned instance list; stale zombie disabled record was still discoverable.",
+      "exit_code": 0,
+      "status": "pass",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/027__outside-staggered__enabled-clean__instance_list__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/027__enabled-clean__instance_list.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows discovery state.",
+        "observed_visual_effect": "Screenshot/log show discovery output with stale disabled record.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "028",
+      "name": "denied__drive_list_no_authenticated_user",
+      "command_string": "$WARPCTRL --output-format json drive list --type workflow --instance inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "authenticated-user authority unavailable/disabled; command invoked outside Warp",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should deny rather than read authenticated Warp Drive data.",
+      "actual_result": "Command returned execution_context_not_allowed: drive.list cannot run from the requested invocation context.",
+      "exit_code": 1,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/028__outside-staggered__denied__drive_list_no_authenticated_user__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/028__denied__drive_list_no_authenticated_user.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows denial JSON; target Warp remains visible and no Drive data is exposed.",
+        "observed_visual_effect": "Screenshot shows execution_context_not_allowed denial next to the Warp workspace.",
+        "status": "pass"
+      }
+    },
+    {
+      "ordinal": "028",
+      "name": "enabled-clean__instance_inspect",
+      "command_string": "$WARPCTRL --output-format json instance inspect",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control enabled, but stale zombie discovery record still present",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should succeed after cleanup or request explicit target; this retry still confirmed stale discovery ambiguity.",
+      "actual_result": "Command returned ambiguous_instance: multiple local Warp control instances were discovered; pass --instance.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/028__outside-staggered__enabled-clean__instance_inspect__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/028__enabled-clean__instance_inspect.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows command output; target Warp remains visible.",
+        "observed_visual_effect": "Terminal showed ambiguous_instance rather than metadata success because stale record was still visible to discovery.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Stale zombie discovery record not fully removed from active discovery path at this point."
+      },
+      "blocker_reason": "stale zombie discovery record caused ambiguous_instance; final explicit-instance validations cover these commands."
+    },
+    {
+      "ordinal": "029",
+      "name": "enabled-clean__app_ping",
+      "command_string": "$WARPCTRL --output-format json app ping",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control enabled, but stale zombie discovery record still present",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should succeed after cleanup or request explicit target; this retry still confirmed stale discovery ambiguity.",
+      "actual_result": "Command returned ambiguous_instance: multiple local Warp control instances were discovered; pass --instance.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/029__outside-staggered__enabled-clean__app_ping__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/029__enabled-clean__app_ping.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows command output; target Warp remains visible.",
+        "observed_visual_effect": "Terminal showed ambiguous_instance rather than metadata success because stale record was still visible to discovery.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Stale zombie discovery record not fully removed from active discovery path at this point."
+      },
+      "blocker_reason": "stale zombie discovery record caused ambiguous_instance; final explicit-instance validations cover these commands."
+    },
+    {
+      "ordinal": "030",
+      "name": "enabled-clean__app_version",
+      "command_string": "$WARPCTRL --output-format json app version",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control enabled, but stale zombie discovery record still present",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should succeed after cleanup or request explicit target; this retry still confirmed stale discovery ambiguity.",
+      "actual_result": "Command returned ambiguous_instance: multiple local Warp control instances were discovered; pass --instance.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/030__outside-staggered__enabled-clean__app_version__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/030__enabled-clean__app_version.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows command output; target Warp remains visible.",
+        "observed_visual_effect": "Terminal showed ambiguous_instance rather than metadata success because stale record was still visible to discovery.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Stale zombie discovery record not fully removed from active discovery path at this point."
+      },
+      "blocker_reason": "stale zombie discovery record caused ambiguous_instance; final explicit-instance validations cover these commands."
+    },
+    {
+      "ordinal": "031",
+      "name": "enabled-clean__app_active",
+      "command_string": "$WARPCTRL --output-format json app active",
+      "context": "outside_warp_external_terminal",
+      "permission_state": "outside-Warp control enabled, but stale zombie discovery record still present",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Use a staggered desktop with an external xterm running warpctrl on the left and the target Warp window/workspace visible on the right; this shows both command/output and any UI effect or lack of effect.",
+      "expected_result": "Command should succeed after cleanup or request explicit target; this retry still confirmed stale discovery ambiguity.",
+      "actual_result": "Command returned ambiguous_instance: multiple local Warp control instances were discovered; pass --instance.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": false,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/031__outside-staggered__enabled-clean__app_active__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/031__enabled-clean__app_active.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Terminal shows command output; target Warp remains visible.",
+        "observed_visual_effect": "Terminal showed ambiguous_instance rather than metadata success because stale record was still visible to discovery.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Stale zombie discovery record not fully removed from active discovery path at this point."
+      },
+      "blocker_reason": "stale zombie discovery record caused ambiguous_instance; final explicit-instance validations cover these commands."
+    },
+    {
+      "ordinal": "029",
+      "name": "inside_warp__app_ping_initial",
+      "command_string": "/workspace/warpctrl-validation/discovery-auth-denials/target/debug/warpctrl --output-format json app ping",
+      "context": "inside_warp_terminal",
+      "permission_state": "inside-Warp terminal; stale zombie discovery record still present",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Run the command inside a visible Warp terminal and capture the terminal output in the Warp UI.",
+      "expected_result": "Record current implemented behavior or expected execution-context denial.",
+      "actual_result": "Command returned ambiguous_instance before stale record cleanup, so it did not prove inside-Warp behavior.",
+      "exit_code": 1,
+      "status": "blocked",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/029__inside-warp__app_ping__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/029__inside_warp__app_ping.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Warp terminal should show the command and either denial or current implemented result.",
+        "observed_visual_effect": "Screenshot showed ambiguous_instance from stale discovery, not a meaningful inside-Warp behavior result.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Stale discovery record masked the inside-Warp behavior."
+      },
+      "blocker_reason": "stale zombie discovery record caused ambiguous_instance; stale record was moved into logs/stale_local_control_records and the check was repeated."
+    },
+    {
+      "ordinal": "030",
+      "name": "inside_warp__app_ping_after_stale_cleanup",
+      "command_string": "/workspace/warpctrl-validation/discovery-auth-denials/target/debug/warpctrl --output-format json app ping",
+      "context": "inside_warp_terminal",
+      "permission_state": "inside-Warp terminal after moving stale zombie record out of active discovery path",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Run the command inside a visible Warp terminal after stale cleanup and capture the full desktop.",
+      "expected_result": "Record current implemented behavior or expected execution-context denial.",
+      "actual_result": "Command log returned ok true for app.ping, but the screenshot did not clearly show the fresh command output, so a clearer repeat was captured as 031.",
+      "exit_code": 0,
+      "status": "blocked",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/030__inside-warp__app_ping_after_stale_cleanup__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/030__inside_warp__app_ping_after_stale_cleanup.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Warp terminal should visibly show the command output.",
+        "observed_visual_effect": "Log shows success, but screenshot remained ambiguous because it did not clearly display the fresh success output.",
+        "status": "blocked",
+        "unexpected_ui_changes_or_ambiguity": "Screenshot did not clearly prove the successful inside-Warp result."
+      },
+      "blocker_reason": "visual proof was ambiguous; repeated as 031 with clearer visible command output."
+    },
+    {
+      "ordinal": "031",
+      "name": "inside_warp__app_ping_visible",
+      "command_string": "$WARPCTRL --output-format json app ping",
+      "context": "inside_warp_terminal",
+      "permission_state": "inside-Warp terminal after stale zombie cleanup; WARPCTRL exported in the visible Warp shell",
+      "proof_setup_question": "What is the best way to show the impact of this CLI command?",
+      "proof_setup_answer": "Run from a visible Warp terminal with the command and JSON output readable; keep external xterm staggered as additional context.",
+      "expected_result": "Record current implemented behavior or expected execution-context denial.",
+      "actual_result": "Current implemented behavior: command returned ok true for app.ping with the selected instance_id.",
+      "exit_code": 0,
+      "status": "pass",
+      "primary_required_case": true,
+      "screenshot_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/screenshots/031__inside-warp__app_ping_visible__terminal_ui.png"
+      ],
+      "log_paths": [
+        "validation-artifacts/warpctrl-v2/f61caf49/discovery-auth-denials/logs/031__inside_warp__app_ping_visible.log"
+      ],
+      "visual_inspection": {
+        "expected_visual_effect": "Warp terminal should show the inside-Warp command and JSON result.",
+        "observed_visual_effect": "Screenshot shows the Warp terminal containing app.ping success JSON and EXIT_CODE: 0; external xterm remains visible beside it.",
+        "status": "pass"
+      }
+    }
+  ],
+  "notes": [
+    "Apt package installation ended with a libc-bin post-install ldconfig.real error, but required X11 tools were available and used.",
+    "Several defunct warp-oss processes left a stale discovery record. It was archived under logs/stale_local_control_records before final inside-Warp current-behavior validation.",
+    "Outside-Warp commands that rely on an active Warp window can fail in a staggered screenshot layout if the xterm owns focus; the successful tab.create retry focused Warp during execution while preserving combined before/after screenshots."
+  ]
+}

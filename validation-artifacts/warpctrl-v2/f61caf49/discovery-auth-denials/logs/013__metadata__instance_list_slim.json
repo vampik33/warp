@@ -1,0 +1,10 @@
+[
+  {
+    "instance_id": "inst_4ff2779dc39e4962af130b7f2b7b0105",
+    "pid": 6523,
+    "channel": "warp-oss",
+    "app_id": "dev.warp.WarpOss",
+    "endpoint": null,
+    "outside_warp_control_enabled": false
+  }
+]

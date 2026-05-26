@@ -1,0 +1,7 @@
+Warp
+Window 6291459
+  Position: 320,140 (screen: 0)
+  Geometry: 1280x800
+Window 6291459
+  Position: 320,140 (screen: 0)
+  Geometry: 1280x800

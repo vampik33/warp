@@ -1,0 +1,8 @@
+{
+  "action": "app.version",
+  "app_id": "dev.warp.WarpOss",
+  "app_version": null,
+  "channel": "warp-oss",
+  "instance_id": "inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+  "protocol_version": 1
+}

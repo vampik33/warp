@@ -1,0 +1,1 @@
+FILE /workspace/warpctrl-validation/discovery-auth-denials/run-env/xdg-config/warp-oss-warpctrl-f61caf49-discovery-auth-denials/user_preferences.json

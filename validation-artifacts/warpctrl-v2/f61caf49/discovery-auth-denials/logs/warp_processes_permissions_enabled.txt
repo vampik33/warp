@@ -1,0 +1,2 @@
+root      7675 14.5  2.7 5457124 443360 pts/0  Sl+  23:08   0:05 /workspace/warpctrl-validation/discovery-auth-denials/target/debug/warp-oss --crash-recovery-mechanism disable-opengl --parent-pid 1
+root      7678  0.0  0.4 495604 77064 pts/0    Sl+  23:08   0:00 /workspace/warpctrl-validation/discovery-auth-denials/target/debug/warp-oss terminal-server --parent-pid=7675

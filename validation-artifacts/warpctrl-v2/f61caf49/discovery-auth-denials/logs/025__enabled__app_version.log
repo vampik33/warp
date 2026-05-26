@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "ambiguous_instance",
+    "message": "multiple local Warp control instances were discovered; pass --instance"
+  }
+}

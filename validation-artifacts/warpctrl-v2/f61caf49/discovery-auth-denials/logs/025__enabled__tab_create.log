@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "missing_target",
+    "message": "tab.create requires an active Warp window"
+  }
+}

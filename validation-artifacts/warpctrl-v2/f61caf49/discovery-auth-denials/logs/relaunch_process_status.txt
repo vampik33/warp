@@ -1,0 +1,2 @@
+  PID STAT CMD
+ 5318 S+   /workspace/warpctrl-validation/discovery-auth-denials/target/debug/warp-oss --crash-recovery-mechanism disable-opengl --parent-pid 5315

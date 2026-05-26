@@ -1,0 +1,312 @@
+   Compiling num-complex v0.4.6
+   Compiling warp v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/app)
+   Compiling warp_assets v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warp_assets)
+   Compiling num v0.4.3
+   Compiling secret-service v5.0.0
+   Compiling warpui_extras v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warpui_extras)
+   Compiling settings v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/settings)
+   Compiling warp_core v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warp_core)
+   Compiling http_client v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/http_client)
+   Compiling warp_cli v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warp_cli)
+   Compiling vim v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/vim)
+   Compiling repo_metadata v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/repo_metadata)
+   Compiling ui_components v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/ui_components)
+   Compiling warp_isolation_platform v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/isolation_platform)
+   Compiling simple_logger v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/simple_logger)
+   Compiling warp_logging v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warp_logging)
+   Compiling warp_editor v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/editor)
+   Compiling warp_graphql v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/graphql)
+   Compiling node_runtime v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/node_runtime)
+   Compiling remote_server v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/remote_server)
+   Compiling lsp v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/lsp)
+   Compiling warp_completer v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warp_completer)
+   Compiling warp_ripgrep v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warp_ripgrep)
+   Compiling warp_files v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warp_files)
+   Compiling languages v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/languages)
+   Compiling syntax_tree v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/syntax_tree)
+   Compiling warp_terminal v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warp_terminal)
+   Compiling input_classifier v0.0.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/input_classifier)
+   Compiling ai v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/ai)
+   Compiling warp_managed_secrets v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/managed_secrets)
+   Compiling warp_server_client v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/warp_server_client)
+   Compiling onboarding v0.1.0 (/workspace/warpctrl-validation/discovery-auth-denials/crates/onboarding)
+warning: unused variable: `e`
+   --> app/src/remote_server/ssh_transport/installation/scp_fallback.rs:196:13
+    |
+196 |         Err(e) if is_valid_cached_tarball(cache_path).await => {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_e`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `add_mcp`
+   --> app/src/terminal/input/slash_commands/mod.rs:391:13
+    |
+391 |             add_mcp if command.name == commands::ADD_MCP.name => {
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_add_mcp`
+
+warning: unused variable: `add_prompt`
+   --> app/src/terminal/input/slash_commands/mod.rs:394:13
+    |
+394 |             add_prompt if command.name == commands::ADD_PROMPT.name => {
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_add_prompt`
+
+warning: unused variable: `add_rule`
+   --> app/src/terminal/input/slash_commands/mod.rs:397:13
+    |
+397 |             add_rule if command.name == commands::ADD_RULE.name => {
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_add_rule`
+
+warning: unused variable: `agent_or_new`
+   --> app/src/terminal/input/slash_commands/mod.rs:400:13
+    |
+400 |             agent_or_new
+    |             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_agent_or_new`
+
+warning: unused variable: `cloud_agent`
+   --> app/src/terminal/input/slash_commands/mod.rs:455:13
+    |
+455 |             cloud_agent if command.name == commands::CLOUD_AGENT.name => {
+    |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_cloud_agent`
+
+warning: unused variable: `create_docker_sandbox`
+   --> app/src/terminal/input/slash_commands/mod.rs:469:13
+    |
+469 |             create_docker_sandbox if command.name == commands::CREATE_DOCKER_SANDBOX.name => {
+    |             ^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_create_docker_sandbox`
+
+warning: unused variable: `conversations`
+   --> app/src/terminal/input/slash_commands/mod.rs:472:13
+    |
+472 |             conversations if command.name == commands::CONVERSATIONS.name => {
+    |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_conversations`
+
+warning: unused variable: `rename_tab`
+   --> app/src/terminal/input/slash_commands/mod.rs:491:13
+    |
+491 |             rename_tab if command.name == commands::RENAME_TAB.name => {
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_rename_tab`
+
+warning: unused variable: `set_tab_color`
+   --> app/src/terminal/input/slash_commands/mod.rs:505:13
+    |
+505 |             set_tab_color if command.name == commands::SET_TAB_COLOR.name => {
+    |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_set_tab_color`
+
+warning: unused variable: `create_env`
+   --> app/src/terminal/input/slash_commands/mod.rs:553:13
+    |
+553 |             create_env if command.name == commands::CREATE_ENVIRONMENT.name => {
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_create_env`
+
+warning: unused variable: `create_project`
+   --> app/src/terminal/input/slash_commands/mod.rs:566:13
+    |
+566 |             create_project if command.name == commands::CREATE_NEW_PROJECT.name => {
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_create_project`
+
+warning: unused variable: `edit`
+   --> app/src/terminal/input/slash_commands/mod.rs:579:13
+    |
+579 |             edit if command.name == commands::EDIT.name => {
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_edit`
+
+warning: unused variable: `export_to_clipboard`
+   --> app/src/terminal/input/slash_commands/mod.rs:663:13
+    |
+663 |             export_to_clipboard if command.name == commands::EXPORT_TO_CLIPBOARD.name => {
+    |             ^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_export_to_clipboard`
+
+warning: unused variable: `export_to_file`
+   --> app/src/terminal/input/slash_commands/mod.rs:688:13
+    |
+688 |             export_to_file if command.name == commands::EXPORT_TO_FILE.name => {
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_export_to_file`
+
+warning: unused variable: `index`
+   --> app/src/terminal/input/slash_commands/mod.rs:705:13
+    |
+705 |             index if command.name == commands::INDEX.name => {
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_index`
+
+warning: unused variable: `init`
+   --> app/src/terminal/input/slash_commands/mod.rs:708:13
+    |
+708 |             init if command.name == commands::INIT.name => {
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_init`
+
+warning: unused variable: `changelog`
+   --> app/src/terminal/input/slash_commands/mod.rs:711:13
+    |
+711 |             changelog if command.name == commands::CHANGELOG.name => {
+    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_changelog`
+
+warning: unused variable: `feedback`
+   --> app/src/terminal/input/slash_commands/mod.rs:717:13
+    |
+717 |             feedback if command.name == commands::FEEDBACK.name => {
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_feedback`
+
+warning: unused variable: `open_code_review`
+   --> app/src/terminal/input/slash_commands/mod.rs:720:13
+    |
+720 |             open_code_review if command.name == commands::OPEN_CODE_REVIEW.name => {
+    |             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_open_code_review`
+
+warning: unused variable: `open_mcp_servers`
+   --> app/src/terminal/input/slash_commands/mod.rs:725:13
+    |
+725 |             open_mcp_servers if command.name == commands::OPEN_MCP_SERVERS.name => {
+    |             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_open_mcp_servers`
+
+warning: unused variable: `open_settings_file`
+   --> app/src/terminal/input/slash_commands/mod.rs:728:13
+    |
+728 |             open_settings_file if command.name == commands::OPEN_SETTINGS_FILE.name => {
+    |             ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_open_settings_file`
+
+warning: unused variable: `open_project_rules`
+   --> app/src/terminal/input/slash_commands/mod.rs:734:13
+    |
+734 |             open_project_rules if command.name == commands::OPEN_PROJECT_RULES.name => {
+    |             ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_open_project_rules`
+
+warning: unused variable: `open_rules`
+   --> app/src/terminal/input/slash_commands/mod.rs:737:13
+    |
+737 |             open_rules if command.name == commands::OPEN_RULES.name => {
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_open_rules`
+
+warning: unused variable: `edit_skill`
+   --> app/src/terminal/input/slash_commands/mod.rs:740:13
+    |
+740 |             edit_skill if command.name == commands::EDIT_SKILL.name => {
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_edit_skill`
+
+warning: unused variable: `invoke_skill`
+   --> app/src/terminal/input/slash_commands/mod.rs:747:13
+    |
+747 |             invoke_skill if command.name == commands::INVOKE_SKILL.name => {
+    |             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_invoke_skill`
+
+warning: unused variable: `host`
+   --> app/src/terminal/input/slash_commands/mod.rs:758:13
+    |
+758 |             host if command.name == commands::HOST.name => {
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_host`
+
+warning: unused variable: `harness`
+   --> app/src/terminal/input/slash_commands/mod.rs:776:13
+    |
+776 |             harness if command.name == commands::HARNESS.name => {
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_harness`
+
+warning: unused variable: `environment`
+   --> app/src/terminal/input/slash_commands/mod.rs:789:13
+    |
+789 |             environment if command.name == commands::ENVIRONMENT.name => {
+    |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_environment`
+
+warning: unused variable: `models`
+   --> app/src/terminal/input/slash_commands/mod.rs:800:13
+    |
+800 |             models if command.name == commands::MODEL.name => {
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_models`
+
+warning: unused variable: `profiles`
+   --> app/src/terminal/input/slash_commands/mod.rs:814:13
+    |
+814 |             profiles if command.name == commands::PROFILE.name => {
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_profiles`
+
+warning: unused variable: `prompts`
+   --> app/src/terminal/input/slash_commands/mod.rs:821:13
+    |
+821 |             prompts if command.name == commands::PROMPTS.name => {
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_prompts`
+
+warning: unused variable: `rewind`
+   --> app/src/terminal/input/slash_commands/mod.rs:832:13
+    |
+832 |             rewind if command.name == commands::REWIND.name => {
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_rewind`
+
+warning: unused variable: `pr_comments`
+   --> app/src/terminal/input/slash_commands/mod.rs:835:13
+    |
+835 |             pr_comments if command.name == commands::PR_COMMENTS.name => {
+    |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_pr_comments`
+
+warning: unused variable: `usage`
+   --> app/src/terminal/input/slash_commands/mod.rs:856:13
+    |
+856 |             usage if command.name == commands::USAGE.name => {
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_usage`
+
+warning: unused variable: `remote_control`
+   --> app/src/terminal/input/slash_commands/mod.rs:859:13
+    |
+859 |             remote_control if command.name == commands::REMOTE_CONTROL.name => {
+    |             ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_remote_control`
+
+warning: unused variable: `cost`
+   --> app/src/terminal/input/slash_commands/mod.rs:876:13
+    |
+876 |             cost if command.name == commands::COST.name => {
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_cost`
+
+warning: unused variable: `move_to_cloud`
+   --> app/src/terminal/input/slash_commands/mod.rs:901:13
+    |
+901 |             move_to_cloud if command.name == commands::MOVE_TO_CLOUD.name => {
+    |             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_move_to_cloud`
+
+warning: unused variable: `fork`
+   --> app/src/terminal/input/slash_commands/mod.rs:931:13
+    |
+931 |             fork if command.name == commands::FORK.name => {
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_fork`
+
+warning: unused variable: `fork_from`
+   --> app/src/terminal/input/slash_commands/mod.rs:956:13
+    |
+956 |             fork_from if command.name == commands::FORK_FROM.name => {
+    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_fork_from`
+
+warning: unused variable: `continue_locally`
+   --> app/src/terminal/input/slash_commands/mod.rs:961:13
+    |
+961 |             continue_locally if command.name == commands::CONTINUE_LOCALLY.name => {
+    |             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_continue_locally`
+
+warning: unused variable: `fork_and_compact`
+    --> app/src/terminal/input/slash_commands/mod.rs:1002:13
+     |
+1002 |             fork_and_compact if command.name == commands::FORK_AND_COMPACT.name => {
+     |             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_fork_and_compact`
+
+warning: unused variable: `compact_and`
+    --> app/src/terminal/input/slash_commands/mod.rs:1030:13
+     |
+1030 |             compact_and if command.name == commands::COMPACT_AND.name => {
+     |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_compact_and`
+
+warning: unused variable: `queue`
+    --> app/src/terminal/input/slash_commands/mod.rs:1049:13
+     |
+1049 |             queue if command.name == commands::QUEUE.name => {
+     |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_queue`
+
+warning: unused variable: `open_repo`
+    --> app/src/terminal/input/slash_commands/mod.rs:1078:13
+     |
+1078 |             open_repo if command.name == commands::OPEN_REPO.name => {
+     |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_open_repo`
+
+warning: unused variable: `command_that_just_sends_ai_request_with_prefix`
+    --> app/src/terminal/input/slash_commands/mod.rs:1084:13
+     |
+1084 |             command_that_just_sends_ai_request_with_prefix
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_command_that_just_sends_ai_request_with_prefix`
+
+warning: `warp` (lib) generated 46 warnings (run `cargo fix --lib -p warp` to apply 46 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4m 59s

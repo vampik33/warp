@@ -1,0 +1,2 @@
+0x00e0000c  0 22   120  660  344  sbx-001ksk6wbg9qrgp19p40qf6n649 warpctrl-external
+0x00600003  0 760  100  820  620  sbx-001ksk6wbg9qrgp19p40qf6n649 Warp

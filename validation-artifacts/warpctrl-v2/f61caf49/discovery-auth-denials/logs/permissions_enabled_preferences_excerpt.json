@@ -1,0 +1,10 @@
+{
+  "HasCompletedOnboarding": "true",
+  "LocalControlAllowOutsideWarp": "true",
+  "LocalControlInsideWarpAuthenticatedUserActions": "false",
+  "LocalControlOutsideWarpAppStateMutations": "true",
+  "LocalControlOutsideWarpMetadataConfigurationMutations": "false",
+  "LocalControlOutsideWarpMetadataReads": "true",
+  "LocalControlOutsideWarpUnderlyingDataMutations": "false",
+  "LocalControlOutsideWarpUnderlyingDataReads": "false"
+}

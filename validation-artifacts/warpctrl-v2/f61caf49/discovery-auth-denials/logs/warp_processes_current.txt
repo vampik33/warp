@@ -1,0 +1,4 @@
+root      5377 17.1  6.3 6099884 1038924 pts/0 Rl   22:56   1:04 /workspace/warpctrl-validation/discovery-auth-denials/target/debug/warp-oss --parent-pid=5318 --crash-recovery-mechanism=force-dedicated-gpu
+root      6088  0.1  0.4 495604 67532 pts/0    Sl   23:01   0:00 /workspace/warpctrl-validation/discovery-auth-denials/target/debug/warp-oss terminal-server --parent-pid=5377
+root      6157 56.8  6.3 6099768 1039212 pts/0 Sl   23:01   0:28 /workspace/warpctrl-validation/discovery-auth-denials/target/debug/warp-oss --crash-recovery-mechanism disable-opengl --parent-pid 6081
+root      6236  0.1  0.4 495604 67524 pts/0    Sl   23:02   0:00 /workspace/warpctrl-validation/discovery-auth-denials/target/debug/warp-oss terminal-server --parent-pid=6157

@@ -1,0 +1,14 @@
+{
+  "action": "tab.create",
+  "created": true,
+  "instance_id": "inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+  "tab": {
+    "active_index": 1,
+    "count": 2,
+    "previous_count": 1
+  },
+  "window": {
+    "id": "0",
+    "selector": "active"
+  }
+}

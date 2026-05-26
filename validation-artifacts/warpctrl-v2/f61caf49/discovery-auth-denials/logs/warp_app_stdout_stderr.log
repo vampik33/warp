@@ -1,0 +1,6 @@
+error: the following required arguments were not provided:
+  <--parent-pid <PID>>
+
+Usage: warp-oss --crash-recovery-mechanism <CRASH_RECOVERY_MECHANISM> --api-key <API_KEY> <--parent-pid <PID>>
+
+For more information, try '--help'.

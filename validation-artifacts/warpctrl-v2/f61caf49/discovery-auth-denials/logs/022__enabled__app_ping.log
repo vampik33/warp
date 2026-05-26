@@ -1,0 +1,6 @@
+{
+  "action": "app.ping",
+  "instance_id": "inst_ecbfdff4cf1e48cc9cdab9b34567cc8d",
+  "ok": true,
+  "protocol_version": 1
+}
