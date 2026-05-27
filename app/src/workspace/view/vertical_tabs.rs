@@ -128,6 +128,15 @@ fn vtab_pane_row_position_id(pane_group_id: EntityId, pane_id: PaneId) -> String
     format!("vertical_tabs:pane_row:{pane_group_id:?}:{pane_id}")
 }
 
+/// Save-position id for a tab group's full container rect (header + body).
+/// Read at drop time via `element_position_by_id_at_last_frame` to test
+/// whether `cursor.y` falls inside the group, which is how
+/// `Workspace::on_tab_drag` decides if a dragged tab should join, leave, or
+/// move between groups.
+pub(crate) fn vtab_group_position_id(group_id: TabGroupId) -> String {
+    format!("vertical_tabs:group:{group_id:?}")
+}
+
 fn terminal_title_fallback_font(agent_text: &TerminalAgentText) -> TerminalPrimaryLineFont {
     if agent_text.cli_agent.is_some() {
         TerminalPrimaryLineFont::Ui
@@ -2247,28 +2256,40 @@ fn render_tab_group_internal(
 
     let group_element = group_element.with_defer_events_to_children().finish();
 
-    let draggable = Draggable::new(tab.draggable_state.clone(), group_element)
-        .on_drag_start(|ctx, _, _| {
-            ctx.dispatch_typed_action(WorkspaceAction::StartTabDrag);
-        })
-        .on_drag(move |ctx, _, rect, _| {
-            ctx.dispatch_typed_action(WorkspaceAction::DragTab {
-                tab_index,
-                tab_position: rect,
-            });
-        })
-        .on_drop(|ctx, _, _, _| {
-            ctx.dispatch_typed_action(WorkspaceAction::DropTab);
-        });
-    // Only lock the drag to the vertical axis when cross-window tab drag is
-    // disabled. When it is enabled, the user needs to be able to drag
-    // horizontally out of the panel to detach the tab into a new window.
-    let draggable = if FeatureFlag::DragTabsToWindows.is_enabled() {
-        draggable
+    // Skip the per-tab `Draggable` while the tab's enclosing tab group is
+    // being dragged as a block, so the user can't simultaneously tear a
+    // member tab out of a group that is itself in flight.
+    let is_parent_group_dragging = tab
+        .group_id
+        .and_then(|gid| workspace.tab_groups.get(&gid))
+        .is_some_and(|group| group.draggable_state.is_dragging());
+
+    let draggable: Box<dyn Element> = if is_parent_group_dragging {
+        group_element
     } else {
-        draggable.with_drag_axis(DragAxis::VerticalOnly)
+        let draggable = Draggable::new(tab.draggable_state.clone(), group_element)
+            .on_drag_start(|ctx, _, _| {
+                ctx.dispatch_typed_action(WorkspaceAction::StartTabDrag);
+            })
+            .on_drag(move |ctx, _, rect, _| {
+                ctx.dispatch_typed_action(WorkspaceAction::DragTab {
+                    tab_index,
+                    tab_position: rect,
+                });
+            })
+            .on_drop(|ctx, _, _, _| {
+                ctx.dispatch_typed_action(WorkspaceAction::DropTab);
+            });
+        // Only lock the drag to the vertical axis when cross-window tab drag
+        // is disabled. When it is enabled, the user needs to be able to drag
+        // horizontally out of the panel to detach the tab into a new window.
+        let draggable = if FeatureFlag::DragTabsToWindows.is_enabled() {
+            draggable
+        } else {
+            draggable.with_drag_axis(DragAxis::VerticalOnly)
+        };
+        draggable.finish()
     };
-    let draggable = draggable.finish();
 
     let draggable: Box<dyn Element> = if is_this_tab_dragging {
         Container::new(draggable)
@@ -2601,6 +2622,10 @@ fn render_grouped_tabs_header(
     }
     // Swallow right-clicks so they don't bubble to the panel's new-session menu handler.
     hoverable = hoverable.on_right_click(|_, _, _| {});
+    // The group-level `Draggable` is installed by
+    // `render_grouped_tab_container` so the floating drag ghost includes
+    // the whole group (header + member tabs). The header itself only
+    // needs hover / click / right-click behavior here.
     hoverable.finish()
 }
 
@@ -2625,11 +2650,19 @@ fn render_grouped_tab_container(
 
     let member_count = members.len();
     let group_id = group.id;
+    let group_draggable_state = group.draggable_state.clone();
     let group = group.clone();
     let any_member_active = members
         .iter()
         .any(|m| m.tab_index == workspace.active_tab_index);
-    let is_collapsed = group.collapsed;
+    // Render the group as expanded while a tab drag is hovering over its
+    // container so the user can drop into a specific member slot. The
+    // persisted `group.collapsed` state is restored on `DropTab`.
+    let is_collapsed = group.collapsed && workspace.drag_force_expanded_group != Some(group_id);
+    let is_being_renamed = workspace
+        .current_workspace_state
+        .is_tab_group_being_renamed(group_id);
+    let rename_editor = is_being_renamed.then(|| workspace.tab_group_rename_editor.clone());
 
     let resolved_mode = resolve_vertical_tabs_mode(app);
     let needs_outer_horizontal_padding = uses_outer_group_container(match resolved_mode {
@@ -2637,12 +2670,7 @@ fn render_grouped_tab_container(
         _ => VerticalTabsDisplayGranularity::Tabs,
     });
 
-    let is_being_renamed = workspace
-        .current_workspace_state
-        .is_tab_group_being_renamed(group_id);
-    let rename_editor = is_being_renamed.then(|| workspace.tab_group_rename_editor.clone());
-
-    Hoverable::new(mouse_states.container.clone(), move |hover_state| {
+    let container = Hoverable::new(mouse_states.container.clone(), move |hover_state| {
         let mut content = Flex::column()
             .with_main_axis_size(MainAxisSize::Min)
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -2719,7 +2747,54 @@ fn render_grouped_tab_container(
     // Consume right-clicks so they don't bubble to the panel's new-session menu handler.
     .on_right_click(|_, _, _| {})
     .with_defer_events_to_children()
-    .finish()
+    .finish();
+    // Wrap the whole group block in a `Draggable` so the user can grab
+    // the group from its header and move it as a unit. Per-tab
+    // `Draggable`s remain nested inside each member row; inside-out hit
+    // testing means clicks on a member tab activate the per-tab drag,
+    // while clicks on the header (which is not inside any inner
+    // `Draggable`) activate the group drag. The drag ghost is the entire
+    // container child here, so the user sees the whole group floating
+    // during the drag rather than just the header.
+    //
+    // Skip the wrap while a member tab is being dragged (the per-tab
+    // drag is already in flight and we don't want to also start a
+    // group drag), or while the group header is being renamed (we don't
+    // want drag-threshold tracking competing with the inline editor).
+    let skip_group_draggable = is_being_renamed || is_any_pane_dragging;
+    let positioned_container: Box<dyn Element> = if skip_group_draggable {
+        container
+    } else {
+        Draggable::new(group_draggable_state, container)
+            .on_drag_start(move |ctx, _, _| {
+                ctx.dispatch_typed_action(WorkspaceAction::StartGroupDrag(group_id));
+            })
+            .on_drag(move |ctx, _, rect, _| {
+                ctx.dispatch_typed_action(WorkspaceAction::DragGroup {
+                    group_id,
+                    position: rect,
+                });
+            })
+            .on_drop(move |ctx, _, _, _| {
+                ctx.dispatch_typed_action(WorkspaceAction::DropGroup(group_id));
+            })
+            .with_drag_axis(DragAxis::VerticalOnly)
+            // Defer to the per-tab `Draggable`s nested inside this group:
+            // clicks on a member tab should start a tab drag, not the
+            // outer group drag. Without this opt-in, mouse-down on a
+            // member tab puts both the inner and outer `Draggable` into
+            // `WaitingToDrag` and they then start dragging in lockstep
+            // when the user crosses the drag threshold.
+            .with_defer_to_handled_child_mouse_down()
+            .finish()
+    };
+
+    // Wrap the whole group container in a `SavePosition` so
+    // `Workspace::target_group_at_y` can read its bounding rect via
+    // `element_position_by_id_at_last_frame` and decide, on tab drop,
+    // whether the dragged tab should join, leave, or move between groups
+    // based on where the cursor is.
+    SavePosition::new(positioned_container, &vtab_group_position_id(group_id)).finish()
 }
 
 fn render_group_header(props: GroupHeaderProps<'_>, app: &AppContext) -> Box<dyn Element> {

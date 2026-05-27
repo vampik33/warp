@@ -296,6 +296,20 @@ pub enum WorkspaceAction {
         tab_position: RectF,
     },
     DropTab,
+    /// Begins a drag of an entire tab group via its header.
+    /// Mirrors `StartTabDrag` but for the group's contiguous run of member
+    /// tabs. Gated at runtime by `FeatureFlag::GroupedTabs`.
+    StartGroupDrag(TabGroupId),
+    /// In-progress drag of an entire tab group. Forwarded to
+    /// `Workspace::on_group_drag`, which decides whether to swap the group's
+    /// block with an adjacent neighbor block based on the dragged header's
+    /// current Y position. Mirrors `DragTab` but for groups.
+    DragGroup {
+        group_id: TabGroupId,
+        position: RectF,
+    },
+    /// Finalizes a group drag. Persists via `should_save_app_state_on_action`.
+    DropGroup(TabGroupId),
     /// Toggles the left panel. In Code Mode V1 this toggles Warp Drive.
     /// In Code Mode V2 this toggles the left panel which contains both the project explorer and
     /// Warp Drive. This happens as explicit action from the user.
@@ -801,6 +815,7 @@ impl WorkspaceAction {
             | MoveTabLeft(_)
             | MoveTabRight(_)
             | DropTab
+            | DropGroup(_)
             | RenameTab(_)
             | ResetTabName(_)
             | RenamePane(_)
@@ -915,6 +930,8 @@ impl WorkspaceAction {
             | OpenInExplorer { .. }
             | DragTab { .. }
             | StartTabDrag
+            | DragGroup { .. }
+            | StartGroupDrag(_)
             | ToggleLeftPanel
             | ToggleWarpDrive
             | OpenWarpDrive
