@@ -1,7 +1,9 @@
 //! Implementations for user-facing `warpctrl` command groups.
 use local_control::protocol::{
     Action, ActionImplementationStatus, ActionKind, ActionMetadata, ActionParams, ControlError,
-    DriveObjectId, EmptyParams, ErrorCode, RequestEnvelope, WorkflowRunParams,
+    DriveObjectCreateParams, DriveObjectId, DriveObjectInsertParams, DriveObjectUpdateParams,
+    EmptyParams, ErrorCode, FileOpenParams, RequestEnvelope, TabActivationMode, TabCloseMode,
+    WorkflowRunParams,
 };
 use local_control::selection::select_instance;
 use serde::Serialize;
@@ -11,9 +13,13 @@ use crate::local_control::output::{write_json, write_json_line};
 use crate::local_control::selectors::{instance_selector, target_selector};
 use crate::local_control::{
     ActionCatalogCommand, AppCommand, AppearanceCommand, BlockCommand, CapabilityCommand,
-    CatalogFilterArgs, DriveCommand, DriveWorkflowCommand, FileCommand, HistoryCommand,
-    InputCommand, InstanceCommand, KeybindingCommand, PaneCommand, SessionCommand, SettingCommand,
-    TabColorCommand, TabCommand, TargetArgs, ThemeCommand, WindowCommand,
+    CatalogFilterArgs, DriveCommand, DriveObjectCommand, DriveObjectCreateArgs, DriveObjectIdArgs,
+    DriveObjectInsertArgs, DriveObjectOpenCommand, DriveObjectShareCommand, DriveObjectUpdateArgs,
+    DriveWorkflowCommand, FileCommand, HistoryCommand, InputCommand, InputModeCommand,
+    InstanceCommand, KeybindingCommand, PaneCommand, SessionCommand, SettingCommand,
+    SurfaceCommand, SurfaceOpenToggleCommand, SurfaceQueryCommand, SurfaceSettingsCommand,
+    SurfaceToggleCommand, TabActivateArgs, TabCloseArgs, TabColorCommand, TabCommand, TargetArgs,
+    ThemeCommand, WindowCommand,
 };
 
 /// Display-oriented projection of a discoverable Warp instance.
@@ -52,6 +58,69 @@ impl From<local_control::discovery::InstanceRecord> for InstanceSummary {
             outside_warp_control_enabled: record.outside_warp_control_enabled,
             actions: record.actions,
         }
+    }
+}
+
+pub(super) fn run_surface_command(
+    command: SurfaceCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        SurfaceCommand::Settings(command) => match command {
+            SurfaceSettingsCommand::Open(args) => run_action_with_params(
+                args.target,
+                ActionKind::SurfaceSettingsOpen,
+                ActionParams::PageQuery {
+                    page: args.page,
+                    query: args.query,
+                },
+                output_format,
+            ),
+        },
+        SurfaceCommand::CommandPalette(command) => run_surface_query_command(
+            command,
+            ActionKind::SurfaceCommandPaletteOpen,
+            output_format,
+        ),
+        SurfaceCommand::CommandSearch(command) => {
+            run_surface_query_command(command, ActionKind::SurfaceCommandSearchOpen, output_format)
+        }
+        SurfaceCommand::WarpDrive(command) => match command {
+            SurfaceOpenToggleCommand::Open(args) => run_action_with_params(
+                args,
+                ActionKind::SurfaceWarpDriveOpen,
+                EmptyParams {},
+                output_format,
+            ),
+            SurfaceOpenToggleCommand::Toggle(args) => run_action_with_params(
+                args,
+                ActionKind::SurfaceWarpDriveToggle,
+                EmptyParams {},
+                output_format,
+            ),
+        },
+        SurfaceCommand::ResourceCenter(command) => run_surface_toggle_command(
+            command,
+            ActionKind::SurfaceResourceCenterToggle,
+            output_format,
+        ),
+        SurfaceCommand::AiAssistant(command) => {
+            run_surface_toggle_command(command, ActionKind::SurfaceAiAssistantToggle, output_format)
+        }
+        SurfaceCommand::CodeReview(command) => {
+            run_surface_toggle_command(command, ActionKind::SurfaceCodeReviewToggle, output_format)
+        }
+        SurfaceCommand::LeftPanel(command) => {
+            run_surface_toggle_command(command, ActionKind::SurfaceLeftPanelToggle, output_format)
+        }
+        SurfaceCommand::RightPanel(command) => {
+            run_surface_toggle_command(command, ActionKind::SurfaceRightPanelToggle, output_format)
+        }
+        SurfaceCommand::VerticalTabs(command) => run_surface_toggle_command(
+            command,
+            ActionKind::SurfaceVerticalTabsToggle,
+            output_format,
+        ),
     }
 }
 
@@ -162,6 +231,18 @@ pub(super) fn run_window_command(
             EmptyParams {},
             output_format,
         ),
+        WindowCommand::Create(args) => run_action_with_params(
+            args,
+            ActionKind::WindowCreate,
+            EmptyParams {},
+            output_format,
+        ),
+        WindowCommand::Focus(args) => {
+            run_action_with_params(args, ActionKind::WindowFocus, EmptyParams {}, output_format)
+        }
+        WindowCommand::Close(args) => {
+            run_action_with_params(args, ActionKind::WindowClose, EmptyParams {}, output_format)
+        }
     }
 }
 pub(super) fn run_tab_command(
@@ -176,6 +257,32 @@ pub(super) fn run_tab_command(
             run_action_with_params(args, ActionKind::TabInspect, EmptyParams {}, output_format)
         }
         TabCommand::Create(args) => run_action(args, ActionKind::TabCreate, output_format),
+        TabCommand::Activate(args) => {
+            let mode = tab_activation_mode(&args);
+            run_action_with_params(
+                args.target,
+                ActionKind::TabActivate,
+                ActionParams::TabActivate { mode },
+                output_format,
+            )
+        }
+        TabCommand::Move(args) => run_action_with_params(
+            args.target,
+            ActionKind::TabMove,
+            ActionParams::Direction {
+                direction: args.direction.into(),
+            },
+            output_format,
+        ),
+        TabCommand::Close(args) => {
+            let mode = tab_close_mode(&args);
+            run_action_with_params(
+                args.target,
+                ActionKind::TabClose,
+                ActionParams::TabClose { mode },
+                output_format,
+            )
+        }
         TabCommand::Rename(args) => run_action_with_params(
             args.target,
             ActionKind::TabRename,
@@ -208,6 +315,49 @@ pub(super) fn run_pane_command(
         PaneCommand::Inspect(args) => {
             run_action_with_params(args, ActionKind::PaneInspect, EmptyParams {}, output_format)
         }
+        PaneCommand::Split(args) => run_action_with_params(
+            args.target,
+            ActionKind::PaneSplit,
+            ActionParams::Direction {
+                direction: args.direction.into(),
+            },
+            output_format,
+        ),
+        PaneCommand::Focus(args) => {
+            run_action_with_params(args, ActionKind::PaneFocus, EmptyParams {}, output_format)
+        }
+        PaneCommand::Navigate(args) => run_action_with_params(
+            args.target,
+            ActionKind::PaneNavigate,
+            ActionParams::Direction {
+                direction: args.direction.into(),
+            },
+            output_format,
+        ),
+        PaneCommand::Resize(args) => run_action_with_params(
+            args.target,
+            ActionKind::PaneResize,
+            ActionParams::Resize {
+                direction: args.direction.into(),
+                amount: args.amount,
+            },
+            output_format,
+        ),
+        PaneCommand::Maximize(args) => run_action_with_params(
+            args,
+            ActionKind::PaneMaximize,
+            EmptyParams {},
+            output_format,
+        ),
+        PaneCommand::Unmaximize(args) => run_action_with_params(
+            args,
+            ActionKind::PaneUnmaximize,
+            EmptyParams {},
+            output_format,
+        ),
+        PaneCommand::Close(args) => {
+            run_action_with_params(args, ActionKind::PaneClose, EmptyParams {}, output_format)
+        }
         PaneCommand::Rename(args) => run_action_with_params(
             args.target,
             ActionKind::PaneRename,
@@ -229,6 +379,27 @@ pub(super) fn run_session_command(
         SessionCommand::Inspect(args) => run_action_with_params(
             args,
             ActionKind::SessionInspect,
+            EmptyParams {},
+            output_format,
+        ),
+        SessionCommand::Activate(args) => run_action_with_params(
+            args,
+            ActionKind::SessionActivate,
+            EmptyParams {},
+            output_format,
+        ),
+        SessionCommand::Previous(args) => run_action_with_params(
+            args,
+            ActionKind::SessionPrevious,
+            EmptyParams {},
+            output_format,
+        ),
+        SessionCommand::Next(args) => {
+            run_action_with_params(args, ActionKind::SessionNext, EmptyParams {}, output_format)
+        }
+        SessionCommand::ReopenClosed(args) => run_action_with_params(
+            args,
+            ActionKind::SessionReopenClosed,
             EmptyParams {},
             output_format,
         ),
@@ -276,6 +447,31 @@ pub(super) fn run_input_command(
             local_control::EmptyParams {},
             output_format,
         ),
+        InputCommand::Insert(args) => run_action_with_params(
+            args.target,
+            ActionKind::InputInsert,
+            ActionParams::Text { text: args.text },
+            output_format,
+        ),
+        InputCommand::Replace(args) => run_action_with_params(
+            args.target,
+            ActionKind::InputReplace,
+            ActionParams::Text { text: args.text },
+            output_format,
+        ),
+        InputCommand::Clear(args) => {
+            run_action_with_params(args, ActionKind::InputClear, EmptyParams {}, output_format)
+        }
+        InputCommand::Mode(command) => match command {
+            InputModeCommand::Set(args) => run_action_with_params(
+                args.target,
+                ActionKind::InputModeSet,
+                ActionParams::InputMode {
+                    mode: args.mode.into(),
+                },
+                output_format,
+            ),
+        },
         InputCommand::Run(args) => run_action_with_params(
             args.target,
             ActionKind::InputRun,
@@ -444,6 +640,17 @@ pub(super) fn run_file_command(
             local_control::EmptyParams {},
             output_format,
         ),
+        FileCommand::Open(args) => run_action_with_params(
+            args.target,
+            ActionKind::FileOpen,
+            ActionParams::FileOpen(FileOpenParams {
+                path: args.path,
+                line: args.line,
+                column: args.column,
+                new_tab: args.new_tab,
+            }),
+            output_format,
+        ),
     }
 }
 
@@ -468,6 +675,20 @@ pub(super) fn run_drive_command(
             },
             output_format,
         ),
+        DriveCommand::Open(args) => {
+            run_drive_id_command(args, ActionKind::DriveOpen, output_format)
+        }
+        DriveCommand::Notebook(command) => match command {
+            DriveObjectOpenCommand::Open(args) => {
+                run_drive_id_command(args, ActionKind::DriveNotebookOpen, output_format)
+            }
+        },
+        DriveCommand::EnvVarCollection(command) => match command {
+            DriveObjectOpenCommand::Open(args) => {
+                run_drive_id_command(args, ActionKind::DriveEnvVarCollectionOpen, output_format)
+            }
+        },
+        DriveCommand::Object(command) => run_drive_object_command(command, output_format),
         DriveCommand::Workflow(command) => match command {
             DriveWorkflowCommand::Run(args) => run_action_with_params(
                 args.target,
@@ -480,6 +701,143 @@ pub(super) fn run_drive_command(
             ),
         },
     }
+}
+
+fn tab_activation_mode(args: &TabActivateArgs) -> TabActivationMode {
+    if args.previous {
+        TabActivationMode::Previous
+    } else if args.next {
+        TabActivationMode::Next
+    } else if args.last {
+        TabActivationMode::Last
+    } else {
+        TabActivationMode::Target
+    }
+}
+
+fn tab_close_mode(args: &TabCloseArgs) -> TabCloseMode {
+    if args.others {
+        TabCloseMode::Others
+    } else if args.right_of {
+        TabCloseMode::RightOf
+    } else if args.active {
+        TabCloseMode::Active
+    } else {
+        TabCloseMode::Target
+    }
+}
+
+fn run_surface_query_command(
+    command: SurfaceQueryCommand,
+    action: ActionKind,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        SurfaceQueryCommand::Open(args) => run_action_with_params(
+            args.target,
+            action,
+            ActionParams::Query { query: args.query },
+            output_format,
+        ),
+    }
+}
+
+fn run_surface_toggle_command(
+    command: SurfaceToggleCommand,
+    action: ActionKind,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        SurfaceToggleCommand::Toggle(args) => {
+            run_action_with_params(args, action, EmptyParams {}, output_format)
+        }
+    }
+}
+
+fn run_drive_id_command(
+    args: DriveObjectIdArgs,
+    action: ActionKind,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    run_action_with_params(
+        args.target,
+        action,
+        ActionParams::DriveObjectId {
+            id: DriveObjectId(args.id),
+        },
+        output_format,
+    )
+}
+
+fn run_drive_object_command(
+    command: DriveObjectCommand,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    match command {
+        DriveObjectCommand::Share(command) => match command {
+            DriveObjectShareCommand::Open(args) => {
+                run_drive_id_command(args, ActionKind::DriveObjectShareOpen, output_format)
+            }
+        },
+        DriveObjectCommand::Create(args) => run_drive_object_create(args, output_format),
+        DriveObjectCommand::Update(args) => run_drive_object_update(args, output_format),
+        DriveObjectCommand::Delete(args) => {
+            run_drive_id_command(args, ActionKind::DriveObjectDelete, output_format)
+        }
+        DriveObjectCommand::Insert(args) => run_drive_object_insert(args, output_format),
+        DriveObjectCommand::ShareToTeam(args) => {
+            run_drive_id_command(args, ActionKind::DriveObjectShareToTeam, output_format)
+        }
+    }
+}
+
+fn run_drive_object_create(
+    args: DriveObjectCreateArgs,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    run_action_with_params(
+        args.target,
+        ActionKind::DriveObjectCreate,
+        ActionParams::DriveObjectCreate(DriveObjectCreateParams {
+            object_type: args.object_type.into(),
+            name: args.name,
+            content: args.content,
+            content_file: args.content_file,
+        }),
+        output_format,
+    )
+}
+
+fn run_drive_object_update(
+    args: DriveObjectUpdateArgs,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    run_action_with_params(
+        args.target,
+        ActionKind::DriveObjectUpdate,
+        ActionParams::DriveObjectUpdate(DriveObjectUpdateParams {
+            id: DriveObjectId(args.id),
+            content: args.content,
+            content_file: args.content_file,
+        }),
+        output_format,
+    )
+}
+
+fn run_drive_object_insert(
+    args: DriveObjectInsertArgs,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    let target = target_selector(&args.target)?;
+    run_action_with_params(
+        args.target,
+        ActionKind::DriveObjectInsert,
+        ActionParams::DriveObjectInsert(DriveObjectInsertParams {
+            id: DriveObjectId(args.id),
+            target: Some(target),
+        }),
+        output_format,
+    )
 }
 
 fn render_catalog_list(

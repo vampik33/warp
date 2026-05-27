@@ -14,8 +14,8 @@ use commands::{
     run_action_catalog_command, run_app_command, run_appearance_command, run_block_command,
     run_capability_command, run_drive_command, run_file_command, run_history_command,
     run_input_command, run_instance_command, run_keybinding_command, run_pane_command,
-    run_session_command, run_setting_command, run_tab_command, run_theme_command,
-    run_window_command,
+    run_session_command, run_setting_command, run_surface_command, run_tab_command,
+    run_theme_command, run_window_command,
 };
 use completions::generate_completions_to_stdout;
 use output::write_control_error;
@@ -161,6 +161,9 @@ pub enum ControlCommand {
     /// Inspect authenticated Warp Drive objects.
     #[command(subcommand)]
     Drive(DriveCommand),
+    /// Open or toggle local Warp surfaces.
+    #[command(subcommand)]
+    Surface(SurfaceCommand),
 
     /// Generate shell completions for your shell to stdout.
     ///
@@ -231,6 +234,15 @@ pub enum WindowCommand {
 
     /// Inspect one window in the selected local Warp app.
     Inspect(TargetArgs),
+
+    /// Create a new window.
+    Create(TargetArgs),
+
+    /// Focus a window.
+    Focus(TargetArgs),
+
+    /// Close a window.
+    Close(TargetArgs),
 }
 
 /// Commands that control tabs in the selected Warp app instance.
@@ -244,6 +256,15 @@ pub enum TabCommand {
 
     /// Create a new terminal tab in the active window.
     Create(TargetArgs),
+
+    /// Activate a tab.
+    Activate(TabActivateArgs),
+
+    /// Move the active tab.
+    Move(TabMoveArgs),
+
+    /// Close tabs.
+    Close(TabCloseArgs),
 
     /// Rename a tab.
     Rename(RenameArgs),
@@ -275,6 +296,27 @@ pub enum PaneCommand {
     /// Inspect one pane in the selected local Warp app.
     Inspect(TargetArgs),
 
+    /// Split the active pane.
+    Split(PaneSplitArgs),
+
+    /// Focus a pane.
+    Focus(TargetArgs),
+
+    /// Navigate between panes.
+    Navigate(PaneNavigateArgs),
+
+    /// Resize the active pane.
+    Resize(PaneResizeArgs),
+
+    /// Maximize the active pane.
+    Maximize(TargetArgs),
+
+    /// Unmaximize the active pane.
+    Unmaximize(TargetArgs),
+
+    /// Close the active pane.
+    Close(TargetArgs),
+
     /// Rename a pane.
     Rename(RenameArgs),
 
@@ -290,6 +332,18 @@ pub enum SessionCommand {
 
     /// Inspect one session in the selected local Warp app.
     Inspect(TargetArgs),
+
+    /// Activate a session.
+    Activate(TargetArgs),
+
+    /// Activate the previous session.
+    Previous(TargetArgs),
+
+    /// Activate the next session.
+    Next(TargetArgs),
+
+    /// Reopen the most recently closed session.
+    ReopenClosed(TargetArgs),
 }
 /// Commands that inspect terminal blocks.
 
@@ -311,8 +365,97 @@ pub enum InputCommand {
     /// Read the current input buffer.
     Get(TargetArgs),
 
+    /// Insert text into the input buffer without submitting it.
+    Insert(TextTargetArgs),
+
+    /// Replace the input buffer without submitting it.
+    Replace(TextTargetArgs),
+
+    /// Clear the input buffer.
+    Clear(TargetArgs),
+
+    /// Set input mode.
+    #[command(subcommand)]
+    Mode(InputModeCommand),
+
     /// Run text in the targeted terminal session.
     Run(InputRunArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum InputModeCommand {
+    /// Set the active input mode.
+    Set(InputModeSetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum SurfaceCommand {
+    /// Open settings surfaces.
+    #[command(subcommand)]
+    Settings(SurfaceSettingsCommand),
+
+    /// Open the command palette.
+    #[command(subcommand)]
+    CommandPalette(SurfaceQueryCommand),
+
+    /// Open command search.
+    #[command(subcommand)]
+    CommandSearch(SurfaceQueryCommand),
+
+    /// Open or toggle Warp Drive.
+    #[command(subcommand)]
+    WarpDrive(SurfaceOpenToggleCommand),
+
+    /// Toggle the resource center.
+    #[command(subcommand)]
+    ResourceCenter(SurfaceToggleCommand),
+
+    /// Toggle the AI assistant.
+    #[command(subcommand)]
+    AiAssistant(SurfaceToggleCommand),
+
+    /// Toggle code review.
+    #[command(subcommand)]
+    CodeReview(SurfaceToggleCommand),
+
+    /// Toggle the left panel.
+    #[command(subcommand)]
+    LeftPanel(SurfaceToggleCommand),
+
+    /// Toggle the right panel.
+    #[command(subcommand)]
+    RightPanel(SurfaceToggleCommand),
+
+    /// Toggle vertical tabs.
+    #[command(subcommand)]
+    VerticalTabs(SurfaceToggleCommand),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum SurfaceSettingsCommand {
+    /// Open Settings, optionally scoped to a page or query.
+    Open(PageQueryArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum SurfaceQueryCommand {
+    /// Open the surface with an optional seeded query.
+    Open(QueryArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum SurfaceOpenToggleCommand {
+    /// Open the surface.
+    Open(TargetArgs),
+
+    /// Toggle the surface.
+    Toggle(TargetArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum SurfaceToggleCommand {
+    /// Toggle the surface.
+    Toggle(TargetArgs),
 }
 
 /// Commands that inspect Warp themes.
@@ -396,6 +539,9 @@ pub enum KeybindingCommand {
 pub enum FileCommand {
     /// List files currently open in Warp editor state.
     List(TargetArgs),
+
+    /// Open a file in Warp.
+    Open(FileOpenArgs),
 }
 
 #[derive(Debug, Clone, Subcommand)]
@@ -407,9 +553,58 @@ pub enum DriveCommand {
     #[command(alias = "get")]
     Inspect(DriveInspectArgs),
 
+    /// Open a Warp Drive object.
+    Open(DriveObjectIdArgs),
+
+    /// Operate on Warp Drive notebooks.
+    #[command(subcommand)]
+    Notebook(DriveObjectOpenCommand),
+
+    /// Operate on Warp Drive environment-variable collections.
+    #[command(subcommand)]
+    EnvVarCollection(DriveObjectOpenCommand),
+
+    /// Operate on Warp Drive objects.
+    #[command(subcommand)]
+    Object(DriveObjectCommand),
+
     /// Operate on Warp Drive workflows.
     #[command(subcommand)]
     Workflow(DriveWorkflowCommand),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum DriveObjectOpenCommand {
+    /// Open a Warp Drive object view.
+    Open(DriveObjectIdArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum DriveObjectCommand {
+    /// Open sharing UI for an object.
+    #[command(subcommand)]
+    Share(DriveObjectShareCommand),
+
+    /// Create a Warp Drive object.
+    Create(DriveObjectCreateArgs),
+
+    /// Update a Warp Drive object.
+    Update(DriveObjectUpdateArgs),
+
+    /// Delete a Warp Drive object.
+    Delete(DriveObjectIdArgs),
+
+    /// Insert a Warp Drive object into a target.
+    Insert(DriveObjectInsertArgs),
+
+    /// Share a personal Warp Drive object to the current team.
+    ShareToTeam(DriveObjectIdArgs),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum DriveObjectShareCommand {
+    /// Open the sharing UI for a Warp Drive object.
+    Open(DriveObjectIdArgs),
 }
 
 /// Commands that operate on Warp Drive workflows.
@@ -465,6 +660,187 @@ pub struct TargetArgs {
     /// Target the active session or an opaque session id.
     #[arg(long = "session")]
     pub session: Option<String>,
+}
+#[derive(Debug, Clone, Args)]
+pub struct TabActivateArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    #[arg(long = "previous", conflicts_with_all = ["next", "last"])]
+    pub previous: bool,
+
+    #[arg(long = "next", conflicts_with_all = ["previous", "last"])]
+    pub next: bool,
+
+    #[arg(long = "last", conflicts_with_all = ["previous", "next"])]
+    pub last: bool,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TabMoveArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    #[arg(long = "direction", value_enum)]
+    pub direction: CliTabMoveDirection,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TabCloseArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    #[arg(long = "active", conflicts_with_all = ["others", "right_of"])]
+    pub active: bool,
+
+    #[arg(long = "others", conflicts_with_all = ["active", "right_of"])]
+    pub others: bool,
+
+    #[arg(long = "right-of", conflicts_with_all = ["active", "others"])]
+    pub right_of: bool,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct PaneSplitArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    #[arg(long = "direction", value_enum)]
+    pub direction: CliCardinalDirection,
+
+    #[arg(long = "shell")]
+    pub shell: Option<String>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct PaneNavigateArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    #[arg(long = "direction", value_enum)]
+    pub direction: CliDirection,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct PaneResizeArgs {
+    #[command(flatten)]
+    pub target: TargetArgs,
+
+    #[arg(long = "direction", value_enum)]
+    pub direction: CliCardinalDirection,
+
+    #[arg(long = "amount")]
+    pub amount: Option<u32>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TextTargetArgs {
+    pub text: String,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct InputModeSetArgs {
+    pub mode: CliInputMode,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct PageQueryArgs {
+    #[arg(long = "page")]
+    pub page: Option<String>,
+
+    #[arg(long = "query")]
+    pub query: Option<String>,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct QueryArgs {
+    #[arg(long = "query")]
+    pub query: Option<String>,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct FileOpenArgs {
+    pub path: String,
+
+    #[arg(long = "line")]
+    pub line: Option<u32>,
+
+    #[arg(long = "column")]
+    pub column: Option<u32>,
+
+    #[arg(long = "new-tab")]
+    pub new_tab: bool,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct PathTargetArgs {
+    pub path: String,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DriveObjectIdArgs {
+    pub id: String,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DriveObjectCreateArgs {
+    #[arg(long = "type", value_enum)]
+    pub object_type: CliDriveObjectType,
+
+    #[arg(long = "name")]
+    pub name: Option<String>,
+
+    #[arg(long = "content", conflicts_with = "content_file")]
+    pub content: Option<String>,
+
+    #[arg(long = "content-file", conflicts_with = "content")]
+    pub content_file: Option<String>,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DriveObjectUpdateArgs {
+    pub id: String,
+
+    #[arg(long = "content", conflicts_with = "content_file")]
+    pub content: Option<String>,
+
+    #[arg(long = "content-file", conflicts_with = "content")]
+    pub content_file: Option<String>,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DriveObjectInsertArgs {
+    pub id: String,
+
+    #[command(flatten)]
+    pub target: TargetArgs,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -604,6 +980,81 @@ pub struct DriveInspectArgs {
     /// Opaque Drive object id returned by drive list.
     pub id: String,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CliCardinalDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+impl From<CliCardinalDirection> for local_control::protocol::Direction {
+    fn from(value: CliCardinalDirection) -> Self {
+        match value {
+            CliCardinalDirection::Left => Self::Left,
+            CliCardinalDirection::Right => Self::Right,
+            CliCardinalDirection::Up => Self::Up,
+            CliCardinalDirection::Down => Self::Down,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CliDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+    Previous,
+    Next,
+}
+
+impl From<CliDirection> for local_control::protocol::Direction {
+    fn from(value: CliDirection) -> Self {
+        match value {
+            CliDirection::Left => Self::Left,
+            CliDirection::Right => Self::Right,
+            CliDirection::Up => Self::Up,
+            CliDirection::Down => Self::Down,
+            CliDirection::Previous => Self::Previous,
+            CliDirection::Next => Self::Next,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CliTabMoveDirection {
+    Left,
+    Right,
+    Previous,
+    Next,
+}
+
+impl From<CliTabMoveDirection> for local_control::protocol::Direction {
+    fn from(value: CliTabMoveDirection) -> Self {
+        match value {
+            CliTabMoveDirection::Left => Self::Left,
+            CliTabMoveDirection::Right => Self::Right,
+            CliTabMoveDirection::Previous => Self::Previous,
+            CliTabMoveDirection::Next => Self::Next,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CliInputMode {
+    Terminal,
+    Agent,
+}
+
+impl From<CliInputMode> for local_control::protocol::InputMode {
+    fn from(value: CliInputMode) -> Self {
+        match value {
+            CliInputMode::Terminal => Self::Terminal,
+            CliInputMode::Agent => Self::Agent,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum CliDriveObjectType {
@@ -670,6 +1121,7 @@ fn run_inner(args: ControlArgs) -> Result<(), local_control::protocol::ControlEr
         ControlCommand::Keybinding(command) => run_keybinding_command(command, output_format),
         ControlCommand::File(command) => run_file_command(command, output_format),
         ControlCommand::Drive(command) => run_drive_command(command, output_format),
+        ControlCommand::Surface(command) => run_surface_command(command, output_format),
         ControlCommand::Completions { shell } => generate_completions_to_stdout(shell),
     }
 }
