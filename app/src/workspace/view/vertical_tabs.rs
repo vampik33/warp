@@ -2440,8 +2440,9 @@ fn render_tab_group_header_icon_button(
     .finish()
 }
 
-/// Renders the header row for a tab group: chevron, title + "N tabs", and (on hover)
-/// kebab + close buttons. Single-clicking outside the per-button regions toggles collapse.
+/// Header row for a tab group: chevron, title + "N tabs", and (on hover) kebab + close
+/// buttons. Single-clicking toggles collapse; double-click enters rename mode.
+#[allow(clippy::too_many_arguments)]
 fn render_grouped_tabs_header(
     group: &TabGroup,
     member_count: usize,
@@ -2449,6 +2450,8 @@ fn render_grouped_tabs_header(
     is_collapsed: bool,
     is_header_selected: bool,
     show_action_buttons: bool,
+    is_being_renamed: bool,
+    rename_editor: Option<ViewHandle<EditorView>>,
     app: &AppContext,
 ) -> Box<dyn Element> {
     let appearance = Appearance::as_ref(app);
@@ -2484,14 +2487,19 @@ fn render_grouped_tabs_header(
     .with_height(VERTICAL_TABS_ICON_SIZE)
     .finish();
 
-    let title_text = group
-        .name
-        .clone()
-        .unwrap_or_else(|| "New Group".to_string());
-    let title_element: Box<dyn Element> = Text::new_inline(title_text, font_family, 12.)
-        .with_clip(ClipConfig::ellipsis())
-        .with_color(main_text_color.into())
-        .finish();
+    let title_element: Box<dyn Element> =
+        if let (true, Some(editor)) = (is_being_renamed, rename_editor.as_ref()) {
+            render_inline_tab_rename_editor(editor, appearance, app)
+        } else {
+            let title_text = group
+                .name
+                .clone()
+                .unwrap_or_else(|| "New Group".to_string());
+            Text::new_inline(title_text, font_family, 12.)
+                .with_clip(ClipConfig::ellipsis())
+                .with_color(main_text_color.into())
+                .finish()
+        };
     let subtitle_text = if member_count == 1 {
         "1 tab".to_string()
     } else {
@@ -2573,20 +2581,30 @@ fn render_grouped_tabs_header(
         }
         container.finish()
     })
-    .with_cursor(Cursor::PointingHand)
+    .with_cursor(if is_being_renamed {
+        Cursor::Arrow
+    } else {
+        Cursor::PointingHand
+    })
     .with_defer_events_to_children();
 
-    // Single-click toggles collapse; no-op `on_right_click` keeps right-clicks from bubbling
-    // up to the panel's new-session menu handler.
-    hoverable = hoverable.on_click(move |ctx, _, _| {
-        ctx.dispatch_typed_action(WorkspaceAction::ToggleTabGroupCollapsed(group_id));
-    });
+    // In rename mode we leave the click alone so it falls through to the inline editor.
+    // The double-click for rename does fire `on_click` for the first click, causing a
+    // brief collapse flash — accepted as a trade-off for snappy single-click toggle.
+    if !is_being_renamed {
+        hoverable = hoverable.on_click(move |ctx, _, _| {
+            ctx.dispatch_typed_action(WorkspaceAction::ToggleTabGroupCollapsed(group_id));
+        });
+        hoverable = hoverable.on_double_click(move |ctx, _, _| {
+            ctx.dispatch_typed_action(WorkspaceAction::RenameTabGroup(group_id));
+        });
+    }
+    // Swallow right-clicks so they don't bubble to the panel's new-session menu handler.
     hoverable = hoverable.on_right_click(|_, _, _| {});
     hoverable.finish()
 }
 
-/// Renders a tab group: pane-like header followed by indented member rows. Background only paints
-/// on hover or when a member is active.
+/// Renders a tab group: header followed by indented member rows.
 fn render_grouped_tab_container(
     state: &VerticalTabsPanelState,
     workspace: &Workspace,
@@ -2606,6 +2624,7 @@ fn render_grouped_tab_container(
         .clone();
 
     let member_count = members.len();
+    let group_id = group.id;
     let group = group.clone();
     let any_member_active = members
         .iter()
@@ -2618,7 +2637,12 @@ fn render_grouped_tab_container(
         _ => VerticalTabsDisplayGranularity::Tabs,
     });
 
-    Hoverable::new(mouse_states.container.clone(), |hover_state| {
+    let is_being_renamed = workspace
+        .current_workspace_state
+        .is_tab_group_being_renamed(group_id);
+    let rename_editor = is_being_renamed.then(|| workspace.tab_group_rename_editor.clone());
+
+    Hoverable::new(mouse_states.container.clone(), move |hover_state| {
         let mut content = Flex::column()
             .with_main_axis_size(MainAxisSize::Min)
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -2633,6 +2657,8 @@ fn render_grouped_tab_container(
             is_collapsed,
             is_header_selected,
             hover_state.is_hovered(),
+            is_being_renamed,
+            rename_editor.clone(),
             app,
         ));
 

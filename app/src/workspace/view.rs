@@ -337,7 +337,8 @@ use crate::settings_view::{flags, SettingsSection, SettingsView, SettingsViewEve
 use crate::shell_indicator::ShellIndicatorType;
 use crate::tab::{
     tab_position_id, uses_vertical_tabs, NewSessionMenuItem, PaneNameMenuTarget, SelectedTabColor,
-    TabBarState, TabComponent, TabData, TabTelemetryAction, TAB_BAR_BORDER_HEIGHT,
+    TabBarState, TabComponent, TabData, TabTelemetryAction, MOVE_TO_GROUP_LABEL,
+    TAB_BAR_BORDER_HEIGHT,
 };
 use crate::tab_configs::action_sidecar::SidecarItemKind;
 use crate::tab_configs::remove_confirmation_dialog::{
@@ -571,6 +572,9 @@ const TOGGLE_RESOURCE_CENTER_KEYBINDING_NAME: &str = "workspace:toggle_resource_
 /// `SavePosition` wrapper and the safe-zone rect lookup.
 const NEW_SESSION_SIDECAR_POSITION_ID: &str = "new_session_sidecar";
 const NEW_SESSION_SIDECAR_WIDTH: f32 = 300.;
+
+const TAB_GROUPS_SIDECAR_POSITION_ID: &str = "tab_groups_sidecar";
+const TAB_GROUPS_SIDECAR_WIDTH: f32 = 200.;
 const NEW_SESSION_SIDECAR_SEARCH_BOX_HEIGHT: f32 = 32.;
 const NEW_SESSION_SIDECAR_SEARCH_BOX_HORIZONTAL_PADDING: f32 = 12.;
 const NEW_SESSION_SIDECAR_SEARCH_BOX_VERTICAL_PADDING: f32 = 6.;
@@ -1088,6 +1092,10 @@ pub struct Workspace {
     new_session_sidecar_add_repo_mouse_state: MouseStateHandle,
     tab_config_action_sidecar_item: Option<SidecarItemKind>,
     tab_config_action_sidecar_mouse_states: crate::tab_configs::action_sidecar::SidecarMouseStates,
+    tab_group_rename_editor: ViewHandle<EditorView>,
+    tab_groups_sidecar_menu: ViewHandle<Menu<WorkspaceAction>>,
+    show_tab_groups_sidecar: bool,
+    tab_groups_sidecar_tab_index: Option<usize>,
     remove_tab_config_confirmation_dialog: ViewHandle<RemoveTabConfigConfirmationDialog>,
     handoff_environment_creation_modal: Option<ViewHandle<HandoffEnvironmentCreationModal>>,
     /// Workspace-level modal hosting `AuthSecretFtuxView` for the
@@ -1325,6 +1333,38 @@ impl Workspace {
         editor
     }
 
+    fn tab_group_rename_editor(ctx: &mut ViewContext<Self>) -> ViewHandle<EditorView> {
+        let editor = ctx.add_typed_action_view(|ctx| {
+            let appearance = Appearance::as_ref(ctx);
+            let options = SingleLineEditorOptions {
+                text: TextOptions::ui_text(Some(12.), appearance),
+                ..Default::default()
+            };
+            EditorView::single_line(options, ctx)
+        });
+        ctx.subscribe_to_view(&editor, move |me, _, event, ctx| {
+            me.handle_tab_group_rename_editor_event(event, ctx);
+        });
+        editor
+    }
+
+    /// Sidecar menu for the "Move to group" submenu. Item dispatch is
+    /// suppressed so we can close the parent menu before dispatching.
+    fn build_tab_groups_sidecar_menu(
+        ctx: &mut ViewContext<Self>,
+    ) -> ViewHandle<Menu<WorkspaceAction>> {
+        let sidecar = ctx.add_typed_action_view(|_| {
+            Menu::new()
+                .without_item_action_dispatch()
+                .with_width(TAB_GROUPS_SIDECAR_WIDTH)
+                .prevent_interaction_with_other_elements()
+        });
+        ctx.subscribe_to_view(&sidecar, move |me, _, event, ctx| {
+            me.handle_tab_groups_sidecar_event(event, ctx);
+        });
+        sidecar
+    }
+
     pub fn handle_tab_rename_editor_event(
         &mut self,
         event: &EditorEvent,
@@ -1355,6 +1395,27 @@ impl Workspace {
                 }
                 EditorEvent::Escape => {
                     self.cancel_pane_rename(ctx);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn handle_tab_group_rename_editor_event(
+        &mut self,
+        event: &EditorEvent,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        if self
+            .current_workspace_state
+            .is_any_tab_group_being_renamed()
+        {
+            match event {
+                EditorEvent::Blurred | EditorEvent::Enter => {
+                    self.finish_tab_group_rename(ctx);
+                }
+                EditorEvent::Escape => {
+                    self.cancel_tab_group_rename(ctx);
                 }
                 _ => {}
             }
@@ -1412,6 +1473,199 @@ impl Workspace {
             self.clear_pane_name_editor(ctx);
             self.focus_pane(locator, ctx);
             ctx.notify();
+        }
+    }
+
+    fn clear_tab_group_name_editor(&mut self, ctx: &mut ViewContext<Self>) {
+        self.tab_group_rename_editor
+            .update(ctx, move |editor, ctx| {
+                editor.clear_buffer_and_reset_undo_stack(ctx);
+            });
+    }
+
+    /// Enters rename mode for the given tab group. Seeds the editor with the
+    /// existing name (or "New group" placeholder when unnamed) and selects it
+    /// so the user can either keep it or type to replace.
+    pub fn rename_tab_group(&mut self, group_id: TabGroupId, ctx: &mut ViewContext<Self>) {
+        let existing_name = self
+            .tab_groups
+            .get(&group_id)
+            .and_then(|g| g.name.clone())
+            .unwrap_or_default();
+        let seed_text = if existing_name.is_empty() {
+            "New group".to_string()
+        } else {
+            existing_name
+        };
+
+        self.current_workspace_state
+            .set_tab_group_being_renamed(group_id);
+        self.clear_tab_group_name_editor(ctx);
+        self.tab_group_rename_editor
+            .update(ctx, move |editor, ctx| {
+                editor.insert_selected_text(&seed_text, ctx);
+            });
+        ctx.focus(&self.tab_group_rename_editor);
+        ctx.notify();
+    }
+
+    fn finish_tab_group_rename(&mut self, ctx: &mut ViewContext<Self>) {
+        if let Some(group_id) = self.current_workspace_state.tab_group_being_renamed() {
+            self.current_workspace_state.clear_tab_group_being_renamed();
+            let title = self.tab_group_rename_editor.as_ref(ctx).buffer_text(ctx);
+            let trimmed = title.trim();
+            if let Some(group) = self.tab_groups.get_mut(&group_id) {
+                group.name = (!trimmed.is_empty()).then(|| trimmed.to_string());
+            }
+            self.clear_tab_group_name_editor(ctx);
+            self.focus_active_tab(ctx);
+            ctx.notify();
+        }
+    }
+
+    fn cancel_tab_group_rename(&mut self, ctx: &mut ViewContext<Self>) {
+        if self
+            .current_workspace_state
+            .is_any_tab_group_being_renamed()
+        {
+            self.current_workspace_state.clear_tab_group_being_renamed();
+            self.clear_tab_group_name_editor(ctx);
+            self.focus_active_tab(ctx);
+            ctx.notify();
+        }
+    }
+
+    /// Creates a new tab group containing `tab_index`, clusters it next to
+    /// other grouped tabs, and enters rename mode on the new group.
+    pub fn new_tab_group_from_tab(&mut self, tab_index: usize, ctx: &mut ViewContext<Self>) {
+        if tab_index >= self.tabs.len() {
+            log::warn!(
+                "Tried to create a tab group from tab {tab_index} but only {} tabs exist",
+                self.tabs.len()
+            );
+            return;
+        }
+        let group_id = TabGroupId::new();
+        self.tab_groups.insert(
+            group_id,
+            TabGroup {
+                id: group_id,
+                name: None,
+                collapsed: false,
+            },
+        );
+        // Detach from any prior group; a tab can only belong to one group.
+        self.tabs[tab_index].group_id = Some(group_id);
+
+        // Land one slot after the last grouped tab so groups stay clustered.
+        let target_index = self
+            .tabs
+            .iter()
+            .enumerate()
+            .filter(|(idx, tab)| *idx != tab_index && tab.group_id.is_some())
+            .map(|(idx, _)| idx)
+            .max()
+            .map(|max_idx| max_idx + 1)
+            .unwrap_or(0);
+
+        let mut active_tab_index = tab_index;
+        if tab_index != target_index {
+            let tab = self.tabs.remove(tab_index);
+            let insert_index = if tab_index < target_index {
+                target_index - 1
+            } else {
+                target_index
+            };
+            self.tabs.insert(insert_index, tab);
+            active_tab_index = insert_index;
+        }
+        self.set_active_tab_index(active_tab_index, ctx);
+
+        ctx.notify();
+
+        // Deferred so the inline editor mounts on the next render.
+        ctx.dispatch_typed_action_deferred(WorkspaceAction::RenameTabGroup(group_id));
+    }
+
+    /// Assigns `tab_index` to `group_id` (or removes it from its group when
+    /// `None`), then reorders to keep group members adjacent. Prunes the
+    /// previous group if it becomes empty.
+    pub fn assign_tab_to_group(
+        &mut self,
+        tab_index: usize,
+        group_id: Option<TabGroupId>,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        if tab_index >= self.tabs.len() {
+            log::warn!(
+                "Tried to assign tab {tab_index} to a group but only {} tabs exist",
+                self.tabs.len()
+            );
+            return;
+        }
+        if let Some(gid) = group_id {
+            if !self.tab_groups.contains_key(&gid) {
+                log::warn!("Tried to assign tab {tab_index} to unknown group {gid:?}");
+                return;
+            }
+        }
+
+        // Short-circuit no-op assignments.
+        if self.tabs[tab_index].group_id == group_id {
+            return;
+        }
+
+        let previous_group_id = self.tabs[tab_index].group_id;
+        self.tabs[tab_index].group_id = group_id;
+
+        // Destination index: after the group's last member when joining, or
+        // after the last grouped tab when leaving (so the cluster stays
+        // contiguous). `None` keeps the tab in place.
+        let target_index = match group_id {
+            Some(gid) => self
+                .tabs
+                .iter()
+                .enumerate()
+                .filter(|(idx, tab)| *idx != tab_index && tab.group_id == Some(gid))
+                .map(|(idx, _)| idx)
+                .max()
+                .map(|max_idx| max_idx + 1),
+            None => self
+                .tabs
+                .iter()
+                .enumerate()
+                .filter(|(idx, tab)| *idx != tab_index && tab.group_id.is_some())
+                .map(|(idx, _)| idx)
+                .max()
+                .map(|max_idx| max_idx + 1),
+        };
+
+        if let Some(target_index) = target_index {
+            if tab_index != target_index {
+                let tab = self.tabs.remove(tab_index);
+                let insert_index = if tab_index < target_index {
+                    target_index - 1
+                } else {
+                    target_index
+                };
+                self.tabs.insert(insert_index, tab);
+                if self.active_tab_index == tab_index {
+                    self.set_active_tab_index(insert_index, ctx);
+                }
+            }
+        }
+
+        if let Some(previous_group_id) = previous_group_id {
+            self.prune_empty_tab_group(previous_group_id);
+        }
+
+        ctx.notify();
+    }
+
+    fn prune_empty_tab_group(&mut self, group_id: TabGroupId) {
+        let has_member = self.tabs.iter().any(|tab| tab.group_id == Some(group_id));
+        if !has_member {
+            self.tab_groups.remove(&group_id);
         }
     }
 
@@ -3215,6 +3469,10 @@ impl Workspace {
             new_session_sidecar_add_repo_mouse_state: Default::default(),
             tab_config_action_sidecar_item: None,
             tab_config_action_sidecar_mouse_states: Default::default(),
+            tab_group_rename_editor: Self::tab_group_rename_editor(ctx),
+            tab_groups_sidecar_menu: Self::build_tab_groups_sidecar_menu(ctx),
+            show_tab_groups_sidecar: false,
+            tab_groups_sidecar_tab_index: None,
             remove_tab_config_confirmation_dialog:
                 Self::build_remove_tab_config_confirmation_dialog(ctx),
             handoff_environment_creation_modal: None,
@@ -6687,6 +6945,11 @@ impl Workspace {
 
         ctx.dispatch_global_action("workspace:save_app", ());
         ctx.notify();
+
+        // Defer entering rename mode to the next event-loop turn so the new
+        // tab group renders first; the inline rename editor anchors to a
+        // header element that only exists after the next render.
+        ctx.dispatch_typed_action_deferred(WorkspaceAction::RenameTabGroup(group_id));
     }
 
     /// Closes every tab in the given group and removes the group.
@@ -6744,7 +7007,7 @@ impl Workspace {
         }
 
         let tab = &self.tabs[tab_index];
-        let menu_items = tab.menu_items(tab_index, self.tabs.len(), ctx);
+        let menu_items = tab.menu_items(tab_index, self.tabs.len(), &self.tab_groups, ctx);
         ctx.update_view(&self.tab_right_click_menu, |context_menu, view_ctx| {
             context_menu.set_items(menu_items, view_ctx);
         });
@@ -6792,6 +7055,7 @@ impl Workspace {
             tab_index,
             self.tabs.len(),
             Some(pane_name_target),
+            &self.tab_groups,
             ctx,
         );
 
@@ -8772,10 +9036,151 @@ impl Workspace {
         event: &MenuEvent,
         ctx: &mut ViewContext<Self>,
     ) {
-        if let MenuEvent::Close { via_select_item: _ } = event {
-            self.show_tab_right_click_menu = None;
+        match event {
+            MenuEvent::Close { .. } => {
+                self.show_tab_right_click_menu = None;
+                self.clear_tab_groups_sidecar_state(ctx);
+                self.tab_right_click_menu.update(ctx, |menu, _| {
+                    menu.set_safe_zone_target(None);
+                    menu.set_submenu_being_shown_for_item_index(None);
+                });
+                ctx.notify();
+            }
+            // Submenu-parent items emit `ItemSelected` via
+            // `HoverSubmenuWithChildren` instead of `ItemHovered`, so handle
+            // both to keep the sidecar in sync with the cursor.
+            MenuEvent::ItemHovered | MenuEvent::ItemSelected => {
+                self.update_tab_groups_sidecar(ctx);
+            }
+        }
+    }
+
+    fn update_tab_groups_sidecar(&mut self, ctx: &mut ViewContext<Self>) {
+        let Some((tab_index, _)) = self.show_tab_right_click_menu else {
+            return;
+        };
+
+        let hovered = self.tab_right_click_menu.read(ctx, |menu, _| {
+            menu.hovered_index().and_then(|idx| {
+                menu.items().get(idx).and_then(|item| match item {
+                    MenuItem::Item(fields) => Some((idx, fields.label().to_string())),
+                    _ => None,
+                })
+            })
+        });
+        let Some((hovered_index, hovered_label)) = hovered else {
+            return;
+        };
+
+        if hovered_label == MOVE_TO_GROUP_LABEL {
+            self.configure_tab_groups_sidecar(tab_index, hovered_index, ctx);
+        } else if self.show_tab_groups_sidecar {
+            self.clear_tab_groups_sidecar_state(ctx);
+            self.tab_right_click_menu.update(ctx, |menu, _| {
+                menu.set_safe_zone_target(None);
+                menu.set_submenu_being_shown_for_item_index(None);
+            });
             ctx.notify();
         }
+    }
+
+    fn configure_tab_groups_sidecar(
+        &mut self,
+        tab_index: usize,
+        hovered_index: usize,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let Some(tab) = self.tabs.get(tab_index) else {
+            return;
+        };
+        let items = tab.group_sidecar_menu_items(tab_index, &self.tab_groups);
+        if items.is_empty() {
+            self.clear_tab_groups_sidecar_state(ctx);
+            self.tab_right_click_menu.update(ctx, |menu, _| {
+                menu.set_safe_zone_target(None);
+                menu.set_submenu_being_shown_for_item_index(None);
+            });
+            return;
+        }
+
+        self.tab_groups_sidecar_menu.update(ctx, |menu, view_ctx| {
+            menu.set_items(items, view_ctx);
+            menu.reset_selection(view_ctx);
+        });
+        self.show_tab_groups_sidecar = true;
+        self.tab_groups_sidecar_tab_index = Some(tab_index);
+
+        let sidecar_rect = ctx
+            .element_position_by_id_at_last_frame(self.window_id, TAB_GROUPS_SIDECAR_POSITION_ID);
+        self.tab_right_click_menu.update(ctx, |menu, _| {
+            menu.set_safe_zone_target(sidecar_rect);
+            menu.set_submenu_being_shown_for_item_index(Some(hovered_index));
+        });
+        ctx.notify();
+    }
+
+    /// Hides the sidecar and resets its selection. Callers handle the parent
+    /// menu's safe-zone state separately.
+    fn clear_tab_groups_sidecar_state(&mut self, ctx: &mut ViewContext<Self>) {
+        self.show_tab_groups_sidecar = false;
+        self.tab_groups_sidecar_tab_index = None;
+        self.tab_groups_sidecar_menu.update(ctx, |menu, view_ctx| {
+            menu.reset_selection(view_ctx);
+        });
+    }
+
+    fn selected_tab_groups_sidecar_action(&self, ctx: &AppContext) -> Option<WorkspaceAction> {
+        self.tab_groups_sidecar_menu.read(ctx, |menu, _| {
+            menu.selected_item().and_then(|item| match item {
+                MenuItem::Item(fields) => fields.on_select_action().cloned(),
+                _ => None,
+            })
+        })
+    }
+
+    fn handle_tab_groups_sidecar_event(&mut self, event: &MenuEvent, ctx: &mut ViewContext<Self>) {
+        match event {
+            MenuEvent::Close { via_select_item } => {
+                let action = via_select_item
+                    .then(|| self.selected_tab_groups_sidecar_action(ctx))
+                    .flatten();
+                if *via_select_item {
+                    // Sidecar item clicked: close the parent menu too.
+                    self.show_tab_right_click_menu = None;
+                    self.tab_right_click_menu.update(ctx, |menu, _| {
+                        menu.set_safe_zone_target(None);
+                        menu.set_submenu_being_shown_for_item_index(None);
+                    });
+                }
+                self.clear_tab_groups_sidecar_state(ctx);
+                if let Some(action) = action {
+                    // Deferred so the workspace view handler is reachable
+                    // after `flush_effects` reinserts the view post-close.
+                    ctx.dispatch_typed_action_deferred(action);
+                }
+                ctx.notify();
+            }
+            MenuEvent::ItemSelected => {}
+            MenuEvent::ItemHovered => {
+                self.sync_tab_groups_sidecar_selection_to_hover(ctx);
+            }
+        }
+    }
+
+    fn sync_tab_groups_sidecar_selection_to_hover(&mut self, ctx: &mut ViewContext<Self>) {
+        self.tab_groups_sidecar_menu.update(ctx, |menu, view_ctx| {
+            let Some(hovered_index) = menu.hovered_index() else {
+                return;
+            };
+            let hovered_item_has_action = menu
+                .items()
+                .get(hovered_index)
+                .and_then(MenuItem::item_on_select_action)
+                .is_some();
+            if hovered_item_has_action && menu.selected_index() != Some(hovered_index) {
+                menu.set_selected_by_index(hovered_index, view_ctx);
+            }
+        });
     }
 
     fn handle_new_session_menu_event(&mut self, event: &MenuEvent, ctx: &mut ViewContext<Self>) {
@@ -21253,6 +21658,13 @@ impl TypedActionView for Workspace {
             }
             CloseTabGroup(group_id) => self.close_tab_group(*group_id, ctx),
             ToggleTabGroupCollapsed(group_id) => self.toggle_tab_group_collapsed(*group_id, ctx),
+            RenameTabGroup(group_id) => self.rename_tab_group(*group_id, ctx),
+            FinishTabGroupRename => self.finish_tab_group_rename(ctx),
+            NewTabGroupFromTab(tab_index) => self.new_tab_group_from_tab(*tab_index, ctx),
+            AssignTabToGroup {
+                tab_index,
+                group_id,
+            } => self.assign_tab_to_group(*tab_index, *group_id, ctx),
             AddDefaultTab => {
                 let effective_mode = AISettings::as_ref(ctx).default_session_mode(ctx);
                 match effective_mode {
@@ -23820,6 +24232,46 @@ impl View for Workspace {
                     stack.add_positioned_overlay_child(
                         ChildView::new(&self.tab_right_click_menu).finish(),
                         positioning,
+                    );
+                }
+
+                // "Move to group" sidecar, anchored to the per-label
+                // `SavePosition` set up in tab.rs.
+                if self.show_tab_groups_sidecar {
+                    let sidecar_element = SavePosition::new(
+                        ChildView::new(&self.tab_groups_sidecar_menu).finish(),
+                        TAB_GROUPS_SIDECAR_POSITION_ID,
+                    )
+                    .finish();
+
+                    let render_left = self.should_render_sidecar_left(
+                        MOVE_TO_GROUP_LABEL,
+                        TAB_GROUPS_SIDECAR_WIDTH,
+                        app,
+                    );
+                    let (offset, parent_anchor, child_anchor) = if render_left {
+                        (
+                            vec2f(-4., 0.),
+                            PositionedElementAnchor::TopLeft,
+                            ChildAnchor::TopRight,
+                        )
+                    } else {
+                        (
+                            vec2f(4., 0.),
+                            PositionedElementAnchor::TopRight,
+                            ChildAnchor::TopLeft,
+                        )
+                    };
+
+                    stack.add_positioned_overlay_child(
+                        sidecar_element,
+                        OffsetPositioning::offset_from_save_position_element(
+                            MOVE_TO_GROUP_LABEL,
+                            offset,
+                            PositionedElementOffsetBounds::WindowByPosition,
+                            parent_anchor,
+                            child_anchor,
+                        ),
                     );
                 }
             }

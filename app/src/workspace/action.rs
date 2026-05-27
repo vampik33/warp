@@ -174,6 +174,22 @@ pub enum WorkspaceAction {
     CloseTabGroup(TabGroupId),
     /// Toggle collapsed state for the given tab group.
     ToggleTabGroupCollapsed(TabGroupId),
+    /// Enter rename mode for the given tab group. Focuses the inline header
+    /// editor and seeds it with the existing name (or a placeholder when the
+    /// group is unnamed).
+    RenameTabGroup(TabGroupId),
+    /// Commit any in-progress tab-group rename. Dispatched by header click /
+    /// editor blur. No-op when no group is being renamed.
+    FinishTabGroupRename,
+    /// Create a new tab group containing the existing tab at `tab_index` and
+    /// immediately enter rename mode on the new group.
+    NewTabGroupFromTab(usize),
+    /// Move the tab at `tab_index` into the given group, or remove it from
+    /// its current group when `group_id` is `None`.
+    AssignTabToGroup {
+        tab_index: usize,
+        group_id: Option<TabGroupId>,
+    },
     AddDefaultTab,
     AddTerminalTab {
         hide_homepage: bool,
@@ -801,6 +817,10 @@ impl WorkspaceAction {
             | CloseTabsRightActiveTab
             | CloseTabGroup(_)
             | ToggleTabGroupCollapsed(_)
+            | RenameTabGroup(_)
+            | FinishTabGroupRename
+            | NewTabGroupFromTab(_)
+            | AssignTabToGroup { .. }
             | ToggleTabColor { .. }
             | AddDefaultTab
             | AddTerminalTab { .. }
