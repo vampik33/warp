@@ -74,30 +74,55 @@ Recommended selector variants:
 - `FileSelector`: `Path { path, line, column }`.
 - `DriveObjectSelector`: `Id(DriveObjectId)` or `Lookup { object_type, name_or_path }`.
 Index selectors are resolved only within their parent selector context, so tab index resolution requires a resolved window and pane/session index resolution requires a resolved tab or pane. Title and name/path lookup selectors are ergonomic helpers for interactive use and must fail on ambiguity rather than choosing the first match.
-Recommended top-level request shape for `tab.create`:
+Recommended top-level request shape for `tab.create` matches the shared `RequestEnvelope` and `Action` serde contract. The action kind and action-specific parameters are nested together under `action` so the allowlisted action name and parameter payload travel as one typed protocol field:
 ```json
 {
   "protocol_version": 1,
   "request_id": "client-generated-id",
-  "action": "tab.create",
   "target": {
     "window": "active"
   },
-  "params": {}
+  "action": {
+    "kind": "tab.create",
+    "params": {}
+  }
 }
 ```
-Recommended response shape:
+Recommended success response shape matches `ResponseEnvelope` and the tagged `ControlResponse::Ok` variant:
 ```json
 {
-  "ok": true,
   "protocol_version": 1,
   "request_id": "client-generated-id",
-  "instance_id": "opaque-instance-id",
-  "resolved_target": {
-    "window_id": "opaque-window-id",
-    "tab_id": "opaque-tab-id"
-  },
-  "result": {}
+  "response": {
+    "status": "ok",
+    "data": {}
+  }
+}
+```
+Recommended request-scoped error response shape matches `ResponseEnvelope` and the tagged `ControlResponse::Error` variant:
+```json
+{
+  "protocol_version": 1,
+  "request_id": "client-generated-id",
+  "response": {
+    "status": "error",
+    "error": {
+      "code": "missing_target",
+      "message": "No active window is available",
+      "details": null
+    }
+  }
+}
+```
+Recommended decode-level error response shape for malformed requests that cannot be decoded into a full request envelope:
+```json
+{
+  "protocol_version": 1,
+  "error": {
+    "code": "invalid_params",
+    "message": "Request body could not be decoded",
+    "details": null
+  }
 }
 ```
 Error payloads should include stable codes defined in `SECURITY.md`, including `local_control_disabled`, `unauthorized_local_client`, `insufficient_permissions`, `authenticated_user_required`, `authenticated_user_unavailable`, `execution_context_not_allowed`, `ambiguous_instance`, `ambiguous_target`, `stale_target`, `invalid_selector`, `unsupported_action`, `not_allowlisted`, `invalid_params`, `target_state_conflict`, `missing_target`, and `no_instance`.
