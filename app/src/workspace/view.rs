@@ -298,6 +298,7 @@ use crate::search::command_palette::view::{
 use crate::search::command_search::searcher::{
     AcceptedHistoryItem, AcceptedWorkflow, CommandSearchItemAction,
 };
+use crate::search::command_search::settings::CommandSearchSettings;
 use crate::search::command_search::view::{CommandSearchEvent, CommandSearchView};
 use crate::search::slash_command_menu::static_commands::commands;
 use crate::search::{self, QueryFilter};
@@ -467,6 +468,7 @@ use crate::workspace::header_toolbar_editor::{HeaderToolbarEditorEvent, HeaderTo
 use crate::workspace::header_toolbar_item::HeaderToolbarItemKind;
 use crate::workspace::one_time_modal_model::OneTimeModalModel;
 use crate::workspace::sync_inputs::SyncedInputState;
+use crate::workspace::tab_group::{TabGroup, TabGroupId};
 use crate::workspace::tab_settings::TabCloseButtonPosition;
 use crate::workspace::toast_stack::{
     ToastStack, ToastStack as WorkspaceToastStack, ToastStackEvent as WorkspaceToastStackEvent,
@@ -495,6 +497,7 @@ use crate::workspace::view::orchestration_launch_modal::{
 use crate::workspace::view::right_panel::{RightPanelEvent, RightPanelView};
 use crate::workspace::{ForkFromExchange, ForkedConversationDestination};
 use crate::workspaces::user_workspaces::UserWorkspaces;
+use crate::workspaces::workspace::AdminEnablementSetting;
 use crate::{
     autoupdate, report_if_error, send_telemetry_from_ctx, settings, AgentNotificationsModel,
     BlocklistAIHistoryModel, GlobalResourceHandles, TelemetryEvent,
@@ -933,6 +936,8 @@ pub struct Workspace {
     tab_bar_hover_state: MouseStateHandle,
     tab_fixed_width: Option<f32>,
     traffic_light_mouse_states: TrafficLightMouseStates,
+    /// Tab groups in this workspace, keyed by id.
+    pub(crate) tab_groups: HashMap<TabGroupId, TabGroup>,
     tab_rename_editor: ViewHandle<EditorView>,
     pane_rename_editor: ViewHandle<EditorView>,
     vertical_tabs_search_input: ViewHandle<EditorView>,
@@ -3089,6 +3094,7 @@ impl Workspace {
             hovered_tab_index: None,
             tab_bar_hover_state: Default::default(),
             traffic_light_mouse_states: Default::default(),
+            tab_groups: HashMap::new(),
             tab_rename_editor: Self::tab_rename_editor(ctx),
             pane_rename_editor: Self::pane_rename_editor(ctx),
             vertical_tabs_search_input: Self::vertical_tabs_search_input(ctx),
@@ -6105,39 +6111,7 @@ impl Workspace {
     }
 
     fn send_feedback(&mut self, ctx: &mut ViewContext<Self>) {
-        // When AI is available (enabled, with remaining requests) and the feedback skill is
-        // bundled on this channel, open a new agent pane and prime the input with `/feedback `
-        // so the user can describe their feedback in their own words before submitting. The
-        // skill is only invoked when they hit enter. Otherwise fall back to the form URL so
-        // logged-out, credit-exhausted, AI-disabled, and stable-channel users still have a
-        // way to send feedback.
-        if !crate::workspace::is_feedback_skill_available(ctx) {
-            ctx.open_url(&links::feedback_form_url());
-            return;
-        }
-
-        self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
-            pane_group.add_terminal_pane_in_agent_mode(Some("/feedback "), None, ctx);
-            if let Some(terminal_view) = pane_group.focused_session_view(ctx) {
-                terminal_view.update(ctx, |terminal_view, terminal_view_ctx| {
-                    terminal_view
-                        .input()
-                        .update(terminal_view_ctx, |input, input_ctx| {
-                            input.editor().update(input_ctx, |editor, editor_ctx| {
-                                // Show a muted placeholder after the primed prefix so the user
-                                // knows they can describe their feedback before submitting. The
-                                // placeholder auto-hides as soon as they start typing and is
-                                // cleared on submit alongside any other placeholder text.
-                                editor.set_placeholder_text_with_prefix(
-                                    "/feedback ",
-                                    "Describe what's broken, confusing, or missing...",
-                                    editor_ctx,
-                                );
-                            });
-                        });
-                });
-            }
-        });
+        ctx.open_url(&links::feedback_form_url());
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -6485,7 +6459,9 @@ impl Workspace {
             #[cfg(not(feature = "local_fs"))]
             NewSessionMenuItem::CreateNewTabConfig => {}
             NewSessionMenuItem::CreateNewTabGroup => {
-                // TODO(johnturcoo): implement tab group creation.
+                if FeatureFlag::GroupedTabs.is_enabled() {
+                    self.create_new_tab_group(ctx);
+                }
             }
         }
     }
@@ -6638,6 +6614,71 @@ impl Workspace {
 
     #[cfg(not(feature = "local_fs"))]
     fn save_current_tab_as_new_config(&mut self, _tab_index: usize, _ctx: &mut ViewContext<Self>) {}
+
+    /// Creates a new tab group containing a single new tab.
+    fn create_new_tab_group(&mut self, ctx: &mut ViewContext<Self>) {
+        let group = TabGroup::new();
+        let group_id = group.id;
+        self.tab_groups.insert(group_id, group);
+        self.add_new_session_tab_with_default_mode(
+            NewSessionSource::Tab,
+            Some(ctx.window_id()),
+            None,
+            None,
+            false,
+            ctx,
+        );
+        let new_tab_index = self.active_tab_index;
+        if let Some(tab) = self.tabs.get_mut(new_tab_index) {
+            tab.group_id = Some(group_id);
+        }
+
+        // New tab groups always land at the top of the tab list.
+        if new_tab_index != 0 {
+            let tab = self.tabs.remove(new_tab_index);
+            self.tabs.insert(0, tab);
+            self.active_tab_index = 0;
+        }
+
+        ctx.dispatch_global_action("workspace:save_app", ());
+        ctx.notify();
+    }
+
+    /// Closes every tab in the given group and removes the group.
+    pub fn close_tab_group(&mut self, group_id: TabGroupId, ctx: &mut ViewContext<Self>) {
+        let indices: Vec<usize> = group_member_indices(&self.tabs, group_id).collect();
+        if indices.is_empty() {
+            self.tab_groups.remove(&group_id);
+            ctx.notify();
+            return;
+        }
+        let first_index = indices[0];
+        let closed = self.close_tabs(
+            indices.into_iter(),
+            OpenDialogSource::CloseOtherTabs {
+                tab_index: first_index,
+            },
+            false,
+            true,
+            ctx,
+        );
+        if closed {
+            self.tab_groups.remove(&group_id);
+            ctx.notify();
+        }
+    }
+
+    /// Toggles the collapsed state of the given tab group.
+    pub fn toggle_tab_group_collapsed(
+        &mut self,
+        group_id: TabGroupId,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        if let Some(group) = self.tab_groups.get_mut(&group_id) {
+            group.collapsed = !group.collapsed;
+            ctx.notify();
+        }
+    }
 
     pub fn toggle_tab_right_click_menu(
         &mut self,
@@ -11057,6 +11098,12 @@ impl Workspace {
 
         let is_new_terminal = matches!(panes_layout, PanesLayout::SingleTerminal(_));
         let is_restoration = matches!(panes_layout, PanesLayout::Snapshot(_));
+        // Capture the active tab's group membership so the new tab can inherit it.
+        let active_tab_group_id = if FeatureFlag::GroupedTabs.is_enabled() && !is_restoration {
+            active_tab.and_then(|tab| tab.group_id)
+        } else {
+            None
+        };
         let new_pane_group = ctx.add_typed_action_view(|ctx| {
             let mut pane_group = PaneGroup::new_with_panes_layout(
                 self.tips_completed.clone(),
@@ -11082,10 +11129,20 @@ impl Workspace {
 
         match new_tab_placement_setting {
             NewTabPlacement::AfterAllTabs => {
-                self.tabs.push(TabData::new(new_pane_group));
+                // When inheriting a group, land at the end of the group's
+                // contiguous run instead of past it so the setting is
+                // honored within the group's bounds.
+                let insert_idx = active_tab_group_id
+                    .and_then(|gid| {
+                        group_member_indices(&self.tabs, gid)
+                            .last()
+                            .map(|last| last + 1)
+                    })
+                    .unwrap_or(self.tabs.len());
+                self.tabs.insert(insert_idx, TabData::new(new_pane_group));
                 self.tab_mru_order
-                    .push(self.tabs.last().unwrap().pane_group.id());
-                self.activate_tab_internal(self.tab_count() - 1, ctx);
+                    .push(self.tabs[insert_idx].pane_group.id());
+                self.activate_tab_internal(insert_idx, ctx);
             }
             // Add tab after current tab
             _ => {
@@ -11101,6 +11158,14 @@ impl Workspace {
                         .push(self.tabs[insert_idx].pane_group.id());
                     self.activate_tab_internal(insert_idx, ctx);
                 }
+            }
+        }
+
+        // Inherit the active tab's group membership. D
+        if let Some(group_id) = active_tab_group_id {
+            let new_idx = self.active_tab_index;
+            if let Some(new_tab) = self.tabs.get_mut(new_idx) {
+                new_tab.group_id = Some(group_id);
             }
         }
 
@@ -20431,14 +20496,17 @@ impl Workspace {
         let alias_expansion_settings = AliasExpansionSettings::as_ref(app);
         let code_settings = CodeSettings::as_ref(app);
         let input_settings = InputSettings::as_ref(app);
+        let font_settings = FontSettings::as_ref(app);
         let reporting_setings = AltScreenReporting::as_ref(app);
         let general_settings = GeneralSettings::as_ref(app);
         let theme_settings = ThemeSettings::as_ref(app);
         let ssh_settings = SshSettings::as_ref(app);
         let warpify_settings = WarpifySettings::as_ref(app);
         let terminal_settings = TerminalSettings::as_ref(app);
+        let window_settings = WindowSettings::as_ref(app);
         let pane_settings = PaneSettings::as_ref(app);
         let keys_settings = KeysSettings::as_ref(app);
+        let command_search_settings = CommandSearchSettings::as_ref(app);
 
         let is_compact_mode =
             matches!(terminal_settings.spacing_mode.value(), SpacingMode::Compact);
@@ -20483,6 +20551,9 @@ impl Workspace {
             #[allow(deprecated)]
             context.set.insert(flags::LEGACY_SSH_WRAPPER_CONTEXT_FLAG);
         }
+        if *warpify_settings.enable_ssh_warpification.value() {
+            context.set.insert(flags::SSH_WARPIFICATION_CONTEXT_FLAG);
+        }
 
         if *warpify_settings.use_ssh_tmux_wrapper.value() {
             context.set.insert(flags::SSH_TMUX_WRAPPER_CONTEXT_FLAG);
@@ -20501,6 +20572,9 @@ impl Workspace {
         if *reporting_setings.scroll_reporting_enabled.value() {
             context.set.insert(flags::SCROLL_REPORTING_CONTEXT_FLAG);
         }
+        if *reporting_setings.mouse_reporting_enabled.value() {
+            context.set.insert(flags::MOUSE_REPORTING_CONTEXT_FLAG);
+        }
 
         if *reporting_setings.focus_reporting_enabled.value() {
             context.set.insert(flags::FOCUS_REPORTING_CONTEXT_FLAG);
@@ -20515,6 +20589,25 @@ impl Workspace {
             NotificationsMode::Enabled
         ) {
             context.set.insert(flags::NOTIFICATIONS_CONTEXT_FLAG);
+        }
+        if session_settings.notifications.is_long_running_enabled {
+            context.set.insert(flags::LONG_RUNNING_NOTIFICATIONS_FLAG);
+        }
+        if session_settings
+            .notifications
+            .is_agent_task_completed_enabled
+        {
+            context
+                .set
+                .insert(flags::AGENT_TASK_COMPLETED_NOTIFICATIONS_FLAG);
+        }
+        if session_settings.notifications.is_needs_attention_enabled {
+            context
+                .set
+                .insert(flags::NEEDS_ATTENTION_NOTIFICATIONS_FLAG);
+        }
+        if session_settings.notifications.play_notification_sound {
+            context.set.insert(flags::NOTIFICATION_SOUND_FLAG);
         }
 
         if *general_settings.link_tooltip {
@@ -20564,6 +20657,19 @@ impl Workspace {
         if *safe_mode_settings.safe_mode_enabled.value() {
             context.set.insert(flags::SAFE_MODE_FLAG);
         }
+        if !privacy_settings.is_telemetry_force_enabled()
+            && matches!(
+                UserWorkspaces::as_ref(app).get_cloud_conversation_storage_enablement_setting(),
+                AdminEnablementSetting::RespectUserSetting
+            )
+        {
+            context
+                .set
+                .insert(flags::CLOUD_CONVERSATION_STORAGE_EDITABLE_FLAG);
+        }
+        if privacy_settings.is_cloud_conversation_storage_enabled {
+            context.set.insert(flags::CLOUD_CONVERSATION_STORAGE_FLAG);
+        }
 
         if privacy_settings.is_crash_reporting_enabled {
             context.set.insert(flags::CRASH_REPORTING_FLAG);
@@ -20585,6 +20691,31 @@ impl Workspace {
 
         if *pane_settings.should_dim_inactive_panes {
             context.set.insert(flags::DIM_INACTIVE_PANES_FLAG);
+        }
+        if *window_settings.open_windows_at_custom_size {
+            context.set.insert(flags::OPEN_WINDOWS_AT_CUSTOM_SIZE_FLAG);
+        }
+
+        if *window_settings.background_blur_texture {
+            context.set.insert(flags::WINDOW_BLUR_TEXTURE_FLAG);
+        }
+
+        if *window_settings.left_panel_visibility_across_tabs {
+            context
+                .set
+                .insert(flags::LEFT_PANEL_VISIBILITY_ACROSS_TABS_FLAG);
+        }
+
+        if *font_settings.match_ai_font_to_terminal_font {
+            context
+                .set
+                .insert(flags::MATCH_AI_FONT_TO_TERMINAL_FONT_FLAG);
+        }
+
+        if *font_settings.match_notebook_to_monospace_font_size {
+            context
+                .set
+                .insert(flags::MATCH_NOTEBOOK_FONT_SIZE_TO_TERMINAL_FONT_SIZE_FLAG);
         }
 
         if *pane_settings.focus_panes_on_hover {
@@ -20609,8 +20740,36 @@ impl Workspace {
         if *tab_settings.show_code_review_button.value() {
             context.set.insert(flags::SHOW_CODE_REVIEW_BUTTON_FLAG);
         }
+        if *tab_settings.show_code_review_diff_stats.value() {
+            context.set.insert(flags::SHOW_CODE_REVIEW_DIFF_STATS_FLAG);
+        }
+        if *general_settings
+            .auto_open_code_review_pane_on_first_agent_change
+            .value()
+        {
+            context.set.insert(flags::AUTO_OPEN_CODE_REVIEW_PANE_FLAG);
+        }
         if *tab_settings.use_vertical_tabs.value() {
             context.set.insert(flags::USE_VERTICAL_TABS_FLAG);
+        }
+        if *tab_settings.preserve_active_tab_color.value() {
+            context.set.insert(flags::PRESERVE_ACTIVE_TAB_COLOR_FLAG);
+        }
+        if *tab_settings
+            .show_vertical_tab_panel_in_restored_windows
+            .value()
+        {
+            context
+                .set
+                .insert(flags::SHOW_VERTICAL_TAB_PANEL_IN_RESTORED_WINDOWS_FLAG);
+        }
+        if *tab_settings
+            .use_latest_user_prompt_as_conversation_title_in_tab_names
+            .value()
+        {
+            context
+                .set
+                .insert(flags::USE_LATEST_USER_PROMPT_AS_CONVERSATION_TITLE_IN_TAB_NAMES_FLAG);
         }
         if self.should_show_session_config_tab_config_chip() {
             context
@@ -20664,6 +20823,11 @@ impl Workspace {
                 .set
                 .insert(flags::AUTOSUGGESTION_KEYBINDING_HINT_FLAG);
         }
+        if *editor_settings.show_autosuggestion_ignore_button.value() {
+            context
+                .set
+                .insert(flags::SHOW_AUTOSUGGESTION_IGNORE_BUTTON_FLAG);
+        }
 
         #[cfg(target_os = "linux")]
         {
@@ -20679,6 +20843,17 @@ impl Workspace {
         let terminal_settings = TerminalSettings::as_ref(app);
         if *terminal_settings.use_audible_bell {
             context.set.insert(flags::USE_AUDIBLE_BELL_CONTEXT_FLAG);
+        }
+        if *terminal_settings.show_terminal_zero_state_block.value() {
+            context
+                .set
+                .insert(flags::SHOW_TERMINAL_ZERO_STATE_BLOCK_FLAG);
+        }
+        if matches!(
+            terminal_settings.alt_screen_padding.value(),
+            crate::terminal::settings::AltScreenPaddingMode::Custom { .. }
+        ) {
+            context.set.insert(flags::ALT_SCREEN_PADDING_FLAG);
         }
 
         let gpu_settings = GPUSettings::as_ref(app);
@@ -20719,6 +20894,53 @@ impl Workspace {
                 .set
                 .insert(flags::SHOW_OZ_UPDATES_IN_ZERO_STATE_FLAG);
         }
+        if *ai_settings.git_operations_autogen_enabled_internal.value() {
+            context.set.insert(flags::GIT_OPERATIONS_AUTOGEN_FLAG);
+        }
+        if *ai_settings.include_agent_commands_in_history.value() {
+            context
+                .set
+                .insert(flags::INCLUDE_AGENT_COMMANDS_IN_HISTORY_FLAG);
+        }
+        if *ai_settings.memory_enabled.value() {
+            context.set.insert(flags::AI_RULES_FLAG);
+        }
+        if *ai_settings.rule_suggestions_enabled_internal.value() {
+            context.set.insert(flags::SUGGESTED_RULES_FLAG);
+        }
+        if *ai_settings.warp_drive_context_enabled.value() {
+            context.set.insert(flags::WARP_DRIVE_CONTEXT_FLAG);
+        }
+        if *ai_settings.file_based_mcp_enabled.value() {
+            context.set.insert(flags::FILE_BASED_MCP_FLAG);
+        }
+        if *ai_settings.can_use_warp_credits_for_fallback.value() {
+            context.set.insert(flags::WARP_CREDIT_FALLBACK_FLAG);
+        }
+        if *session_settings.show_model_selectors_in_prompt.value() {
+            context
+                .set
+                .insert(flags::SHOW_BASE_MODEL_PICKER_IN_PROMPT_FLAG);
+        }
+        if *ai_settings.should_render_cli_agent_footer.value() {
+            context.set.insert(flags::CLI_AGENT_FOOTER_ENABLED);
+        }
+        if *ai_settings.auto_toggle_rich_input.value() {
+            context.set.insert(flags::AUTO_TOGGLE_RICH_INPUT_FLAG);
+        }
+        if *ai_settings.auto_open_rich_input_on_cli_agent_start.value() {
+            context
+                .set
+                .insert(flags::AUTO_OPEN_RICH_INPUT_ON_CLI_AGENT_START_FLAG);
+        }
+        if *ai_settings.auto_dismiss_rich_input_after_submit.value() {
+            context
+                .set
+                .insert(flags::AUTO_DISMISS_RICH_INPUT_AFTER_SUBMIT_FLAG);
+        }
+        if *ai_settings.show_agent_notifications.value() {
+            context.set.insert(flags::AGENT_IN_APP_NOTIFICATIONS_FLAG);
+        }
 
         if *ai_settings
             .should_render_use_agent_footer_for_user_commands
@@ -20749,6 +20971,26 @@ impl Workspace {
 
         if *input_settings.enable_slash_commands_in_terminal.value() {
             context.set.insert(flags::SLASH_COMMANDS_IN_TERMINAL_FLAG);
+        }
+        if *input_settings.at_context_menu_in_terminal_mode.value() {
+            context.set.insert(flags::AT_CONTEXT_MENU_IN_TERMINAL_FLAG);
+        }
+
+        if *input_settings
+            .outline_codebase_symbols_for_at_context_menu
+            .value()
+        {
+            context
+                .set
+                .insert(flags::OUTLINE_CODEBASE_SYMBOLS_FOR_AT_CONTEXT_MENU_FLAG);
+        }
+        if *command_search_settings
+            .show_global_workflows_in_universal_search
+            .value()
+        {
+            context
+                .set
+                .insert(flags::GLOBAL_WORKFLOWS_IN_COMMAND_SEARCH_FLAG);
         }
 
         if ChannelState::enable_debug_features() {
@@ -21131,6 +21373,8 @@ impl TypedActionView for Workspace {
             CloseTabsRightActiveTab => {
                 self.close_tabs_direction(self.active_tab_index, TabMovement::Right, false, ctx)
             }
+            CloseTabGroup(group_id) => self.close_tab_group(*group_id, ctx),
+            ToggleTabGroupCollapsed(group_id) => self.toggle_tab_group_collapsed(*group_id, ctx),
             AddDefaultTab => {
                 let effective_mode = AISettings::as_ref(ctx).default_session_mode(ctx);
                 match effective_mode {
@@ -25280,6 +25524,18 @@ impl Workspace {
 
 fn should_reserve_traffic_light_space_in_tab_bar(side: TrafficLightSide) -> bool {
     side == TrafficLightSide::Right
+}
+
+/// Returns the indices of every tab in `tabs` that belongs to `group_id`,
+/// in ascending order.
+fn group_member_indices(
+    tabs: &[TabData],
+    group_id: TabGroupId,
+) -> impl Iterator<Item = usize> + '_ {
+    tabs.iter()
+        .enumerate()
+        .filter(move |(_, tab)| tab.group_id == Some(group_id))
+        .map(|(idx, _)| idx)
 }
 
 /// Returns every tab-bar-equivalent rect laid out in `window_id` (horizontal

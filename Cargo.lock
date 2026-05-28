@@ -2823,6 +2823,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "cloud_objects"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "cynic",
+ "derivative",
+ "itertools 0.14.0",
+ "lasso",
+ "pathfinder_geometry",
+ "schemars",
+ "serde",
+ "session-sharing-protocol",
+ "settings_value",
+ "thiserror 2.0.17",
+ "uuid",
+ "warp_core",
+ "warp_graphql",
+ "warpui_core",
+]
+
+[[package]]
 name = "cmac"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14352,6 +14374,7 @@ dependencies = [
  "channel_versions",
  "chrono",
  "clap",
+ "cloud_objects",
  "cocoa 0.26.0",
  "comfy-table",
  "command",
@@ -14461,7 +14484,6 @@ dependencies = [
  "os_info",
  "palette",
  "parking_lot",
- "paste",
  "pathfinder_color",
  "pathfinder_geometry",
  "permissions",
@@ -14522,7 +14544,6 @@ dependencies = [
  "syntect",
  "sysinfo",
  "tabwriter",
- "tantivy",
  "tempfile",
  "thiserror 2.0.17",
  "thousands",
@@ -14566,6 +14587,7 @@ dependencies = [
  "warp_managed_secrets",
  "warp_multi_agent_api",
  "warp_ripgrep",
+ "warp_search_core",
  "warp_server_client",
  "warp_terminal",
  "warp_util",
@@ -14589,7 +14611,7 @@ dependencies = [
 [[package]]
 name = "warp-command-signatures"
 version = "0.0.0"
-source = "git+https://github.com/warpdotdev/command-signatures.git?rev=00a032b8ea0ee5711e2077e39a92dc9ca2051cd3#00a032b8ea0ee5711e2077e39a92dc9ca2051cd3"
+source = "git+https://github.com/warpdotdev/command-signatures.git?rev=b3061096d193bf4915eabb0d03b4e6b403c6ea45#b3061096d193bf4915eabb0d03b4e6b403c6ea45"
 dependencies = [
  "cfg-if",
  "itertools 0.10.5",
@@ -14607,7 +14629,7 @@ dependencies = [
 [[package]]
 name = "warp-completion-metadata"
 version = "0.0.0"
-source = "git+https://github.com/warpdotdev/command-signatures.git?rev=00a032b8ea0ee5711e2077e39a92dc9ca2051cd3#00a032b8ea0ee5711e2077e39a92dc9ca2051cd3"
+source = "git+https://github.com/warpdotdev/command-signatures.git?rev=b3061096d193bf4915eabb0d03b4e6b403c6ea45#b3061096d193bf4915eabb0d03b4e6b403c6ea45"
 dependencies = [
  "html-escape",
  "itertools 0.10.5",
@@ -14727,6 +14749,7 @@ dependencies = [
  "dirs 6.0.0",
  "enum-iterator",
  "futures",
+ "futures-lite 1.13.0",
  "getset",
  "http 1.4.0",
  "instant",
@@ -14739,6 +14762,7 @@ dependencies = [
  "objc",
  "objc2-foundation 0.3.2",
  "parking_lot",
+ "pin-project",
  "rand 0.8.6",
  "regex",
  "reqwest",
@@ -14988,12 +15012,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "warp_search_core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "async-trait",
+ "enum-iterator",
+ "futures",
+ "futures-util",
+ "instant",
+ "itertools 0.14.0",
+ "lazy_static",
+ "log",
+ "ordered-float 3.9.2",
+ "parking_lot",
+ "paste",
+ "pathfinder_color",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "string-offset",
+ "strum",
+ "strum_macros",
+ "tantivy",
+ "warp_core",
+ "warpui_core",
+]
+
+[[package]]
 name = "warp_server_client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
  "chrono",
+ "cloud_objects",
  "cynic",
  "derivative",
  "diesel",
