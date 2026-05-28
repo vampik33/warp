@@ -334,7 +334,7 @@ pub struct DiffMatchFailures {
     pub noop_deltas: u8,
     /// Search blocks that are missing line numbers.
     pub missing_line_numbers: u8,
-    /// The search/replace payloads that failed to fuzzy match. Skipped for telemetry.
+    /// The search blocks that failed to fuzzy match. Skipped for telemetry.
     #[serde(skip)]
     pub fuzzy_match_failure_details: Vec<DiffMatchFailure>,
 }
@@ -342,7 +342,6 @@ pub struct DiffMatchFailures {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiffMatchFailure {
     pub search: String,
-    pub replace: Option<String>,
     pub range: Option<Range<usize>>,
 }
 
@@ -468,7 +467,6 @@ pub fn fuzzy_match_v4a_diffs(
                 failures.fuzzy_match_failures += 1;
                 failures.fuzzy_match_failure_details.push(DiffMatchFailure {
                     search: capped_failure_text(&v4a_hunk_search_text(diff)),
-                    replace: Some(capped_failure_text(&diff.new)),
                     range: None,
                 });
             }
@@ -672,7 +670,6 @@ fn fuzzy_match_file_diffs(
                 failures.fuzzy_match_failures += 1;
                 failures.fuzzy_match_failure_details.push(DiffMatchFailure {
                     search: capped_failure_text(&search),
-                    replace: Some(capped_failure_text(&diff.replace)),
                     range: parsed_line_range,
                 });
             }

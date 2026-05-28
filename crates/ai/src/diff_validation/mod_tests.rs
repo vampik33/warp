@@ -415,7 +415,6 @@ fn test_v4a_no_match() {
         failures.fuzzy_match_failure_details,
         vec![DiffMatchFailure {
             search: "fn does_not_exist() {\n    unrelated_code();\n}".to_string(),
-            replace: Some("    new_code();".to_string()),
             range: None,
         }]
     );

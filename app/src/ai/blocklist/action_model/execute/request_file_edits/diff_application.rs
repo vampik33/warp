@@ -189,12 +189,6 @@ fn append_fuzzy_match_failure(message: &mut String, failure: &DiffMatchFailure) 
     // Add the search block.
     message.push_str("Search:\n");
     message.push_str(&failure.search);
-
-    // Add the replacement content if it exists.
-    if let Some(replace) = &failure.replace {
-        message.push_str("\nReplace:\n");
-        message.push_str(replace);
-    }
 }
 
 /// Given a list of suggested edits from the server API, parse it into applicable diffs to be shown
