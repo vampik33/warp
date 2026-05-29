@@ -73,6 +73,7 @@ message ServerMessage {
     GetFragmentMetadataFromHashResponse get_fragment_metadata_from_hash_response = 24;
     GetBranchesResponse get_branches_response = 25;
     UploadHandoffSnapshotResponse upload_handoff_snapshot_response = 26;
+    ProjectContextFilesSnapshot project_context_files_snapshot = 27;
   }
 }
 
@@ -217,6 +218,24 @@ message FileNodeMetadata {
   string path = 1;
   optional string extension = 2;
   bool ignored = 3;
+}
+
+enum ProjectContextFileKind {
+  PROJECT_CONTEXT_FILE_KIND_UNSPECIFIED = 0;
+  PROJECT_SKILLS = 1;
+  PROJECT_RULES = 2;
+}
+
+message ProjectContextFile {
+  string path = 1;
+  string content = 2;
+}
+
+// Server → client: authoritative replacement snapshot of feature-owned project context files.
+message ProjectContextFilesSnapshot {
+  string repo_path = 1;
+  ProjectContextFileKind kind = 2;
+  repeated ProjectContextFile files = 3;
 }
 
 // Mirrors FileTreeEntryUpdate in Rust. Describes a subtree patch rooted

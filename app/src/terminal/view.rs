@@ -4643,6 +4643,7 @@ impl TerminalView {
                     | RemoteServerManagerEvent::RepoMetadataSnapshot { .. }
                     | RemoteServerManagerEvent::RepoMetadataUpdated { .. }
                     | RemoteServerManagerEvent::RepoMetadataDirectoryLoaded { .. }
+                    | RemoteServerManagerEvent::ProjectContextFilesSnapshot { .. }
                     | RemoteServerManagerEvent::CodebaseIndexStatusesSnapshot { .. }
                     | RemoteServerManagerEvent::CodebaseIndexStatusUpdated { .. }
                     | RemoteServerManagerEvent::CodebaseIndexMutationFailed { .. }

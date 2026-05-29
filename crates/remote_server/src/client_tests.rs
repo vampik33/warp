@@ -10,7 +10,8 @@ use crate::proto::{
     CodebaseIndexStatusesSnapshot, ErrorCode, FileOperationError, FragmentMetadata,
     FragmentMetadataLookupError, FragmentMetadataLookupErrorCode,
     GetFragmentMetadataFromHashResponse, GetFragmentMetadataFromHashSuccess, InitializeResponse,
-    MissingFragmentMetadata, RunCommandResponse, RunCommandSuccess, ServerMessage,
+    MissingFragmentMetadata, ProjectContextFile, ProjectContextFileKind,
+    ProjectContextFilesSnapshot, RunCommandResponse, RunCommandSuccess, ServerMessage,
 };
 use crate::protocol;
 
@@ -107,6 +108,48 @@ async fn codebase_index_push_messages_become_client_events() {
     }
 }
 
+#[tokio::test]
+async fn project_context_snapshot_push_message_becomes_client_event() {
+    let (client_stream, server_stream) = tokio::io::duplex(4096);
+    let (server_read, server_write) = tokio::io::split(server_stream);
+    let (client_read, client_write) = tokio::io::split(client_stream);
+    drop(server_read);
+
+    let executor = executor::Background::default();
+    let (_client, event_rx, _failure_rx) =
+        RemoteServerClient::new(client_read.compat(), client_write.compat_write(), &executor);
+    let mut writer = server_write.compat_write();
+
+    protocol::write_server_message(
+        &mut writer,
+        &ServerMessage {
+            request_id: String::new(),
+            message: Some(server_message::Message::ProjectContextFilesSnapshot(
+                ProjectContextFilesSnapshot {
+                    repo_path: "/repo".to_string(),
+                    kind: ProjectContextFileKind::ProjectRules.into(),
+                    files: vec![ProjectContextFile {
+                        path: "/repo/WARP.md".to_string(),
+                        content: "remote rule".to_string(),
+                    }],
+                },
+            )),
+        },
+    )
+    .await
+    .unwrap();
+    writer.flush().await.unwrap();
+
+    match event_rx.recv().await.unwrap() {
+        ClientEvent::ProjectContextFilesSnapshotReceived { snapshot } => {
+            assert_eq!(snapshot.repo_path, "/repo");
+            assert_eq!(snapshot.kind, ProjectContextFileKind::ProjectRules as i32);
+            assert_eq!(snapshot.files[0].path, "/repo/WARP.md");
+            assert_eq!(snapshot.files[0].content, "remote rule");
+        }
+        other => panic!("Expected ProjectContextFilesSnapshotReceived, got {other:?}"),
+    }
+}
 /// Sets up a duplex stream, spawns `mock_server_with` with the given responder,
 /// and returns a connected `RemoteServerClient`, its event receiver, and the
 /// background executor (which must be kept alive for the test duration).

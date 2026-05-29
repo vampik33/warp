@@ -10,6 +10,7 @@ use ::ai::index::full_source_code_embedding::manager::{
 use ::ai::index::full_source_code_embedding::{
     ContentHash, FragmentMetadata as LocalFragmentMetadata, NodeHash,
 };
+use ::ai::project_context::model::{ProjectContextModel, ProjectRule};
 use remote_server::proto::OpenBufferSuccess;
 use repo_metadata::repositories::{DetectedRepositories, RepoDetectionSource};
 use repo_metadata::{RepoMetadataEvent, RepoMetadataModel, RepositoryIdentifier};
@@ -47,11 +48,12 @@ use super::proto::{
     GetDiffStateResponse, GetFragmentMetadataFromHash, GetFragmentMetadataFromHashResponse,
     GetFragmentMetadataFromHashSuccess, IndexCodebase, Initialize, InitializeResponse,
     MissingFragmentMetadata, NavigatedToDirectory, NavigatedToDirectoryResponse, OpenBuffer,
-    OpenBufferResponse, ReadFileContextResponse, ResolveConflict, ResolveConflictResponse,
-    ResolveConflictSuccess, ResyncCodebase, RunCommandError, RunCommandErrorCode,
-    RunCommandRequest, RunCommandResponse, RunCommandSuccess, SaveBuffer, SaveBufferResponse,
-    SaveBufferSuccess, ServerMessage, SessionBootstrapped, TextEdit, UploadHandoffSnapshot,
-    WriteFile, WriteFileResponse, WriteFileSuccess,
+    OpenBufferResponse, ProjectContextFile, ProjectContextFileKind, ProjectContextFilesSnapshot,
+    ReadFileContextResponse, ResolveConflict, ResolveConflictResponse, ResolveConflictSuccess,
+    ResyncCodebase, RunCommandError, RunCommandErrorCode, RunCommandRequest, RunCommandResponse,
+    RunCommandSuccess, SaveBuffer, SaveBufferResponse, SaveBufferSuccess, ServerMessage,
+    SessionBootstrapped, TextEdit, UploadHandoffSnapshot, WriteFile, WriteFileResponse,
+    WriteFileSuccess,
 };
 use super::server_buffer_tracker::{PendingBufferRequestKind, ServerBufferTracker};
 use crate::code::global_buffer_model::{GlobalBufferModel, GlobalBufferModelEvent};
@@ -349,14 +351,30 @@ impl ServerModel {
                             sent_roots.insert(path.clone());
                         }
                     }
+                    me.push_authoritative_project_rule_snapshot(path.clone(), ctx);
                 }
-                RepoMetadataEvent::RepositoryRemoved { .. }
-                | RepoMetadataEvent::FileTreeUpdated { .. }
-                | RepoMetadataEvent::FileTreeEntryUpdated { .. }
-                | RepoMetadataEvent::UpdatingRepositoryFailed { .. }
+                RepoMetadataEvent::RepositoryRemoved {
+                    id: RepositoryIdentifier::Local(path),
+                } => me.push_project_rule_snapshot(path, Vec::new()),
+                RepoMetadataEvent::UpdatingRepositoryFailed {
+                    id: RepositoryIdentifier::Local(path),
+                } => me.push_authoritative_project_rule_snapshot(path.clone(), ctx),
+                RepoMetadataEvent::FileTreeUpdated { .. }
+                | RepoMetadataEvent::FileTreeEntryUpdated {
+                    id: RepositoryIdentifier::Remote(_),
+                }
+                | RepoMetadataEvent::RepositoryRemoved {
+                    id: RepositoryIdentifier::Remote(_),
+                }
+                | RepoMetadataEvent::UpdatingRepositoryFailed {
+                    id: RepositoryIdentifier::Remote(_),
+                }
                 | RepoMetadataEvent::RepositoryUpdated {
                     id: RepositoryIdentifier::Remote(_),
                 } => {}
+                RepoMetadataEvent::FileTreeEntryUpdated {
+                    id: RepositoryIdentifier::Local(path),
+                } => me.push_authoritative_project_rule_snapshot(path.clone(), ctx),
             });
         }
         let index_manager = CodebaseIndexManager::handle(ctx);
@@ -823,6 +841,46 @@ impl ServerModel {
             None,
             server_message::Message::CodebaseIndexStatusUpdated(CodebaseIndexStatusUpdated {
                 status: Some(status),
+            }),
+        );
+    }
+
+    fn push_authoritative_project_rule_snapshot(
+        &mut self,
+        repo_path: StandardizedPath,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(local_path) = repo_path.to_local_path() else {
+            return;
+        };
+        ctx.spawn(
+            async move { ProjectContextModel::read_project_rules_from_metadata_root(&local_path).await },
+            move |me, rules, _ctx| match rules {
+                Ok(rules) => me.push_project_rule_snapshot(&repo_path, rules),
+                Err(error) => {
+                    log::warn!("Failed to build daemon project-rule snapshot: {error:#}");
+                }
+            },
+        );
+    }
+
+    fn push_project_rule_snapshot(&self, repo_path: &StandardizedPath, rules: Vec<ProjectRule>) {
+        let files = rules
+            .into_iter()
+            .filter_map(|rule| {
+                Some(ProjectContextFile {
+                    path: rule.path.to_local_path()?.to_string_lossy().to_string(),
+                    content: rule.content,
+                })
+            })
+            .collect();
+        self.send_server_message(
+            None,
+            None,
+            server_message::Message::ProjectContextFilesSnapshot(ProjectContextFilesSnapshot {
+                repo_path: repo_path.to_string(),
+                kind: ProjectContextFileKind::ProjectRules.into(),
+                files,
             }),
         );
     }
@@ -1747,12 +1805,15 @@ impl ServerModel {
                             None,
                             server_message::Message::RepoMetadataSnapshot(
                                 super::proto::RepoMetadataSnapshot {
-                                    repo_path: indexed_path,
+                                    repo_path: indexed_path.clone(),
                                     entries,
                                     sync_complete: true,
                                 },
                             ),
                         );
+                        if is_git {
+                            me.push_authoritative_project_rule_snapshot(root_path.clone(), ctx);
+                        }
                         if is_git {
                             if let Some(sent_roots) = me
                                 .snapshot_sent_roots_by_connection

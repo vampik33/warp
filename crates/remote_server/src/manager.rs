@@ -27,7 +27,7 @@ use crate::codebase_index_proto::RemoteCodebaseIndexStatus;
 use crate::proto::{
     diff_state, get_diff_state_response, CodebaseIndexLimits, DiffMode, DiffState,
     DiffStateErrorValue, DiffStateFileDelta, DiffStateMetadataUpdate, DiffStateSnapshot,
-    FileStatusInfo, GetDiffStateResponse, TextEdit,
+    FileStatusInfo, GetDiffStateResponse, ProjectContextFilesSnapshot, TextEdit,
 };
 use crate::repo_metadata_proto::proto_load_repo_metadata_directory_response_to_update;
 #[cfg(not(target_family = "wasm"))]
@@ -254,6 +254,7 @@ fn client_event_kind(event: &ClientEvent) -> &'static str {
         ClientEvent::Disconnected => "disconnected",
         ClientEvent::RepoMetadataSnapshotReceived { .. } => "repo_metadata_snapshot",
         ClientEvent::RepoMetadataUpdated { .. } => "repo_metadata_updated",
+        ClientEvent::ProjectContextFilesSnapshotReceived { .. } => "project_context_files_snapshot",
         ClientEvent::CodebaseIndexStatusesSnapshotReceived { .. } => {
             "codebase_index_statuses_snapshot"
         }
@@ -463,6 +464,11 @@ pub enum RemoteServerManagerEvent {
         host_id: HostId,
         update: RepoMetadataUpdate,
     },
+    /// Authoritative server-discovered project-context file contents.
+    ProjectContextFilesSnapshot {
+        host_id: HostId,
+        snapshot: ProjectContextFilesSnapshot,
+    },
     /// A full remote codebase-index status snapshot was pushed or requested.
     CodebaseIndexStatusesSnapshot {
         host_id: HostId,
@@ -607,6 +613,7 @@ impl RemoteServerManagerEvent {
             | RemoteServerManagerEvent::RepoMetadataSnapshot { .. }
             | RemoteServerManagerEvent::RepoMetadataUpdated { .. }
             | RemoteServerManagerEvent::RepoMetadataDirectoryLoaded { .. }
+            | RemoteServerManagerEvent::ProjectContextFilesSnapshot { .. }
             | RemoteServerManagerEvent::CodebaseIndexStatusesSnapshot { .. }
             | RemoteServerManagerEvent::CodebaseIndexStatusUpdated {
                 session_id: None, ..
@@ -2099,6 +2106,12 @@ impl RemoteServerManager {
             }
             ClientEvent::RepoMetadataUpdated { update } => {
                 ctx.emit(RemoteServerManagerEvent::RepoMetadataUpdated { host_id, update });
+            }
+            ClientEvent::ProjectContextFilesSnapshotReceived { snapshot } => {
+                ctx.emit(RemoteServerManagerEvent::ProjectContextFilesSnapshot {
+                    host_id,
+                    snapshot,
+                });
             }
             ClientEvent::CodebaseIndexStatusesSnapshotReceived { statuses } => {
                 let statuses = statuses

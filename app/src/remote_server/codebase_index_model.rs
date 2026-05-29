@@ -454,6 +454,7 @@ impl RemoteCodebaseIndexModel {
             | RemoteServerManagerEvent::RepoMetadataSnapshot { .. }
             | RemoteServerManagerEvent::RepoMetadataUpdated { .. }
             | RemoteServerManagerEvent::RepoMetadataDirectoryLoaded { .. }
+            | RemoteServerManagerEvent::ProjectContextFilesSnapshot { .. }
             | RemoteServerManagerEvent::BufferUpdated { .. }
             | RemoteServerManagerEvent::BufferConflictDetected { .. }
             | RemoteServerManagerEvent::DiffStateSnapshotReceived { .. }

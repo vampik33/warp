@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ai::project_context::model::ProjectRule;
+use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warp_util::standardized_path::StandardizedPath;
 use warpui::App;
 
 use super::super::diff_state_tracker::RemoteDiffStateManager;
-use super::super::proto::{Authenticate, Initialize};
+use super::super::proto::{server_message, Authenticate, Initialize, ProjectContextFileKind};
 use super::super::server_buffer_tracker::ServerBufferTracker;
 use super::{PendingFileOps, ServerModel};
 use crate::auth::auth_state::AuthState;
@@ -44,6 +46,49 @@ fn fresh_model_starts_without_auth_token() {
         assert_eq!(model.auth_token().as_deref(), None);
         assert_eq!(model.auth_state.user_id(), None);
         assert_eq!(model.auth_state.user_email(), None);
+    });
+}
+
+#[test]
+fn project_rule_snapshot_serializes_typed_context_files() {
+    App::test((), |mut app| async move {
+        let mut model = test_model(&mut app);
+        let (message_tx, message_rx) = async_channel::unbounded();
+        model
+            .connection_senders
+            .insert(uuid::Uuid::new_v4(), message_tx);
+
+        let repo_path = StandardizedPath::try_new("/repo").unwrap();
+        model.push_project_rule_snapshot(
+            &repo_path,
+            vec![ProjectRule {
+                path: LocalOrRemotePath::Local("/repo/WARP.md".into()),
+                content: "server rule".to_string(),
+            }],
+        );
+
+        let message = message_rx.recv().await.unwrap();
+        match message.message.unwrap() {
+            server_message::Message::ProjectContextFilesSnapshot(snapshot) => {
+                assert_eq!(snapshot.repo_path, "/repo");
+                assert_eq!(snapshot.kind, ProjectContextFileKind::ProjectRules as i32);
+                assert_eq!(snapshot.files[0].path, "/repo/WARP.md");
+                assert_eq!(snapshot.files[0].content, "server rule");
+            }
+            other => panic!("expected a project-context snapshot, got {other:?}"),
+        }
+
+        model.push_project_rule_snapshot(&repo_path, Vec::new());
+
+        let message = message_rx.recv().await.unwrap();
+        match message.message.unwrap() {
+            server_message::Message::ProjectContextFilesSnapshot(snapshot) => {
+                assert_eq!(snapshot.repo_path, "/repo");
+                assert_eq!(snapshot.kind, ProjectContextFileKind::ProjectRules as i32);
+                assert!(snapshot.files.is_empty());
+            }
+            other => panic!("expected an empty project-context snapshot, got {other:?}"),
+        }
     });
 }
 

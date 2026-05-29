@@ -486,6 +486,10 @@ impl LocalRepoMetadataModel {
     pub fn repository_state(&self, repo_path: &StandardizedPath) -> Option<&IndexedRepoState> {
         self.repositories.get(repo_path)
     }
+    /// Returns all tracked local repository paths, including pending and failed repositories.
+    pub fn repository_paths(&self) -> impl Iterator<Item = &StandardizedPath> {
+        self.repositories.keys()
+    }
 
     /// Checks if a repository is being tracked and indexed.
     pub fn has_repository(&self, repo_path: &StandardizedPath) -> bool {

@@ -21,10 +21,10 @@ use crate::proto::{
     FileStatusInfo, FragmentMetadataLookupErrorCode, GetBranches, GetDiffState,
     GetDiffStateResponse, GetFragmentMetadataFromHash, GetFragmentMetadataFromHashSuccess,
     IndexCodebase, Initialize, InitializeResponse, LoadRepoMetadataDirectoryResponse,
-    NavigatedToDirectoryResponse, OpenBuffer, OpenBufferResponse, ReadFileContextRequest,
-    ReadFileContextResponse, ResyncCodebase, RunCommandRequest, RunCommandResponse, SaveBuffer,
-    ServerMessage, SessionBootstrapped, TextEdit, UnsubscribeDiffState, UploadHandoffSnapshot,
-    UploadHandoffSnapshotResponse, WriteFile,
+    NavigatedToDirectoryResponse, OpenBuffer, OpenBufferResponse, ProjectContextFilesSnapshot,
+    ReadFileContextRequest, ReadFileContextResponse, ResyncCodebase, RunCommandRequest,
+    RunCommandResponse, SaveBuffer, ServerMessage, SessionBootstrapped, TextEdit,
+    UnsubscribeDiffState, UploadHandoffSnapshot, UploadHandoffSnapshotResponse, WriteFile,
 };
 use crate::repo_metadata_proto::{proto_snapshot_to_update, proto_to_repo_metadata_update};
 
@@ -92,6 +92,10 @@ pub enum ClientEvent {
     /// An incremental repo metadata update was pushed by the server.
     RepoMetadataUpdated {
         update: repo_metadata::RepoMetadataUpdate,
+    },
+    /// An authoritative project-context replacement snapshot was pushed by the server.
+    ProjectContextFilesSnapshotReceived {
+        snapshot: ProjectContextFilesSnapshot,
     },
     /// A full remote codebase-index status snapshot was pushed by the server.
     CodebaseIndexStatusesSnapshotReceived {
@@ -842,6 +846,9 @@ impl RemoteServerClient {
             server_message::Message::RepoMetadataUpdate(push) => {
                 let update = proto_to_repo_metadata_update(&push)?;
                 Some(ClientEvent::RepoMetadataUpdated { update })
+            }
+            server_message::Message::ProjectContextFilesSnapshot(snapshot) => {
+                Some(ClientEvent::ProjectContextFilesSnapshotReceived { snapshot })
             }
             server_message::Message::CodebaseIndexStatusesSnapshot(snapshot) => {
                 let statuses = proto_to_codebase_index_statuses_snapshot(&snapshot);
