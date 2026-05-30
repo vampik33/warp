@@ -23,7 +23,7 @@ use rustc_hash::FxHashMap;
 use super::{
     autotracking, ActionCallback, BlurContext, FocusContext, GlobalActionCallback, GlobalShortcut,
     InvalidationCallback, Observation, PendingUnsubscribes, RefCounts, Subscription, TaskCallback,
-    TuiWindow, TypedActionCallback, ViewType,
+    TuiTypedActionCallback, TuiWindow, TypedActionCallback, ViewType,
 };
 use crate::accessibility::{AccessibilityVerbosity, ActionAccessibilityContent};
 use crate::actions::StandardAction;
@@ -56,12 +56,12 @@ use crate::util::post_inc;
 use crate::windowing::{self, WindowCallbacks, WindowManager};
 use crate::{
     assets, rendering, AccessibilityData, Action, AddSingletonModel, AddWindowOptions, AnyModel,
-    AnyModelHandle, AnyView, ApplicationBundleInfo, Clipboard, CursorInfo, Effect, Element, Entity,
-    EntityId, Event, GetSingletonModelHandle, ModelAsRef, ModelContext, ModelHandle,
+    AnyModelHandle, AnyTuiView, AnyView, ApplicationBundleInfo, Clipboard, CursorInfo, Effect,
+    Element, Entity, EntityId, Event, GetSingletonModelHandle, ModelAsRef, ModelContext, ModelHandle,
     NextNewWindowsHasThisWindowsBoundsUponClose, Presenter, ReadModel, ReadTuiView, ReadView,
-    Scene, SingletonEntity, SpawnedFuture, TaskId, TuiView, TuiViewAsRef, TuiViewContext,
-    TuiViewHandle, TypedActionView, UpdateModel, UpdateTuiView, UpdateView, View, ViewAsRef,
-    ViewContext, ViewHandle, WindowId, WindowInvalidation, ZoomFactor,
+    Scene, SingletonEntity, SpawnedFuture, TaskId, TuiTypedActionView, TuiView, TuiViewAsRef,
+    TuiViewContext, TuiViewHandle, TypedActionView, UpdateModel, UpdateTuiView, UpdateView, View,
+    ViewAsRef, ViewContext, ViewHandle, WindowId, WindowInvalidation, ZoomFactor,
 };
 
 lazy_static! {
@@ -223,6 +223,20 @@ impl App {
         );
     }
 
+    pub fn dispatch_tui_typed_action(
+        &self,
+        window_id: WindowId,
+        responder_chain: &[EntityId],
+        action: &dyn Action,
+    ) -> bool {
+        self.0.borrow_mut().dispatch_tui_typed_action(
+            window_id,
+            responder_chain,
+            action,
+            log::Level::Info,
+        )
+    }
+
     pub fn last_active_timestamp() -> i64 {
         LAST_USER_ACTION_UNIX_TIMESTAMP.load(Ordering::SeqCst)
     }
@@ -268,6 +282,21 @@ impl App {
     ) -> Result<bool> {
         let mut state = self.0.borrow_mut();
         state.dispatch_keystroke(window_id, responder_chain, keystroke, is_composing)
+    }
+
+    pub fn dispatch_tui_keystroke(
+        &self,
+        window_id: WindowId,
+        responder_chain: &[EntityId],
+        keystroke: &Keystroke,
+    ) -> Result<bool> {
+        self.0
+            .borrow_mut()
+            .dispatch_tui_keystroke(window_id, responder_chain, keystroke)
+    }
+
+    pub fn focus_tui_view(&mut self, window_id: WindowId, view_id: EntityId) {
+        self.update(|ctx| ctx.focus(window_id, view_id));
     }
 
     pub fn add_model<T, F>(&mut self, build_model: F) -> ModelHandle<T>
@@ -395,12 +424,39 @@ impl App {
         self.0.borrow_mut().add_tui_window(build_root_view)
     }
 
+    pub fn add_tui_typed_action_window<T, F>(
+        &mut self,
+        build_root_view: F,
+    ) -> (WindowId, TuiViewHandle<T>)
+    where
+        T: TuiView + TuiTypedActionView,
+        F: FnOnce(&mut TuiViewContext<T>) -> T,
+    {
+        self.0
+            .borrow_mut()
+            .add_tui_typed_action_window(build_root_view)
+    }
+
     pub fn add_tui_view<T, F>(&mut self, window_id: WindowId, build_view: F) -> TuiViewHandle<T>
     where
         T: TuiView,
         F: FnOnce(&mut TuiViewContext<T>) -> T,
     {
         self.0.borrow_mut().add_tui_view(window_id, build_view)
+    }
+
+    pub fn add_tui_typed_action_view<T, F>(
+        &mut self,
+        window_id: WindowId,
+        build_view: F,
+    ) -> TuiViewHandle<T>
+    where
+        T: TuiView + TuiTypedActionView,
+        F: FnOnce(&mut TuiViewContext<T>) -> T,
+    {
+        self.0
+            .borrow_mut()
+            .add_tui_typed_action_view(window_id, build_view)
     }
 
     pub fn read<T, F: FnOnce(&AppContext) -> T>(&self, callback: F) -> T {
@@ -646,6 +702,7 @@ pub struct AppContext {
     /// Safety Note: The `TypedActionCallback` must only be called with parameters that match the
     /// type keys, as it requires the values to appropriately downcast.
     typed_actions: HashMap<ActionType, HashMap<ViewType, Box<TypedActionCallback>>>,
+    tui_typed_actions: HashMap<ActionType, HashMap<ViewType, Box<TuiTypedActionCallback>>>,
     presenters: HashMap<WindowId, Rc<RefCell<Presenter>>>,
     /// Configuration options related to rendering of the application.
     rendering_config: rendering::Config,
@@ -812,6 +869,7 @@ impl AppContext {
             // AppContext fields
             actions: Default::default(),
             typed_actions: Default::default(),
+            tui_typed_actions: Default::default(),
             global_actions: Default::default(),
             presenters: Default::default(),
             rendering_config: Default::default(),
@@ -1299,6 +1357,35 @@ impl AppContext {
             .or_insert(handler);
     }
 
+    fn add_tui_typed_action<V>(&mut self)
+    where
+        V: TuiTypedActionView + TuiView,
+    {
+        let handler = Box::new(
+            |view: &mut dyn AnyTuiView,
+             action: &dyn Any,
+             app: &mut AppContext,
+             window_id: WindowId,
+             view_id: EntityId| {
+                let action = action
+                    .downcast_ref()
+                    .expect("Handlers are hashed by action type");
+                let view = view
+                    .as_any_mut()
+                    .downcast_mut()
+                    .expect("Handlers are hashed by view type");
+                let mut ctx = TuiViewContext::new(app, window_id, view_id);
+                V::handle_action(view, action, &mut ctx);
+            },
+        );
+
+        self.tui_typed_actions
+            .entry(ActionType::of::<V::Action>())
+            .or_default()
+            .entry(ViewType::of::<V>())
+            .or_insert(handler);
+    }
+
     pub fn add_action<S, V, T, F>(&mut self, name: S, mut handler: F)
     where
         S: Into<String>,
@@ -1566,6 +1653,62 @@ impl AppContext {
 
         if !handled {
             log::warn!("Action {action:?} was dispatched, but no view handled it");
+        }
+
+        self.flush_effects();
+        handled
+    }
+
+    pub fn dispatch_tui_typed_action(
+        &mut self,
+        window_id: WindowId,
+        responder_chain: &[EntityId],
+        action: &dyn Action,
+        log_level: log::Level,
+    ) -> bool {
+        log::log!(
+            log_level,
+            "dispatching TUI typed action: {}::{action:?}",
+            action.type_name()
+        );
+
+        let action_type: ActionType = action.into();
+        let Some(mut handlers) = self.tui_typed_actions.remove(&action_type) else {
+            log::warn!("Dispatched TUI action has no handlers: {:?}", &action);
+            return false;
+        };
+
+        self.pending_flushes += 1;
+        let handled = responder_chain.iter().rev().any(|view_id| {
+            let mut view = match self
+                .tui_windows
+                .get_mut(&window_id)
+                .and_then(|window| window.views.remove(view_id))
+            {
+                Some(view) => view,
+                None => return false,
+            };
+
+            let view_type = ViewType(view.as_any().type_id());
+            let found = match handlers.get_mut(&view_type) {
+                Some(handler) => {
+                    handler(view.as_mut(), action.as_any(), self, window_id, *view_id);
+                    true
+                }
+                None => false,
+            };
+
+            if let Some(window) = self.tui_windows.get_mut(&window_id) {
+                window.views.insert(*view_id, view);
+            }
+
+            found
+        });
+
+        self.tui_typed_actions.insert(action_type, handlers);
+
+        if !handled {
+            log::warn!("TUI action {action:?} was dispatched, but no view handled it");
         }
 
         self.flush_effects();
@@ -1899,6 +2042,29 @@ impl AppContext {
         Ok(context_chain)
     }
 
+    fn contexts_from_tui_responder_chain(
+        &self,
+        window_id: WindowId,
+        responder_chain: &[EntityId],
+    ) -> Result<Vec<Context>> {
+        let mut context_chain = Vec::new();
+        for view_id in responder_chain {
+            if let Some(view) = self
+                .tui_windows
+                .get(&window_id)
+                .and_then(|window| window.views.get(view_id))
+            {
+                context_chain.push(view.keymap_context(self));
+            } else {
+                return Err(anyhow!(
+                    "TUI view {} in responder chain does not exist",
+                    view_id
+                ));
+            }
+        }
+        Ok(context_chain)
+    }
+
     fn dispatch_standard_action(
         &mut self,
         action: StandardAction,
@@ -2062,6 +2228,41 @@ impl AppContext {
                     false
                 }
                 MatchResult::Action(action) => self.dispatch_typed_action(
+                    window_id,
+                    &responder_chain[0..=i],
+                    action.as_ref(),
+                    log::Level::Info,
+                ),
+            };
+
+            if handled {
+                return Ok(true);
+            }
+        }
+        Ok(pending)
+    }
+
+    pub fn dispatch_tui_keystroke(
+        &mut self,
+        window_id: WindowId,
+        responder_chain: &[EntityId],
+        keystroke: &Keystroke,
+    ) -> Result<bool> {
+        let mut context_chain =
+            self.contexts_from_tui_responder_chain(window_id, responder_chain)?;
+        let mut pending = false;
+        for (i, ctx) in context_chain.iter_mut().enumerate().rev() {
+            let handled = match self.keystroke_matcher.push_keystroke(
+                keystroke.clone(),
+                responder_chain[i],
+                ctx,
+            ) {
+                MatchResult::None => false,
+                MatchResult::Pending => {
+                    pending = true;
+                    false
+                }
+                MatchResult::Action(action) => self.dispatch_tui_typed_action(
                     window_id,
                     &responder_chain[0..=i],
                     action.as_ref(),
@@ -2450,7 +2651,10 @@ impl AppContext {
                                         presenter.clone(),
                                     );
                                 }
-                            }
+                                true
+                            } else {
+                                false
+                            };
                         }
                     }
                     // Update the last mouse moved event on mouse up with the new position.
@@ -2916,6 +3120,40 @@ impl AppContext {
 
         let handle = TuiViewHandle::new(window_id, view_id, &self.ref_counts);
         self.flush_effects();
+        handle
+    }
+
+    pub fn add_tui_typed_action_window<T, F>(
+        &mut self,
+        build_root_view: F,
+    ) -> (WindowId, TuiViewHandle<T>)
+    where
+        T: TuiView + TuiTypedActionView,
+        F: FnOnce(&mut TuiViewContext<T>) -> T,
+    {
+        let window_id = WindowId::new();
+        self.tui_windows.insert(window_id, TuiWindow::default());
+        let root_handle = self.add_tui_typed_action_view(window_id, build_root_view);
+        let root_view_id = root_handle.id();
+        self.tui_windows
+            .get_mut(&window_id)
+            .expect("this TUI window was just inserted and should still exist")
+            .root_view = Some(root_handle.clone().into());
+        self.focus(window_id, root_view_id);
+        (window_id, root_handle)
+    }
+
+    pub fn add_tui_typed_action_view<T, F>(
+        &mut self,
+        window_id: WindowId,
+        build_view: F,
+    ) -> TuiViewHandle<T>
+    where
+        T: TuiView + TuiTypedActionView,
+        F: FnOnce(&mut TuiViewContext<T>) -> T,
+    {
+        let handle = self.add_tui_view(window_id, build_view);
+        self.add_tui_typed_action::<T>();
         handle
     }
 
@@ -3790,29 +4028,27 @@ impl AppContext {
                             } else {
                                 false
                             }
-                        } else {
-                            if let Some(mut view) = self
-                                .tui_windows
-                                .get_mut(&current_window_id)
-                                .and_then(|window| window.views.remove(view_id))
-                            {
-                                callback(
-                                    view.as_any_mut(),
-                                    payload.as_ref(),
-                                    self,
-                                    current_window_id,
-                                    *view_id,
-                                );
+                        } else if let Some(mut view) = self
+                            .tui_windows
+                            .get_mut(&current_window_id)
+                            .and_then(|window| window.views.remove(view_id))
+                        {
+                            callback(
+                                view.as_any_mut(),
+                                payload.as_ref(),
+                                self,
+                                current_window_id,
+                                *view_id,
+                            );
 
-                                if let Some(window) = self.tui_windows.get_mut(&current_window_id) {
-                                    window.views.insert(*view_id, view);
-                                    true
-                                } else {
-                                    false
-                                }
+                            if let Some(window) = self.tui_windows.get_mut(&current_window_id) {
+                                window.views.insert(*view_id, view);
+                                true
                             } else {
                                 false
                             }
+                        } else {
+                            false
                         }
                     }
                     Subscription::FromApp { callback } => {
@@ -3891,28 +4127,26 @@ impl AppContext {
                                     window.views.insert(*view_id, view);
                                 }
                                 true
-                            } else {
-                                if let Some(mut view) = self
-                                    .tui_windows
-                                    .get_mut(&current_window_id)
-                                    .and_then(|w| w.views.remove(view_id))
+                            } else if let Some(mut view) = self
+                                .tui_windows
+                                .get_mut(&current_window_id)
+                                .and_then(|w| w.views.remove(view_id))
+                            {
+                                callback(
+                                    view.as_any_mut(),
+                                    observed_id,
+                                    self,
+                                    current_window_id,
+                                    *view_id,
+                                );
+                                if let Some(window) =
+                                    self.tui_windows.get_mut(&current_window_id)
                                 {
-                                    callback(
-                                        view.as_any_mut(),
-                                        observed_id,
-                                        self,
-                                        current_window_id,
-                                        *view_id,
-                                    );
-                                    if let Some(window) =
-                                        self.tui_windows.get_mut(&current_window_id)
-                                    {
-                                        window.views.insert(*view_id, view);
-                                    }
-                                    true
-                                } else {
-                                    false
+                                    window.views.insert(*view_id, view);
                                 }
+                                true
+                            } else {
+                                false
                             }
                         }
                         Observation::FromApp { callback } => {

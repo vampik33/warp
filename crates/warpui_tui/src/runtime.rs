@@ -56,7 +56,7 @@ where
         Ok(())
     }
 
-    fn draw_if_dirty(&mut self, app: &App) -> io::Result<()> {
+    fn draw_if_dirty(&mut self, app: &mut App) -> io::Result<()> {
         let size = self.terminal.size()?;
         if self.last_size != Some(size) {
             self.dirty.set(true);
@@ -68,9 +68,17 @@ where
 
         let _ = app.take_window_invalidations(self.window_id);
         let frame = app.read(|ctx| {
-            self.root_view
-                .read(ctx, |view, ctx| self.presenter.render_view(view, ctx, size))
+            self.root_view.read(ctx, |view, ctx| {
+                self.presenter.render_window(
+                    self.window_id,
+                    self.root_view.id(),
+                    view,
+                    ctx,
+                    size,
+                )
+            })
         });
+        self.presenter.sync_focus(app);
         self.terminal.draw(&frame)?;
         self.last_size = Some(size);
         Ok(())

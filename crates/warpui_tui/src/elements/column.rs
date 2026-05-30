@@ -1,6 +1,6 @@
 use warpui_core::{AppContext, Event};
 
-use crate::elements::TuiElement;
+use crate::elements::{TuiElement, TuiPresentationContext};
 use crate::{TuiBuffer, TuiConstraint, TuiEventContext, TuiRect, TuiSize};
 
 pub struct TuiColumn {
@@ -74,6 +74,12 @@ impl TuiElement for TuiColumn {
             y = y.saturating_add(child_height);
         }
         None
+    }
+
+    fn present(&mut self, ctx: &mut TuiPresentationContext<'_>) {
+        for child in &mut self.children {
+            child.present(ctx);
+        }
     }
 
     fn dispatch_event(

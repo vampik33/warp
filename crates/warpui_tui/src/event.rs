@@ -5,7 +5,7 @@ use crossterm::event::{
 use warpui_core::event::{KeyEventDetails, ModifiersState};
 use warpui_core::geometry::vector::{vec2f, Vector2F};
 use warpui_core::keymap::Keystroke;
-use warpui_core::{App, Event};
+use warpui_core::{Action, App, EntityId, Event};
 
 pub enum TuiDispatchEventResult {
     PropagateToParent,
@@ -16,6 +16,7 @@ pub enum TuiDispatchEventResult {
 pub struct TuiEventDispatchResult {
     pub handled: bool,
 }
+type TuiAppUpdate = Box<dyn FnOnce(&mut App)>;
 
 pub fn vertical_scroll_lines(delta: Vector2F) -> i16 {
     let y = delta.y();
@@ -33,7 +34,14 @@ pub fn vertical_scroll_lines(delta: Vector2F) -> i16 {
 
 #[derive(Default)]
 pub struct TuiEventContext {
-    updates: Vec<Box<dyn FnOnce(&mut App)>>,
+    updates: Vec<TuiAppUpdate>,
+    typed_actions: Vec<TuiDispatchedAction>,
+    origin_view_id: Option<EntityId>,
+}
+
+pub(crate) struct TuiDispatchedAction {
+    pub(crate) origin_view_id: EntityId,
+    pub(crate) action: Box<dyn Action>,
 }
 
 impl TuiEventContext {
@@ -43,9 +51,26 @@ impl TuiEventContext {
     {
         self.updates.push(Box::new(update));
     }
+    pub fn dispatch_typed_action(&mut self, action: impl Action) {
+        let origin_view_id = self
+            .origin_view_id
+            .expect("typed actions can only be dispatched while processing a rendered TUI view");
+        self.typed_actions.push(TuiDispatchedAction {
+            origin_view_id,
+            action: Box::new(action),
+        });
+    }
 
-    pub(crate) fn take_updates(&mut self) -> Vec<Box<dyn FnOnce(&mut App)>> {
+    pub(crate) fn take_updates(&mut self) -> Vec<TuiAppUpdate> {
         std::mem::take(&mut self.updates)
+    }
+
+    pub(crate) fn take_typed_actions(&mut self) -> Vec<TuiDispatchedAction> {
+        std::mem::take(&mut self.typed_actions)
+    }
+
+    pub(crate) fn set_origin_view(&mut self, view_id: Option<EntityId>) -> Option<EntityId> {
+        std::mem::replace(&mut self.origin_view_id, view_id)
     }
 }
 

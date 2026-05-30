@@ -4,7 +4,7 @@ use std::rc::Rc;
 use warpui_core::geometry::vector::Vector2F;
 use warpui_core::{AppContext, Event};
 
-use crate::elements::TuiElement;
+use crate::elements::{TuiElement, TuiPresentationContext};
 use crate::{TuiBuffer, TuiConstraint, TuiEventContext, TuiRect, TuiSize};
 
 type TuiMouseHandler = dyn FnMut(&mut TuiEventContext, &AppContext, Vector2F);
@@ -136,6 +136,10 @@ impl TuiElement for TuiMouseArea {
 
     fn cursor_position(&self, area: TuiRect) -> Option<(u16, u16)> {
         self.child.cursor_position(area)
+    }
+
+    fn present(&mut self, ctx: &mut TuiPresentationContext<'_>) {
+        self.child.present(ctx);
     }
 
     fn dispatch_event(

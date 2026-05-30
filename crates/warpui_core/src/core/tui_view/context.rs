@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use super::TuiTypedActionView;
 use crate::core::{Observation, Subscription};
 use crate::{
     AppContext, Effect, Entity, EntityId, ModelContext, ModelHandle, TuiView, TuiViewHandle,
@@ -45,6 +46,22 @@ impl<'a, T: TuiView> TuiViewContext<'a, T> {
         F: FnOnce(&mut ModelContext<S>) -> S,
     {
         self.app.add_model(build_model)
+    }
+    pub fn add_tui_view<S, F>(&mut self, build_view: F) -> TuiViewHandle<S>
+    where
+        S: TuiView,
+        F: FnOnce(&mut TuiViewContext<S>) -> S,
+    {
+        self.app.add_tui_view(self.window_id, build_view)
+    }
+
+    pub fn add_tui_typed_action_view<S, F>(&mut self, build_view: F) -> TuiViewHandle<S>
+    where
+        S: TuiTypedActionView,
+        F: FnOnce(&mut TuiViewContext<S>) -> S,
+    {
+        self.app
+            .add_tui_typed_action_view(self.window_id, build_view)
     }
 
     pub fn subscribe_to_model<S: Entity, F>(&mut self, handle: &ModelHandle<S>, mut callback: F)

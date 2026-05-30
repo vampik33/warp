@@ -6,7 +6,7 @@ use std::any::Any;
 pub use context::TuiViewContext;
 pub use handle::{ReadTuiView, TuiViewAsRef, TuiViewHandle, UpdateTuiView, WeakTuiViewHandle};
 
-use crate::{keymap, AppContext, Entity, EntityId, WindowId};
+use crate::{keymap, Action, AppContext, Entity, EntityId, WindowId};
 
 pub trait TuiView: Entity {
     type RenderOutput: Any;
@@ -20,6 +20,12 @@ pub trait TuiView: Entity {
         ctx.set.insert(Self::ui_name());
         ctx
     }
+}
+
+pub trait TuiTypedActionView: TuiView {
+    type Action: Action;
+
+    fn handle_action(&mut self, _action: &Self::Action, _ctx: &mut TuiViewContext<Self>) {}
 }
 
 pub trait AnyTuiView {

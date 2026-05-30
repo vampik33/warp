@@ -140,6 +140,8 @@ type ActionCallback =
 
 type TypedActionCallback =
     dyn FnMut(&mut dyn AnyView, &dyn Any, &mut AppContext, WindowId, EntityId);
+type TuiTypedActionCallback =
+    dyn FnMut(&mut dyn AnyTuiView, &dyn Any, &mut AppContext, WindowId, EntityId);
 
 type GlobalActionCallback =
     dyn FnMut(&dyn Any, &'static std::panic::Location<'static>, &mut AppContext);
