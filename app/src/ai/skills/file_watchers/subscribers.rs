@@ -4,7 +4,7 @@ use ai::skills::{read_skills, ParsedSkill, SKILL_PROVIDER_DEFINITIONS};
 use async_channel::Sender;
 use futures::Future;
 use repo_metadata::repository::RepositorySubscriber;
-use repo_metadata::{Repository, RepositoryUpdate};
+use repo_metadata::{Repository, RepositoryIdentifier, RepositoryUpdate};
 use warpui::ModelContext;
 
 /// Messages sent from [`RepositorySubscriber`]s to [`SkillManager`].
@@ -12,7 +12,7 @@ pub enum SkillRepositoryMessage {
     /// Initial scan of a home skills directory (e.g., `~/.agents`).
     HomeInitialScan { skills: Vec<ParsedSkill> },
     /// Incremental file system updates from a local project fallback watcher.
-    ProjectRepositoryUpdate { update: RepositoryUpdate },
+    ProjectRepositoryUpdate { repo_id: RepositoryIdentifier },
     /// Incremental file system updates from a home provider directory.
     HomeRepositoryUpdate { update: RepositoryUpdate },
     /// File changes detected in a resolved symlink target directory.
@@ -21,6 +21,7 @@ pub enum SkillRepositoryMessage {
 
 /// A repository subscriber for project directories that forwards file change events to [`SkillManager`].
 pub struct ProjectSkillSubscriber {
+    pub repo_id: RepositoryIdentifier,
     pub message_tx: Sender<SkillRepositoryMessage>,
 }
 
@@ -38,15 +39,15 @@ impl RepositorySubscriber for ProjectSkillSubscriber {
     fn on_files_updated(
         &mut self,
         _repository: &Repository,
-        update: &RepositoryUpdate,
+        _update: &RepositoryUpdate,
         _ctx: &mut ModelContext<Repository>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
         let tx = self.message_tx.clone();
-        let update = update.clone();
+        let repo_id = self.repo_id.clone();
 
         Box::pin(async move {
             let _ = tx
-                .send(SkillRepositoryMessage::ProjectRepositoryUpdate { update })
+                .send(SkillRepositoryMessage::ProjectRepositoryUpdate { repo_id })
                 .await;
         })
     }

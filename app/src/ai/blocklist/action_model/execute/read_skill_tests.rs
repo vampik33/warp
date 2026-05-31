@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use ai::skills::{parse_skill, ParsedSkill, SkillProvider, SkillReference, SkillScope};
+use remote_server::manager::RemoteServerManager;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
 use repo_metadata::RepoMetadataModel;
@@ -30,6 +31,7 @@ fn initialize_app(app: &mut App) {
     app.add_singleton_model(RepoMetadataModel::new);
     app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
     app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+    app.add_singleton_model(RemoteServerManager::new);
     app.add_singleton_model(SkillManager::new);
 }
 

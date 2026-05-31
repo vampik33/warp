@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 
 use ai::skills::{get_provider_for_path, ParsedSkill, SkillProvider, SkillReference, SkillScope};
+use remote_server::manager::RemoteServerManager;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::{DirectoryWatcher, RepoMetadataModel};
 use tempfile::TempDir;
@@ -86,6 +87,7 @@ fn get_skills_for_working_directory_scopes_subdirectory_skills() {
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let skill_manager_handle = app.add_singleton_model(SkillManager::new);
 
         // Register the repo root so get_root_for_path returns Some.
@@ -219,6 +221,7 @@ fn get_skills_for_working_directory_name_collision_returns_both() {
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let skill_manager_handle = app.add_singleton_model(SkillManager::new);
 
         // Register the repo root so get_root_for_path returns Some.
@@ -323,6 +326,7 @@ fn cloud_environment_skills_always_included() {
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let skill_manager_handle = app.add_singleton_model(SkillManager::new);
 
         let canonical_repo_a =
@@ -532,6 +536,7 @@ fn active_skill_by_reference_resolves_exact_remote_identity() {
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let handle = app.add_singleton_model(SkillManager::new);
 
         handle.update(&mut app, |manager, _| {
@@ -564,6 +569,7 @@ fn active_skill_by_reference_distinguishes_remote_hosts_with_the_same_display_pa
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let handle = app.add_singleton_model(SkillManager::new);
 
         handle.update(&mut app, |manager, _| {
@@ -619,6 +625,7 @@ fn best_supported_provider_fast_path_returns_deduped_provider() {
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let handle = app.add_singleton_model(SkillManager::new);
 
         let claude_skill = make_skill("deploy", ".claude");
@@ -645,6 +652,7 @@ fn best_supported_provider_remaps_to_supported_provider() {
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let handle = app.add_singleton_model(SkillManager::new);
 
         let agents_skill = make_skill("deploy", ".agents");
@@ -676,6 +684,7 @@ fn best_supported_provider_falls_back_when_no_match() {
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let handle = app.add_singleton_model(SkillManager::new);
 
         let agents_skill = make_skill("deploy", ".agents");

@@ -22,7 +22,7 @@ pub enum RepoContent<'a> {
 
 use warp_util::standardized_path::StandardizedPath;
 
-use crate::entry::{BuildTreeError, BuildTreeOptions, Entry, FileId, IgnoredPathStrategy};
+use crate::entry::{BuildTreeOptions, Entry, FileId, IgnoredPathStrategy};
 use crate::repository::Repository;
 use crate::telemetry::RepoMetadataTelemetryEvent;
 use crate::{gitignores_for_directory, matches_gitignores, RepoMetadataError};
@@ -76,6 +76,14 @@ pub enum RepositoryMetadataEvent {
     FileTreeEntryUpdated {
         path: StandardizedPath,
     },
+    /// A display-only lazily loaded tree was added or updated.
+    LazyDisplayTreeUpdated {
+        path: StandardizedPath,
+    },
+    /// A display-only lazily loaded tree was removed.
+    LazyDisplayTreeRemoved {
+        path: StandardizedPath,
+    },
     UpdatingRepositoryFailed {
         path: StandardizedPath,
     },
@@ -124,6 +132,11 @@ impl IndexedRepoState {
     }
 }
 
+#[derive(Debug)]
+struct LazyDisplayTreeState {
+    tree: FileTreeState,
+    refcount: usize,
+}
 /// Singleton model for managing local repository metadata.
 ///
 /// This model tracks repositories on the local filesystem, using file watchers
@@ -134,8 +147,12 @@ impl IndexedRepoState {
 pub struct LocalRepoMetadataModel {
     /// Mapping from repository path to its indexed state.
     repositories: HashMap<StandardizedPath, IndexedRepoState>,
-    /// Refcounts for lazily-loaded standalone paths tracked in the model.
-    lazy_loaded_paths: HashMap<StandardizedPath, usize>,
+    /// Display-only lazily-loaded trees keyed by the displayed root.
+    ///
+    /// These trees intentionally remain separate from `repositories`: a partial
+    /// tree suitable for browsing must not be exposed as successful repository
+    /// metadata to project-context discovery consumers.
+    lazy_display_trees: HashMap<StandardizedPath, LazyDisplayTreeState>,
     /// File system watcher for monitoring changes.
     #[cfg(feature = "local_fs")]
     watcher: Option<ModelHandle<BulkFilesystemWatcher>>,
@@ -227,7 +244,7 @@ impl LocalRepoMetadataModel {
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         let mut model = Self {
             repositories: HashMap::new(),
-            lazy_loaded_paths: HashMap::new(),
+            lazy_display_trees: HashMap::new(),
             #[cfg(feature = "local_fs")]
             watcher: None,
             emit_incremental_updates: false,
@@ -294,23 +311,27 @@ impl LocalRepoMetadataModel {
         event: &BulkFilesystemWatcherEvent,
         ctx: &mut ModelContext<Self>,
     ) {
-        // Create a map to collect changes per repository
-        let mut repo_updates: HashMap<StandardizedPath, RepoUpdate> = HashMap::new();
+        // Create a map to collect changes per authoritative or display-only tree.
+        let mut tree_updates: HashMap<StandardizedPath, (RepoUpdate, bool)> = HashMap::new();
 
         // Process added or updated files
         for path in event.added_or_updated_iter() {
-            if let Some(repo_path) = self.find_repository_for_path(path) {
-                let repo_update = repo_updates.entry(repo_path).or_default();
+            if let Some((tree_path, lazy_display)) = self.find_watched_tree_for_path(path) {
+                let (repo_update, _) = tree_updates
+                    .entry(tree_path)
+                    .or_insert_with(|| (RepoUpdate::default(), lazy_display));
                 repo_update.added.push(path.to_path_buf());
             }
         }
 
         // Process deleted files
         for path in &event.deleted {
-            if let Some(repo_path) =
-                self.find_repository_for_path_string(path.to_string_lossy().as_ref())
+            if let Some((tree_path, lazy_display)) =
+                self.find_watched_tree_for_path_string(path.to_string_lossy().as_ref())
             {
-                let repo_update = repo_updates.entry(repo_path).or_default();
+                let (repo_update, _) = tree_updates
+                    .entry(tree_path)
+                    .or_insert_with(|| (RepoUpdate::default(), lazy_display));
                 repo_update.deleted.push(path.to_path_buf());
             } else {
                 log::warn!("Deleted file not found in any repo: {path:?} not found in any repo");
@@ -319,8 +340,10 @@ impl LocalRepoMetadataModel {
 
         // Process moved files
         for (to_path, from_path) in &event.moved {
-            if let Some(repo_path) = self.find_repository_for_path(to_path) {
-                let repo_update = repo_updates.entry(repo_path).or_default();
+            if let Some((tree_path, lazy_display)) = self.find_watched_tree_for_path(to_path) {
+                let (repo_update, _) = tree_updates
+                    .entry(tree_path)
+                    .or_insert_with(|| (RepoUpdate::default(), lazy_display));
                 repo_update
                     .moved
                     .insert(to_path.to_path_buf(), from_path.to_path_buf());
@@ -329,40 +352,74 @@ impl LocalRepoMetadataModel {
 
         // Collect all paths that have been updated and emit an event.
         ctx.emit(RepositoryMetadataEvent::FileTreeUpdated {
-            paths: repo_updates.keys().cloned().collect(),
+            paths: tree_updates
+                .iter()
+                .filter_map(|(path, (_, lazy_display))| (!lazy_display).then_some(path.clone()))
+                .collect(),
         });
         // Apply updates to each affected repository asynchronously.
         // Phase 1 (background thread): compute lightweight mutations via filesystem I/O.
         // Phase 2 (main thread callback): apply mutations directly to the tree — no clone needed.
-        for (repo_path, repo_scoped_update) in repo_updates {
-            if let Some(IndexedRepoState::Indexed(state)) = self.repositories.get_mut(&repo_path) {
-                let repo_path_clone = repo_path.clone();
+        for (tree_path, (tree_scoped_update, lazy_display)) in tree_updates {
+            let state = if lazy_display {
+                self.lazy_display_trees
+                    .get(&tree_path)
+                    .map(|state| &state.tree)
+            } else {
+                self.repositories
+                    .get(&tree_path)
+                    .and_then(|state| match state {
+                        IndexedRepoState::Indexed(state) => Some(state),
+                        IndexedRepoState::Pending(_) | IndexedRepoState::Failed(_) => None,
+                    })
+            };
+            if let Some(state) = state {
+                let tree_path_clone = tree_path.clone();
                 let gitignores_clone = state.gitignores.clone();
                 let ignored_path_interests = self.ignored_path_interests.clone();
-                let lazy_load = self.lazy_loaded_paths.contains_key(&repo_path);
                 ctx.spawn(
                     async move {
                         let mutations = Self::compute_file_tree_mutations(
-                            &repo_scoped_update,
+                            &tree_scoped_update,
                             &gitignores_clone,
                             &ignored_path_interests,
                         )
                         .await;
-                        (mutations, repo_path_clone, lazy_load)
+                        (mutations, tree_path_clone, lazy_display)
                     },
-                    |model, (mutations, repo_path, lazy_load), ctx| {
-                        if let Some(IndexedRepoState::Indexed(state)) =
-                            model.repositories.get_mut(&repo_path)
-                        {
+                    |model, (mutations, tree_path, lazy_display), ctx| {
+                        let state = if lazy_display {
+                            model
+                                .lazy_display_trees
+                                .get_mut(&tree_path)
+                                .map(|state| &mut state.tree)
+                        } else {
+                            model
+                                .repositories
+                                .get_mut(&tree_path)
+                                .and_then(|state| match state {
+                                    IndexedRepoState::Indexed(state) => Some(state),
+                                    IndexedRepoState::Pending(_) | IndexedRepoState::Failed(_) => {
+                                        None
+                                    }
+                                })
+                        };
+                        if let Some(state) = state {
                             let update = Self::apply_file_tree_mutations(
                                 &mut state.entry,
                                 mutations,
-                                lazy_load,
+                                lazy_display,
                                 model.emit_incremental_updates,
                             );
-                            ctx.emit(RepositoryMetadataEvent::FileTreeEntryUpdated {
-                                path: repo_path,
-                            });
+                            if lazy_display {
+                                ctx.emit(RepositoryMetadataEvent::LazyDisplayTreeUpdated {
+                                    path: tree_path,
+                                });
+                            } else {
+                                ctx.emit(RepositoryMetadataEvent::FileTreeEntryUpdated {
+                                    path: tree_path,
+                                });
+                            }
 
                             if let Some(update) = update {
                                 ctx.emit(RepositoryMetadataEvent::IncrementalUpdateReady {
@@ -386,6 +443,34 @@ impl LocalRepoMetadataModel {
             })
             .max_by_key(|(repo_path, _)| repo_path.as_str().len())
             .map(|(repo_path, _)| repo_path.clone())
+    }
+    #[cfg(feature = "local_fs")]
+    fn find_watched_tree_for_path_string(
+        &self,
+        path_str: &str,
+    ) -> Option<(StandardizedPath, bool)> {
+        self.repositories
+            .iter()
+            .filter_map(|(repo_path, state)| {
+                (path_str.starts_with(repo_path.as_str())
+                    && matches!(state, IndexedRepoState::Indexed(_)))
+                .then_some((repo_path, false))
+            })
+            .chain(
+                self.lazy_display_trees
+                    .keys()
+                    .filter(|path| path_str.starts_with(path.as_str()))
+                    .map(|path| (path, true)),
+            )
+            .max_by_key(|(path, _)| path.as_str().len())
+            .map(|(path, lazy_display)| (path.clone(), lazy_display))
+    }
+
+    #[cfg(feature = "local_fs")]
+    fn find_watched_tree_for_path(&self, path: &Path) -> Option<(StandardizedPath, bool)> {
+        StandardizedPath::from_local_canonicalized(path)
+            .ok()
+            .and_then(|std_path| self.find_watched_tree_for_path_string(std_path.as_str()))
     }
 
     #[cfg(feature = "local_fs")]
@@ -501,7 +586,12 @@ impl LocalRepoMetadataModel {
 
     /// Returns whether the given path is tracked as a lazily-loaded standalone path.
     pub fn is_lazy_loaded_path(&self, path: &StandardizedPath) -> bool {
-        self.lazy_loaded_paths.contains_key(path)
+        self.lazy_display_trees.contains_key(path)
+    }
+
+    /// Returns the display-only lazily-loaded tree for `path`, if one exists.
+    pub fn get_lazy_display_tree(&self, path: &StandardizedPath) -> Option<&FileTreeState> {
+        self.lazy_display_trees.get(path).map(|state| &state.tree)
     }
 
     /// Lazily indexes a standalone path with only the first level of children.
@@ -515,8 +605,8 @@ impl LocalRepoMetadataModel {
     ) -> Result<(), RepoMetadataError> {
         // Already tracked as a lazy-loaded path — increase the refcount and keep the
         // existing watcher/model entry alive.
-        if let Some(refcount) = self.lazy_loaded_paths.get_mut(path) {
-            *refcount += 1;
+        if let Some(state) = self.lazy_display_trees.get_mut(path) {
+            state.refcount += 1;
             return Ok(());
         }
 
@@ -555,8 +645,23 @@ impl LocalRepoMetadataModel {
         .map_err(RepoMetadataError::BuildTree)?;
 
         let state = FileTreeState::new_lazy_loaded(root_entry);
-        self.add_repository_internal(path.clone(), state, ctx)?;
-        self.lazy_loaded_paths.insert(path.clone(), 1);
+        if let Some(ref watcher) = self.watcher {
+            watcher.update(ctx, |watcher, _ctx| {
+                std::mem::drop(watcher.register_path(
+                    &local_path,
+                    repo_watch_filter(),
+                    RecursiveMode::Recursive,
+                ));
+            });
+        }
+        self.lazy_display_trees.insert(
+            path.clone(),
+            LazyDisplayTreeState {
+                tree: state,
+                refcount: 1,
+            },
+        );
+        ctx.emit(RepositoryMetadataEvent::LazyDisplayTreeUpdated { path: path.clone() });
         Ok(())
     }
 
@@ -567,16 +672,22 @@ impl LocalRepoMetadataModel {
         path: &StandardizedPath,
         ctx: &mut ModelContext<Self>,
     ) {
-        let Some(refcount) = self.lazy_loaded_paths.get_mut(path) else {
+        let Some(state) = self.lazy_display_trees.get_mut(path) else {
             return;
         };
-        if *refcount > 1 {
-            *refcount -= 1;
+        if state.refcount > 1 {
+            state.refcount -= 1;
             return;
         }
-        self.lazy_loaded_paths.remove(path);
-        // remove_repository unregisters the watcher and emits RepositoryRemoved.
-        let _ = self.remove_repository(path, ctx);
+        self.lazy_display_trees.remove(path);
+        if let Some(ref watcher) = self.watcher {
+            if let Some(local_path) = path.to_local_path() {
+                watcher.update(ctx, |watcher, _ctx| {
+                    std::mem::drop(watcher.unregister_path(&local_path));
+                });
+            }
+        }
+        ctx.emit(RepositoryMetadataEvent::LazyDisplayTreeRemoved { path: path.clone() });
     }
 
     /// Loads a specific directory inside an already-tracked tree.
@@ -588,7 +699,13 @@ impl LocalRepoMetadataModel {
         dir_path: &StandardizedPath,
         ctx: &mut ModelContext<Self>,
     ) -> Result<(), RepoMetadataError> {
-        let Some(IndexedRepoState::Indexed(state)) = self.repositories.get_mut(repo_root) else {
+        let lazy_display = self.lazy_display_trees.contains_key(repo_root);
+        let state = if let Some(state) = self.lazy_display_trees.get_mut(repo_root) {
+            &mut state.tree
+        } else if let Some(IndexedRepoState::Indexed(state)) = self.repositories.get_mut(repo_root)
+        {
+            state
+        } else {
             return Err(RepoMetadataError::RepoNotFound(repo_root.to_string()));
         };
 
@@ -598,9 +715,15 @@ impl LocalRepoMetadataModel {
             .load_at_path(dir_path, &mut gitignores)
             .map_err(RepoMetadataError::BuildTree)?;
 
-        ctx.emit(RepositoryMetadataEvent::FileTreeEntryUpdated {
-            path: repo_root.clone(),
-        });
+        if lazy_display {
+            ctx.emit(RepositoryMetadataEvent::LazyDisplayTreeUpdated {
+                path: repo_root.clone(),
+            });
+        } else {
+            ctx.emit(RepositoryMetadataEvent::FileTreeEntryUpdated {
+                path: repo_root.clone(),
+            });
+        }
         Ok(())
     }
 
@@ -891,18 +1014,10 @@ impl LocalRepoMetadataModel {
         let repo_path_str = std_path.to_string();
 
         // Check if the repository is already indexed or currently being indexed.
-        // Allow re-indexing if the existing entry was a lazily-loaded path placeholder.
         match self.repositories.get(&std_path) {
-            Some(IndexedRepoState::Indexed(_))
-                if !self.lazy_loaded_paths.contains_key(&std_path) =>
-            {
+            Some(IndexedRepoState::Indexed(_)) => {
                 log::debug!("Repository already indexed: {std_path}");
                 return Ok(());
-            }
-            Some(IndexedRepoState::Indexed(_)) => {
-                // Was a lazy-loaded path – allow upgrading to a real repo.
-                log::info!("Upgrading lazy-loaded path to git repo: {repo_path_str}");
-                self.lazy_loaded_paths.remove(&std_path);
             }
             Some(IndexedRepoState::Pending(_)) => {
                 log::debug!("Repository already being indexed: {repo_path_str}");
@@ -941,14 +1056,10 @@ impl LocalRepoMetadataModel {
             async move {
                 let mut files: Vec<crate::entry::FileMetadata> = Vec::new();
                 let mut gitignores_for_build = gitignores_for_build;
-                // Snapshot the initial gitignores so we can retry from a clean
-                // state if the full-depth build is partially populated before
-                // it hits the file limit.
-                let initial_gitignores = gitignores_for_build.clone();
 
                 let mut file_limit = MAX_FILES_PER_REPO;
 
-                let mut build_result = Entry::build_tree_with_ignored_path_interests(
+                let build_result = Entry::build_tree_with_ignored_path_interests(
                     &repo_path_for_build,
                     &mut files,
                     &mut gitignores_for_build,
@@ -961,34 +1072,6 @@ impl LocalRepoMetadataModel {
                     },
                 );
 
-                // Repos with more than MAX_FILES_PER_REPO tracked files can't
-                // be indexed at full depth. Fall back to a single-level scan
-                // (with the file quota disabled — direct-child files at
-                // depth=1 still consume the quota, so reusing it would
-                // re-trigger ExceededMaxFileLimit on repos with >MAX_FILES_PER_REPO
-                // files directly under the root) so the user can still browse
-                // the tree; subdirectories are loaded on expand via
-                // LAZY_LOAD_FILE_LIMIT.
-                let mut indexed_with_limit = false;
-                if matches!(build_result, Err(BuildTreeError::ExceededMaxFileLimit)) {
-                    files.clear();
-                    gitignores_for_build = initial_gitignores;
-                    build_result = Entry::build_tree_with_ignored_path_interests(
-                        &repo_path_for_build,
-                        &mut files,
-                        &mut gitignores_for_build,
-                        None,
-                        BuildTreeOptions {
-                            max_depth: 1, // Only first level.
-                            current_depth: 0,
-                            ignored_path_strategy: &IgnoredPathStrategy::IncludeLazy,
-                            ignored_path_interests: &ignored_path_interests,
-                        },
-                    );
-                    if build_result.is_ok() {
-                        indexed_with_limit = true;
-                    }
-                }
 
                 (
                     build_result,
@@ -997,7 +1080,6 @@ impl LocalRepoMetadataModel {
                     repo_path_str_for_log,
                     std_path_for_completion,
                     repository_handle_for_completion,
-                    indexed_with_limit,
                 )
             },
             move |model: &mut LocalRepoMetadataModel,
@@ -1008,26 +1090,22 @@ impl LocalRepoMetadataModel {
                       repo_path_str,
                       std_repo_path,
                       repository_handle,
-                      indexed_with_limit,
-                  ): (Result<Entry, _>, Vec<crate::entry::FileMetadata>, _, String, StandardizedPath, ModelHandle<Repository>, bool),
+                  ): (Result<Entry, _>, Vec<crate::entry::FileMetadata>, _, String, StandardizedPath, ModelHandle<Repository>),
                   ctx| {
                 match build_result {
                     Ok(root_entry) => {
                         let state =
                             FileTreeState::new(root_entry, gitignores_for_build, Some(repository_handle));
 
-                        if let Err(e) =
-                            model.add_repository_internal(std_repo_path.clone(), state, ctx)
+                        if let Err(e) = model.add_repository_internal(
+                            std_repo_path.clone(),
+                            state,
+                            ctx,
+                        )
                         {
                             log::warn!("Failed to add repository {repo_path_str}: {e:?}");
                             // On failure, mark the repository as failed so waiters are notified.
                             model.mark_repository_failed(std_repo_path, e, ctx);
-                        } else if indexed_with_limit {
-                            safe_warn!(
-                                safe: ("Repository exceeded max file limit; indexed in degraded mode"),
-                                full: ("Repository {repo_path_str} exceeded max file limit ({MAX_FILES_PER_REPO}); indexed only first level — subdirectories load on expand")
-                            );
-                            send_telemetry_from_ctx!(RepoMetadataTelemetryEvent::BuildTreeFailed { error: format!("{:#}", BuildTreeError::ExceededMaxFileLimit) }, ctx);
                         } else {
                             log::info!(
                                 "Successfully indexed repository: {} with {} files",
@@ -1171,6 +1249,14 @@ impl LocalRepoMetadataModel {
     /// Insert a repository state directly for testing purposes.
     pub fn insert_test_state(&mut self, repo_path: StandardizedPath, state: FileTreeState) {
         self.replace_repository_state(repo_path, IndexedRepoState::Indexed(state));
+    }
+
+    /// Insert a failed local repository state directly for testing fallback consumers.
+    pub fn insert_test_failed_state(&mut self, repo_path: StandardizedPath) {
+        self.replace_repository_state(
+            repo_path,
+            IndexedRepoState::Failed(RepoMetadataError::InvalidPath("test failure".to_string())),
+        );
     }
 }
 

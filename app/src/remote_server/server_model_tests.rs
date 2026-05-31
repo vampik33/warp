@@ -15,6 +15,7 @@ use crate::code_review::diff_state::DiffMode;
 use crate::remote_server::diff_state_tracker::DiffModelKey;
 
 fn test_model(app: &mut App) -> ServerModel {
+    let (project_skill_refresh_tx, _) = async_channel::unbounded();
     ServerModel {
         connection_senders: HashMap::new(),
         snapshot_sent_roots_by_connection: HashMap::new(),
@@ -26,6 +27,8 @@ fn test_model(app: &mut App) -> ServerModel {
         auth_state: Arc::new(AuthState::new_logged_out_for_test()),
         buffers: ServerBufferTracker::new(),
         diff_states: app.add_model(|_| RemoteDiffStateManager::new()),
+        failed_project_skill_watchers: HashMap::new(),
+        project_skill_refresh_tx,
     }
 }
 

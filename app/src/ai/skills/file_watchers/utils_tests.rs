@@ -1,3 +1,5 @@
+use std::fs;
+
 use repo_metadata::entry::{DirectoryEntry, Entry, FileMetadata};
 use repo_metadata::file_tree_store::FileTreeState;
 use repo_metadata::file_tree_update::{
@@ -7,6 +9,7 @@ use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::{
     DirectoryWatcher, RepoMetadataModel, RepoMetadataUpdate, RepositoryIdentifier,
 };
+use tempfile::TempDir;
 use virtual_fs::{Stub, VirtualFS};
 use warp_util::host_id::HostId;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
@@ -16,7 +19,8 @@ use warpui::App;
 
 use super::{
     extract_skill_parent_directory, find_skill_files_in_tree, is_home_provider_path,
-    is_home_skill_directory, is_skill_file, read_skills_from_files,
+    is_home_skill_directory, is_skill_file, read_local_project_skills_from_filesystem,
+    read_skills_from_files,
 };
 
 // ============================================================================
@@ -425,6 +429,44 @@ fn is_home_provider_path_false_for_partial_path() {
 
     // Just home
     assert!(!is_home_provider_path(&home_dir));
+}
+
+#[test]
+fn local_project_fallback_discovers_provider_paths_ignored_by_git() {
+    let repo = TempDir::new().unwrap();
+    let repo_path = dunce::canonicalize(repo.path()).unwrap();
+    let skill_path = repo_path.join(".agents/skills/ignored/SKILL.md");
+    fs::create_dir_all(skill_path.parent().unwrap()).unwrap();
+    fs::write(repo_path.join(".gitignore"), ".agents/\n").unwrap();
+    fs::write(
+        &skill_path,
+        "---\nname: ignored\ndescription: ignored provider\n---\ncontent\n",
+    )
+    .unwrap();
+
+    let skills = read_local_project_skills_from_filesystem(&repo_path);
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].path, LocalOrRemotePath::Local(skill_path));
+}
+
+#[cfg(unix)]
+#[test]
+fn local_project_fallback_rejects_symlinked_provider_roots() {
+    let repo = TempDir::new().unwrap();
+    let external = TempDir::new().unwrap();
+    let external_skills = external.path().join("skills");
+    let escaped_skill = external_skills.join("escaped/SKILL.md");
+    fs::create_dir_all(escaped_skill.parent().unwrap()).unwrap();
+    fs::write(
+        &escaped_skill,
+        "---\nname: escaped\ndescription: escaped provider\n---\ncontent\n",
+    )
+    .unwrap();
+    let provider_parent = repo.path().join(".agents");
+    fs::create_dir_all(&provider_parent).unwrap();
+    std::os::unix::fs::symlink(&external_skills, provider_parent.join("skills")).unwrap();
+
+    assert!(read_local_project_skills_from_filesystem(repo.path()).is_empty());
 }
 
 // ============================================================================

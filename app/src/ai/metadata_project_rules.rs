@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use ai::project_context::model::{ProjectContextModel, ProjectRule};
 use remote_server::manager::{RemoteServerManager, RemoteServerManagerEvent};
 use remote_server::proto::{ProjectContextFileKind, ProjectContextFilesSnapshot};
+use repo_metadata::local_model::IndexedRepoState;
 use repo_metadata::{RepoMetadataModel, RepositoryIdentifier};
 use warp_util::host_id::HostId;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
@@ -39,7 +40,7 @@ impl MetadataProjectRulesModel {
             next_refresh_generation: 0,
         };
         for repo_id in RepoMetadataModel::as_ref(ctx).local_repository_ids(ctx) {
-            model.refresh_local_project_rules(&repo_id, ctx);
+            model.refresh_or_fallback_project_rules_for_repo(&repo_id, ctx);
         }
         model
     }
@@ -57,10 +58,10 @@ impl MetadataProjectRulesModel {
             }
             | RepoMetadataEvent::FileTreeEntryUpdated {
                 id: repo_id @ RepositoryIdentifier::Local(_),
-            }
-            | RepoMetadataEvent::UpdatingRepositoryFailed {
-                id: repo_id @ RepositoryIdentifier::Local(_),
             } => self.refresh_local_project_rules(repo_id, ctx),
+            RepoMetadataEvent::UpdatingRepositoryFailed {
+                id: repo_id @ RepositoryIdentifier::Local(_),
+            } => self.refresh_local_project_rules_from_filesystem_fallback(repo_id, ctx),
             RepoMetadataEvent::RepositoryRemoved {
                 id: repo_id @ RepositoryIdentifier::Local(_),
             } => self.clear_project_rules_for_removed_repository(repo_id, ctx),
@@ -74,10 +75,25 @@ impl MetadataProjectRulesModel {
             | RepoMetadataEvent::FileTreeEntryUpdated {
                 id: RepositoryIdentifier::Remote(_),
             }
+            | RepoMetadataEvent::LazyDisplayTreeUpdated { .. }
+            | RepoMetadataEvent::LazyDisplayTreeRemoved { .. }
             | RepoMetadataEvent::UpdatingRepositoryFailed {
                 id: RepositoryIdentifier::Remote(_),
             }
             | RepoMetadataEvent::IncrementalUpdateReady { .. } => {}
+        }
+    }
+    fn refresh_or_fallback_project_rules_for_repo(
+        &mut self,
+        repo_id: &RepositoryIdentifier,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        match RepoMetadataModel::as_ref(ctx).repository_state(repo_id, ctx) {
+            Some(IndexedRepoState::Indexed(_)) => self.refresh_local_project_rules(repo_id, ctx),
+            Some(IndexedRepoState::Failed(_)) => {
+                self.refresh_local_project_rules_from_filesystem_fallback(repo_id, ctx);
+            }
+            Some(IndexedRepoState::Pending(_)) | None => {}
         }
     }
 
@@ -171,6 +187,22 @@ impl MetadataProjectRulesModel {
         });
     }
 
+    fn refresh_local_project_rules_from_filesystem_fallback(
+        &mut self,
+        repo_id: &RepositoryIdentifier,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        self.advance_refresh_generation(repo_id);
+        let Some(local_root) = repo_id.local_path_buf() else {
+            return;
+        };
+        ProjectContextModel::handle(ctx).update(ctx, |model, ctx| {
+            model.use_local_filesystem_rule_fallback_for_root(&local_root);
+            if let Err(error) = model.index_and_store_rules(local_root, ctx) {
+                log::warn!("Failed to index project rules from local fallback: {error}");
+            }
+        });
+    }
     fn clear_project_rules_for_removed_repository(
         &mut self,
         repo_id: &RepositoryIdentifier,

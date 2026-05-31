@@ -32,7 +32,7 @@ mod tests {
         fn new_for_test() -> Self {
             Self {
                 repositories: HashMap::new(),
-                lazy_loaded_paths: Default::default(),
+                lazy_display_trees: Default::default(),
                 #[cfg(feature = "local_fs")]
                 watcher: Default::default(),
                 emit_incremental_updates: false,
@@ -331,7 +331,12 @@ mod tests {
                     assert!(model.is_lazy_loaded_path(
                         &StandardizedPath::from_local_canonicalized(&shared_dir).unwrap()
                     ));
-                    assert!(model.has_repository(
+                    assert!(model
+                        .get_lazy_display_tree(
+                            &StandardizedPath::from_local_canonicalized(&shared_dir).unwrap()
+                        )
+                        .is_some());
+                    assert!(!model.has_repository(
                         &StandardizedPath::from_local_canonicalized(&shared_dir).unwrap()
                     ));
                 });
@@ -345,7 +350,8 @@ mod tests {
 
                 model_handle.read(&app, |model, _ctx| {
                     assert!(model.is_lazy_loaded_path(&shared_dir_std));
-                    assert!(model.has_repository(&shared_dir_std));
+                    assert!(model.get_lazy_display_tree(&shared_dir_std).is_some());
+                    assert!(!model.has_repository(&shared_dir_std));
                 });
 
                 model_handle.update(&mut app, |model, ctx| {
@@ -356,9 +362,11 @@ mod tests {
                     assert!(!model.is_lazy_loaded_path(
                         &StandardizedPath::from_local_canonicalized(&shared_dir).unwrap()
                     ));
-                    assert!(!model.has_repository(
-                        &StandardizedPath::from_local_canonicalized(&shared_dir).unwrap()
-                    ));
+                    assert!(model
+                        .get_lazy_display_tree(
+                            &StandardizedPath::from_local_canonicalized(&shared_dir).unwrap()
+                        )
+                        .is_none());
                 });
             });
         });
@@ -366,7 +374,7 @@ mod tests {
 
     #[cfg(feature = "local_fs")]
     #[test]
-    fn test_index_directory_upgrades_lazy_loaded_path_to_repo() {
+    fn test_index_directory_preserves_separate_lazy_display_tree_until_unregistered() {
         VirtualFS::test("lazy_loaded_path_upgrade", |dirs, mut vfs| {
             vfs.mkdir("repo/.git/objects")
                 .mkdir("repo/src/nested")
@@ -407,10 +415,10 @@ mod tests {
                     assert!(model.is_lazy_loaded_path(
                         &StandardizedPath::from_local_canonicalized(&repo_root).unwrap()
                     ));
-                    let Some(IndexedRepoState::Indexed(state)) = model.repository_state(
+                    let Some(state) = model.get_lazy_display_tree(
                         &StandardizedPath::from_local_canonicalized(&repo_root).unwrap(),
                     ) else {
-                        panic!("expected indexed lazy-loaded path");
+                        panic!("expected lazy display tree");
                     };
                     assert!(state
                         .entry
@@ -447,7 +455,7 @@ mod tests {
                     .expect("repo upgrade completion sender dropped");
 
                 model_handle.read(&app, |model, _ctx| {
-                    assert!(!model.is_lazy_loaded_path(
+                    assert!(model.is_lazy_loaded_path(
                         &StandardizedPath::from_local_canonicalized(&repo_root).unwrap()
                     ));
                     let Some(IndexedRepoState::Indexed(state)) = model.repository_state(
@@ -458,6 +466,32 @@ mod tests {
                     assert!(state
                         .entry
                         .contains(&StandardizedPath::try_from_local(&source_file).unwrap()));
+                    let lazy_display = model
+                        .get_lazy_display_tree(
+                            &StandardizedPath::from_local_canonicalized(&repo_root).unwrap(),
+                        )
+                        .expect("display tree stays registered until its UI owner removes it");
+                    assert!(!lazy_display
+                        .entry
+                        .contains(&StandardizedPath::try_from_local(&source_file).unwrap()));
+                });
+
+                model_handle.update(&mut app, |model, ctx| {
+                    model.remove_lazy_loaded_path(
+                        &StandardizedPath::from_local_canonicalized(&repo_root).unwrap(),
+                        ctx,
+                    );
+                });
+                model_handle.read(&app, |model, _ctx| {
+                    assert!(!model.is_lazy_loaded_path(
+                        &StandardizedPath::from_local_canonicalized(&repo_root).unwrap()
+                    ));
+                    assert!(matches!(
+                        model.repository_state(
+                            &StandardizedPath::from_local_canonicalized(&repo_root).unwrap()
+                        ),
+                        Some(IndexedRepoState::Indexed(_))
+                    ));
                 });
             });
         });

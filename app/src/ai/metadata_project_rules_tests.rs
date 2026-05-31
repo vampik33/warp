@@ -5,7 +5,8 @@ use ai::project_context::model::{ProjectContextModel, ProjectContextModelEvent};
 use remote_server::proto::{
     ProjectContextFile, ProjectContextFileKind, ProjectContextFilesSnapshot,
 };
-use repo_metadata::RepositoryIdentifier;
+use repo_metadata::repositories::DetectedRepositories;
+use repo_metadata::{DirectoryWatcher, RepoMetadataModel, RepositoryIdentifier};
 use tempfile::TempDir;
 use warp_util::host_id::HostId;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
@@ -100,6 +101,121 @@ fn local_metadata_refresh_uses_dedicated_rule_scan() {
                 .collect();
             assert!(contents.contains(&"root rule"));
             assert!(contents.contains(&"nested rule"));
+        });
+    });
+}
+
+#[test]
+fn failed_local_repository_uses_filesystem_rule_fallback() {
+    let (indexed_tx, indexed_rx) = async_channel::unbounded();
+
+    App::test((), |mut app| async move {
+        app.add_singleton_model(DirectoryWatcher::new_for_testing);
+        app.add_singleton_model(|_| DetectedRepositories::default());
+        let project_context = app.add_singleton_model(|_| ProjectContextModel::default());
+        let repo_metadata = app.add_singleton_model(RepoMetadataModel::new);
+        let _listener = app.add_model(|ctx| RulesIndexedListener::new(indexed_tx, ctx));
+        let rules_model = app.add_model(|_| metadata_rules_model());
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo = dunce::canonicalize(temp_dir.path()).unwrap();
+        fs::write(repo.join("WARP.md"), "failed fallback rule").unwrap();
+        let repo_id = RepositoryIdentifier::try_local(&repo).unwrap();
+        repo_metadata.update(&mut app, |model, ctx| {
+            model.insert_test_failed_state(StandardizedPath::try_from_local(&repo).unwrap(), ctx);
+        });
+
+        rules_model.update(&mut app, |model, ctx| {
+            model.refresh_or_fallback_project_rules_for_repo(&repo_id, ctx);
+        });
+        indexed_rx.recv().await.unwrap();
+
+        project_context.read(&app, |model, _| {
+            let result = model
+                .find_applicable_project_rules(&repo.join("main.rs"))
+                .expect("failed-metadata local project rule fallback should apply");
+            assert_eq!(result.active_rules.len(), 1);
+            assert_eq!(result.active_rules[0].content, "failed fallback rule");
+        });
+    });
+}
+
+#[test]
+fn failed_local_fallback_rescan_persists_deleted_rule_paths() {
+    let (indexed_tx, indexed_rx) = async_channel::unbounded();
+    let (deleted_tx, deleted_rx) = async_channel::unbounded();
+
+    App::test((), |mut app| async move {
+        app.add_singleton_model(DirectoryWatcher::new_for_testing);
+        app.add_singleton_model(|_| DetectedRepositories::default());
+        let project_context = app.add_singleton_model(|_| ProjectContextModel::default());
+        let repo_metadata = app.add_singleton_model(RepoMetadataModel::new);
+        let _indexed_listener = app.add_model(|ctx| RulesIndexedListener::new(indexed_tx, ctx));
+        let _deleted_listener = app.add_model(|ctx| RulesDeltaListener::new(deleted_tx, ctx));
+        let rules_model = app.add_model(|_| metadata_rules_model());
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo = dunce::canonicalize(temp_dir.path()).unwrap();
+        let rule_path = repo.join("WARP.md");
+        fs::write(&rule_path, "fallback rule").unwrap();
+        let repo_id = RepositoryIdentifier::try_local(&repo).unwrap();
+        repo_metadata.update(&mut app, |model, ctx| {
+            model.insert_test_failed_state(StandardizedPath::try_from_local(&repo).unwrap(), ctx);
+        });
+
+        rules_model.update(&mut app, |model, ctx| {
+            model.refresh_or_fallback_project_rules_for_repo(&repo_id, ctx);
+        });
+        indexed_rx.recv().await.unwrap();
+        assert!(deleted_rx.recv().await.unwrap().is_empty());
+
+        fs::remove_file(&rule_path).unwrap();
+        rules_model.update(&mut app, |model, ctx| {
+            model.refresh_or_fallback_project_rules_for_repo(&repo_id, ctx);
+        });
+        indexed_rx.recv().await.unwrap();
+        assert_eq!(deleted_rx.recv().await.unwrap(), vec![rule_path]);
+        project_context.read(&app, |model, _| {
+            assert!(model
+                .find_applicable_project_rules(&repo.join("main.rs"))
+                .is_none());
+        });
+    });
+}
+
+#[test]
+fn failed_local_repository_discovers_nested_rules_with_filesystem_fallback() {
+    let (indexed_tx, indexed_rx) = async_channel::unbounded();
+
+    App::test((), |mut app| async move {
+        app.add_singleton_model(DirectoryWatcher::new_for_testing);
+        app.add_singleton_model(|_| DetectedRepositories::default());
+        let project_context = app.add_singleton_model(|_| ProjectContextModel::default());
+        let repo_metadata = app.add_singleton_model(RepoMetadataModel::new);
+        let _listener = app.add_model(|ctx| RulesIndexedListener::new(indexed_tx, ctx));
+        let rules_model = app.add_model(|_| metadata_rules_model());
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo = dunce::canonicalize(temp_dir.path()).unwrap();
+        let nested_dir = repo.join("src");
+        fs::create_dir_all(&nested_dir).unwrap();
+        fs::write(nested_dir.join("WARP.md"), "fallback rule").unwrap();
+        let repo_id = RepositoryIdentifier::try_local(&repo).unwrap();
+        repo_metadata.update(&mut app, |model, ctx| {
+            model.insert_test_failed_state(StandardizedPath::try_from_local(&repo).unwrap(), ctx);
+        });
+
+        rules_model.update(&mut app, |model, ctx| {
+            model.refresh_or_fallback_project_rules_for_repo(&repo_id, ctx);
+        });
+        indexed_rx.recv().await.unwrap();
+
+        project_context.read(&app, |model, _| {
+            let result = model
+                .find_applicable_project_rules(&nested_dir.join("main.rs"))
+                .expect("filesystem-fallback local project rule should apply");
+            assert_eq!(result.active_rules.len(), 1);
+            assert_eq!(result.active_rules[0].content, "fallback rule");
         });
     });
 }

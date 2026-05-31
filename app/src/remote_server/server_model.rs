@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::Arc;
 
 use ::ai::index::full_source_code_embedding::manager::{
@@ -11,9 +12,13 @@ use ::ai::index::full_source_code_embedding::{
     ContentHash, FragmentMetadata as LocalFragmentMetadata, NodeHash,
 };
 use ::ai::project_context::model::{ProjectContextModel, ProjectRule};
+use ::ai::skills::ParsedSkill;
 use remote_server::proto::OpenBufferSuccess;
 use repo_metadata::repositories::{DetectedRepositories, RepoDetectionSource};
-use repo_metadata::{RepoMetadataEvent, RepoMetadataModel, RepositoryIdentifier};
+use repo_metadata::repository::{RepositorySubscriber, SubscriberId};
+use repo_metadata::{
+    RepoMetadataEvent, RepoMetadataModel, Repository, RepositoryIdentifier, RepositoryUpdate,
+};
 use warp_core::channel::ChannelState;
 use warp_core::{safe_error, SessionId};
 use warp_files::{FileModel, FileModelEvent};
@@ -56,6 +61,7 @@ use super::proto::{
     WriteFileSuccess,
 };
 use super::server_buffer_tracker::{PendingBufferRequestKind, ServerBufferTracker};
+use crate::ai::skills::SkillWatcher;
 use crate::code::global_buffer_model::{GlobalBufferModel, GlobalBufferModelEvent};
 use crate::code_review::diff_state::{DiffMode, FileStatusInfo};
 use crate::terminal::shell::ShellType;
@@ -132,6 +138,33 @@ struct PendingFileOp {
     request_id: RequestId,
     conn_id: ConnectionId,
     kind: FileOpKind,
+}
+struct FailedProjectSkillSubscriber {
+    repo_path: StandardizedPath,
+    message_tx: async_channel::Sender<StandardizedPath>,
+}
+
+impl RepositorySubscriber for FailedProjectSkillSubscriber {
+    fn on_scan(
+        &mut self,
+        _repository: &Repository,
+        _ctx: &mut ModelContext<Repository>,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+        Box::pin(async {})
+    }
+
+    fn on_files_updated(
+        &mut self,
+        _repository: &Repository,
+        _update: &RepositoryUpdate,
+        _ctx: &mut ModelContext<Repository>,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+        let repo_path = self.repo_path.clone();
+        let message_tx = self.message_tx.clone();
+        Box::pin(async move {
+            let _ = message_tx.send(repo_path).await;
+        })
+    }
 }
 
 /// Manages pending file operations and ensures that the corresponding
@@ -232,6 +265,11 @@ pub struct ServerModel {
     buffers: ServerBufferTracker,
     /// Manages per-(repo, mode) diff state models and per-connection subscriptions.
     diff_states: ModelHandle<RemoteDiffStateManager>,
+    /// Repository subscriptions for project-skill filesystem fallback when
+    /// authoritative metadata indexing has failed.
+    failed_project_skill_watchers:
+        HashMap<StandardizedPath, (ModelHandle<Repository>, SubscriberId)>,
+    project_skill_refresh_tx: async_channel::Sender<StandardizedPath>,
 }
 
 impl Entity for ServerModel {
@@ -243,6 +281,7 @@ impl SingletonEntity for ServerModel {}
 impl ServerModel {
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         let host_id = uuid::Uuid::new_v4().to_string();
+        let (project_skill_refresh_tx, project_skill_refresh_rx) = async_channel::unbounded();
         log::info!(
             "Daemon started: PID={}, host_id={}",
             std::process::id(),
@@ -259,7 +298,17 @@ impl ServerModel {
             auth_state: AuthStateProvider::as_ref(ctx).get().clone(),
             buffers: ServerBufferTracker::new(),
             diff_states: ctx.add_model(|_| RemoteDiffStateManager::new()),
+            failed_project_skill_watchers: HashMap::new(),
+            project_skill_refresh_tx,
         };
+        ctx.spawn_stream_local(
+            project_skill_refresh_rx,
+            |me, repo_path, ctx| {
+                me.push_failed_project_skill_snapshot(&repo_path, ctx);
+                me.push_failed_project_rule_snapshot(&repo_path);
+            },
+            |_, _| {},
+        );
         // Subscribe to FileModel and RepoMetadataModel events
         // file operation results and repo metadata pushes are forwarded to all
         // connected proxy sessions.
@@ -351,30 +400,72 @@ impl ServerModel {
                             sent_roots.insert(path.clone());
                         }
                     }
+                    me.stop_failed_project_skill_watcher(path, ctx);
+                    me.push_authoritative_project_skill_snapshot(path, ctx);
+                    me.push_authoritative_project_rule_snapshot(path.clone(), ctx);
+                }
+                RepoMetadataEvent::LazyDisplayTreeUpdated { path } => {
+                    let repo_model = RepoMetadataModel::handle(ctx);
+                    if let Some(state) = repo_model.as_ref(ctx).get_lazy_display_tree(path, ctx) {
+                        let entries = super::repo_metadata_proto::file_tree_entry_to_snapshot_proto(
+                            &state.entry,
+                        );
+                        me.send_server_message(
+                            None,
+                            None,
+                            server_message::Message::RepoMetadataSnapshot(
+                                super::proto::RepoMetadataSnapshot {
+                                    repo_path: path.to_string(),
+                                    entries,
+                                    sync_complete: true,
+                                },
+                            ),
+                        );
+                    }
+                }
+                RepoMetadataEvent::UpdatingRepositoryFailed {
+                    id: RepositoryIdentifier::Local(path),
+                } => {
+                    let failed_path = path.clone();
+                    let repo_model = RepoMetadataModel::handle(ctx);
+                    repo_model.update(ctx, |repo_model, ctx| {
+                        if let Err(error) = repo_model.index_lazy_loaded_path(&failed_path, ctx) {
+                            log::warn!(
+                                "Failed to build display tree after repository indexing failed for {failed_path}: {error}"
+                            );
+                        }
+                    });
+                    me.push_failed_project_skill_snapshot(path, ctx);
+                    me.push_failed_project_rule_snapshot(path);
+                    me.watch_failed_project_skills(path, ctx);
+                }
+                RepoMetadataEvent::FileTreeEntryUpdated {
+                    id: RepositoryIdentifier::Local(path),
+                } => {
+                    me.push_authoritative_project_skill_snapshot(path, ctx);
                     me.push_authoritative_project_rule_snapshot(path.clone(), ctx);
                 }
                 RepoMetadataEvent::RepositoryRemoved {
                     id: RepositoryIdentifier::Local(path),
-                } => me.push_project_rule_snapshot(path, Vec::new()),
-                RepoMetadataEvent::UpdatingRepositoryFailed {
-                    id: RepositoryIdentifier::Local(path),
-                } => me.push_authoritative_project_rule_snapshot(path.clone(), ctx),
-                RepoMetadataEvent::FileTreeUpdated { .. }
+                } => {
+                    me.stop_failed_project_skill_watcher(path, ctx);
+                    me.push_project_skill_snapshot(path, Vec::new());
+                    me.push_project_rule_snapshot(path, Vec::new());
+                }
+                RepoMetadataEvent::RepositoryRemoved {
+                    id: RepositoryIdentifier::Remote(_),
+                }
+                | RepoMetadataEvent::FileTreeUpdated { .. }
                 | RepoMetadataEvent::FileTreeEntryUpdated {
                     id: RepositoryIdentifier::Remote(_),
                 }
-                | RepoMetadataEvent::RepositoryRemoved {
-                    id: RepositoryIdentifier::Remote(_),
-                }
+                | RepoMetadataEvent::LazyDisplayTreeRemoved { .. }
                 | RepoMetadataEvent::UpdatingRepositoryFailed {
                     id: RepositoryIdentifier::Remote(_),
                 }
                 | RepoMetadataEvent::RepositoryUpdated {
                     id: RepositoryIdentifier::Remote(_),
                 } => {}
-                RepoMetadataEvent::FileTreeEntryUpdated {
-                    id: RepositoryIdentifier::Local(path),
-                } => me.push_authoritative_project_rule_snapshot(path.clone(), ctx),
             });
         }
         let index_manager = CodebaseIndexManager::handle(ctx);
@@ -845,25 +936,6 @@ impl ServerModel {
         );
     }
 
-    fn push_authoritative_project_rule_snapshot(
-        &mut self,
-        repo_path: StandardizedPath,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let Some(local_path) = repo_path.to_local_path() else {
-            return;
-        };
-        ctx.spawn(
-            async move { ProjectContextModel::read_project_rules_from_metadata_root(&local_path).await },
-            move |me, rules, _ctx| match rules {
-                Ok(rules) => me.push_project_rule_snapshot(&repo_path, rules),
-                Err(error) => {
-                    log::warn!("Failed to build daemon project-rule snapshot: {error:#}");
-                }
-            },
-        );
-    }
-
     fn push_project_rule_snapshot(&self, repo_path: &StandardizedPath, rules: Vec<ProjectRule>) {
         let files = rules
             .into_iter()
@@ -1258,6 +1330,143 @@ impl ServerModel {
         }
 
         Ok(())
+    }
+
+    fn push_authoritative_project_skill_snapshot(
+        &self,
+        repo_path: &StandardizedPath,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(local_path) = repo_path.to_local_path() else {
+            return;
+        };
+        self.push_project_skill_snapshot(
+            repo_path,
+            SkillWatcher::read_local_skills_for_repos(std::slice::from_ref(&local_path), ctx),
+        );
+    }
+
+    fn push_failed_project_skill_snapshot(
+        &self,
+        repo_path: &StandardizedPath,
+        _ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(local_path) = repo_path.to_local_path() else {
+            return;
+        };
+        self.push_project_skill_snapshot(
+            repo_path,
+            SkillWatcher::read_failed_local_project_skills(&local_path),
+        );
+    }
+
+    fn push_authoritative_project_rule_snapshot(
+        &mut self,
+        repo_path: StandardizedPath,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some(local_path) = repo_path.to_local_path() else {
+            return;
+        };
+        ctx.spawn(
+            async move { ProjectContextModel::read_project_rules_from_metadata_root(&local_path).await },
+            move |me, rules, _ctx| match rules {
+                Ok(rules) => me.push_project_rule_snapshot(&repo_path, rules),
+                Err(error) => {
+                    log::warn!("Failed to build daemon project-rule snapshot: {error:#}");
+                }
+            },
+        );
+    }
+
+    fn push_failed_project_rule_snapshot(&self, repo_path: &StandardizedPath) {
+        let Some(local_path) = repo_path.to_local_path() else {
+            return;
+        };
+        self.push_project_rule_snapshot(
+            repo_path,
+            ProjectContextModel::read_project_rule_snapshot_from_filesystem_fallback(&local_path),
+        );
+    }
+
+    fn push_project_skill_snapshot(&self, repo_path: &StandardizedPath, skills: Vec<ParsedSkill>) {
+        let files = skills
+            .into_iter()
+            .filter_map(|skill| {
+                Some(ProjectContextFile {
+                    path: skill.path.to_local_path()?.to_string_lossy().to_string(),
+                    content: skill.content,
+                })
+            })
+            .collect();
+        self.send_server_message(
+            None,
+            None,
+            server_message::Message::ProjectContextFilesSnapshot(ProjectContextFilesSnapshot {
+                repo_path: repo_path.to_string(),
+                kind: ProjectContextFileKind::ProjectSkills.into(),
+                files,
+            }),
+        );
+    }
+
+    fn watch_failed_project_skills(
+        &mut self,
+        repo_path: &StandardizedPath,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if self.failed_project_skill_watchers.contains_key(repo_path) {
+            return;
+        }
+        let Some(local_path) = repo_path.to_local_path() else {
+            return;
+        };
+        let Some(repo_handle) =
+            DetectedRepositories::as_ref(ctx).get_local_watched_repo_for_path(&local_path, ctx)
+        else {
+            log::warn!(
+                "Cannot watch failed remote project-skill repository {repo_path}; repository is not registered"
+            );
+            return;
+        };
+        let repo_path_for_subscriber = repo_path.clone();
+        let message_tx = self.project_skill_refresh_tx.clone();
+        let start = repo_handle.update(ctx, |repository, ctx| {
+            repository.start_watching(
+                Box::new(FailedProjectSkillSubscriber {
+                    repo_path: repo_path_for_subscriber,
+                    message_tx,
+                }),
+                ctx,
+            )
+        });
+        let subscriber_id = start.subscriber_id;
+        self.failed_project_skill_watchers
+            .insert(repo_path.clone(), (repo_handle, subscriber_id));
+        let repo_path = repo_path.clone();
+        ctx.spawn(start.registration_future, move |me, result, ctx| {
+            if let Err(error) = result {
+                log::warn!(
+                    "Failed to watch remote project-skill fallback repository {repo_path}: {error}"
+                );
+                me.stop_failed_project_skill_watcher(&repo_path, ctx);
+            }
+        });
+    }
+
+    fn stop_failed_project_skill_watcher(
+        &mut self,
+        repo_path: &StandardizedPath,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let Some((repo_handle, subscriber_id)) =
+            self.failed_project_skill_watchers.remove(repo_path)
+        else {
+            return;
+        };
+        repo_handle.update(ctx, |repository, ctx| {
+            repository.stop_watching(subscriber_id, ctx);
+        });
     }
 
     /// Routes a server message to its destination.
@@ -1789,7 +1998,12 @@ impl ServerModel {
 
                     let id = RepositoryIdentifier::local(root_path.clone());
                     let repo_model = RepoMetadataModel::handle(ctx);
-                    if let Some(state) = repo_model.as_ref(ctx).get_repository(&id, ctx) {
+                    let state = repo_model.as_ref(ctx).get_repository(&id, ctx).or_else(|| {
+                        repo_model
+                            .as_ref(ctx)
+                            .get_lazy_display_tree(&root_path, ctx)
+                    });
+                    if let Some(state) = state {
                         let entries = super::repo_metadata_proto::file_tree_entry_to_snapshot_proto(
                             &state.entry,
                         );
@@ -1890,9 +2104,15 @@ impl ServerModel {
 
         // Read back the loaded children and serialize them.
         let id = RepositoryIdentifier::local(repo_path.clone());
-        let entries = RepoMetadataModel::handle(ctx)
+        let repo_model = RepoMetadataModel::handle(ctx);
+        let entries = repo_model
             .as_ref(ctx)
             .get_repository(&id, ctx)
+            .or_else(|| {
+                repo_model
+                    .as_ref(ctx)
+                    .get_lazy_display_tree(&repo_path, ctx)
+            })
             .map(|state| {
                 super::repo_metadata_proto::file_tree_children_to_proto_entries(
                     &state.entry,

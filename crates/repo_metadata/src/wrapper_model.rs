@@ -35,6 +35,10 @@ pub enum RepoMetadataEvent {
     FileTreeUpdated { ids: Vec<RepositoryIdentifier> },
     /// A file tree entry was updated.
     FileTreeEntryUpdated { id: RepositoryIdentifier },
+    /// A display-only lazy local file tree was added or updated.
+    LazyDisplayTreeUpdated { path: StandardizedPath },
+    /// A display-only lazy local file tree was removed.
+    LazyDisplayTreeRemoved { path: StandardizedPath },
     /// Updating a repository failed.
     UpdatingRepositoryFailed { id: RepositoryIdentifier },
     /// An incremental file tree update is ready to be sent to the remote
@@ -66,6 +70,16 @@ impl RepoMetadataModel {
         ctx.subscribe_to_model(&remote, Self::forward_remote_event);
 
         Self { local, remote }
+    }
+
+    /// Returns the display-only lazy local tree for a displayed path, if available.
+    #[cfg(feature = "local_fs")]
+    pub fn get_lazy_display_tree<'a>(
+        &self,
+        path: &StandardizedPath,
+        ctx: &'a AppContext,
+    ) -> Option<&'a FileTreeState> {
+        self.local.as_ref(ctx).get_lazy_display_tree(path)
     }
 
     /// Creates a new `RepoMetadataModel` with incremental update emission
@@ -114,6 +128,12 @@ impl RepoMetadataModel {
                 RepoMetadataEvent::FileTreeEntryUpdated {
                     id: RepositoryIdentifier::local(path.clone()),
                 }
+            }
+            RepositoryMetadataEvent::LazyDisplayTreeUpdated { path } => {
+                RepoMetadataEvent::LazyDisplayTreeUpdated { path: path.clone() }
+            }
+            RepositoryMetadataEvent::LazyDisplayTreeRemoved { path } => {
+                RepoMetadataEvent::LazyDisplayTreeRemoved { path: path.clone() }
             }
             RepositoryMetadataEvent::UpdatingRepositoryFailed { path } => {
                 RepoMetadataEvent::UpdatingRepositoryFailed {
@@ -421,6 +441,17 @@ impl RepoMetadataModel {
     ) {
         self.local.update(ctx, |local, _ctx| {
             local.insert_test_state(repo_path, state);
+        });
+    }
+
+    /// Inserts a failed local repository state for testing fallback behavior.
+    pub fn insert_test_failed_state(
+        &self,
+        repo_path: StandardizedPath,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        self.local.update(ctx, |local, _ctx| {
+            local.insert_test_failed_state(repo_path);
         });
     }
 }

@@ -556,6 +556,17 @@ impl FileTreeView {
                     }
                 }
             }
+            RepoMetadataEvent::LazyDisplayTreeUpdated { path } => {
+                if let Some(state) = RepoMetadataModel::as_ref(ctx).get_lazy_display_tree(path, ctx)
+                {
+                    if let Some(root_dir) = self.root_directories.get_mut(path) {
+                        root_dir.entry = state.entry.clone();
+                        self.rebuild_flattened_items_for_root(path);
+                        self.apply_pending_focus_target();
+                        ctx.notify();
+                    }
+                }
+            }
             RepoMetadataEvent::UpdatingRepositoryFailed {
                 id: RepositoryIdentifier::Local(std_path),
             } => {
@@ -617,6 +628,7 @@ impl FileTreeView {
             }
             RepoMetadataEvent::FileTreeUpdated { .. }
             | RepoMetadataEvent::RepositoryRemoved { .. }
+            | RepoMetadataEvent::LazyDisplayTreeRemoved { .. }
             | RepoMetadataEvent::UpdatingRepositoryFailed { .. }
             | RepoMetadataEvent::IncrementalUpdateReady { .. } => {}
         }
@@ -1404,6 +1416,9 @@ impl FileTreeView {
         if RepoMetadataModel::as_ref(ctx)
             .get_repository(&backing_id, ctx)
             .is_none()
+            && RepoMetadataModel::as_ref(ctx)
+                .get_lazy_display_tree(&backing_root, ctx)
+                .is_none()
         {
             return;
         }
@@ -1426,7 +1441,10 @@ impl FileTreeView {
             log::warn!("Failed to load directory {dir_path}: {error}");
         }
 
-        if let Some(state) = RepoMetadataModel::as_ref(ctx).get_repository(&backing_id, ctx) {
+        let state = RepoMetadataModel::as_ref(ctx)
+            .get_repository(&backing_id, ctx)
+            .or_else(|| RepoMetadataModel::as_ref(ctx).get_lazy_display_tree(&backing_root, ctx));
+        if let Some(state) = state {
             if let Some(root_dir) = self.root_directories.get_mut(root_path) {
                 root_dir.entry = state.entry.clone();
             }
@@ -1571,20 +1589,20 @@ impl FileTreeView {
             }
         }
 
-        let id = repo_metadata::RepositoryIdentifier::local(path.clone());
-        let repo_state = RepoMetadataModel::as_ref(ctx).repository_state(&id, ctx);
         if let Some(root_dir) = self.root_directories.get_mut(path) {
-            match repo_state {
-                Some(IndexedRepoState::Indexed(state)) => {
-                    root_dir.entry = state.entry.clone();
-                }
-                Some(IndexedRepoState::Pending(_)) => {
-                    // Repo is being (re-)indexed. Keep whatever entry we already
-                    // have so the tree doesn't flash back to a loading state
-                    // during the Pending → Indexed transition.
-                }
-                Some(IndexedRepoState::Failed(_)) | None => {
-                    root_dir.entry = Self::create_empty_entry(path);
+            if let Some(state) = RepoMetadataModel::as_ref(ctx).get_lazy_display_tree(path, ctx) {
+                root_dir.entry = state.entry.clone();
+            } else {
+                let id = repo_metadata::RepositoryIdentifier::local(path.clone());
+                match RepoMetadataModel::as_ref(ctx).repository_state(&id, ctx) {
+                    Some(IndexedRepoState::Pending(_)) => {
+                        // Keep the current UI tree during an authoritative re-index.
+                    }
+                    Some(IndexedRepoState::Indexed(_))
+                    | Some(IndexedRepoState::Failed(_))
+                    | None => {
+                        root_dir.entry = Self::create_empty_entry(path);
+                    }
                 }
             }
         }

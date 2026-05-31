@@ -1,5 +1,6 @@
 use ai::agent::action::UploadArtifactRequest;
 use ai::skills::{ParsedSkill, SkillProvider, SkillScope};
+use remote_server::manager::RemoteServerManager;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::{DirectoryWatcher, RepoMetadataModel};
 use warp_util::host_id::HostId;
@@ -106,6 +107,7 @@ fn parsed_skill_for_common_locations_resolves_cached_remote_skill() {
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let manager = app.add_singleton_model(SkillManager::new);
         manager.update(&mut app, |manager, _| {
             manager.add_skill_for_testing(skill.clone());
@@ -143,6 +145,7 @@ fn parsed_skill_for_common_locations_does_not_mix_remote_hosts() {
         app.add_singleton_model(RepoMetadataModel::new);
         app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
         app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
+        app.add_singleton_model(RemoteServerManager::new);
         let manager = app.add_singleton_model(SkillManager::new);
         manager.update(&mut app, |manager, _| {
             manager.add_skill_for_testing(skill);

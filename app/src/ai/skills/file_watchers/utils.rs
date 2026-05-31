@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use ai::skills::{
@@ -65,16 +66,18 @@ pub fn find_skill_files_in_tree(
 
 /// Reads local project skills by discovering provider directories on the filesystem.
 ///
-/// This is a local-only fallback for repositories whose repo metadata indexing fails. Successful
-/// local and remote repos should use [`find_skill_files_in_tree`] so the normal metadata-backed
-/// path remains shared.
+/// This is a local-only fallback for repositories whose authoritative repo metadata indexing
+/// fails. Successfully indexed local repositories use [`find_skill_files_in_tree`].
 pub(super) fn read_local_project_skills_from_filesystem(scan_root: &Path) -> Vec<ParsedSkill> {
+    let Ok(scan_root) = dunce::canonicalize(scan_root) else {
+        return Vec::new();
+    };
     let direct_skill_file = scan_root.join("SKILL.md");
     if is_skill_file(&direct_skill_file) {
         return read_skills_from_files([direct_skill_file]);
     }
 
-    read_skills_from_directories(find_local_provider_directories_on_filesystem(scan_root))
+    read_skills_from_directories(find_local_provider_directories_on_filesystem(&scan_root))
 }
 
 fn find_local_provider_directories_on_filesystem(scan_root: &Path) -> Vec<PathBuf> {
@@ -90,7 +93,10 @@ fn find_local_provider_directories_on_filesystem(scan_root: &Path) -> Vec<PathBu
             }
             continue;
         }
-        if entry.file_type().is_dir() && is_project_provider_path(entry.path()) {
+        if entry.file_type().is_dir()
+            && is_project_provider_path(entry.path())
+            && is_trusted_project_provider_directory(scan_root, entry.path())
+        {
             provider_dirs.push(entry.into_path());
             entries.skip_current_dir();
         }
@@ -101,6 +107,18 @@ fn find_local_provider_directories_on_filesystem(scan_root: &Path) -> Vec<PathBu
 
 fn is_ignored_fallback_scan_entry(entry: &DirEntry) -> bool {
     entry.file_name().to_str() == Some(".git")
+}
+
+fn is_trusted_project_provider_directory(scan_root: &Path, provider_path: &Path) -> bool {
+    if !provider_path.starts_with(scan_root)
+        || fs::symlink_metadata(provider_path)
+            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+    {
+        return false;
+    }
+
+    dunce::canonicalize(provider_path)
+        .is_ok_and(|canonical_provider| canonical_provider.starts_with(scan_root))
 }
 
 /// Finds symlinked skill directories under loaded local provider directories in a repository.

@@ -762,11 +762,15 @@ impl ProjectContextModel {
     /// Uses repo_metadata::entry::build_tree for efficient directory traversal
     #[cfg(feature = "local_fs")]
     async fn scan_directory_for_rules(dir_path: &Path) -> Result<ProjectRules> {
+        Self::scan_directory_for_rules_sync(dir_path)
+    }
+
+    #[cfg(feature = "local_fs")]
+    fn scan_directory_for_rules_sync(dir_path: &Path) -> Result<ProjectRules> {
         use repo_metadata::entry::IgnoredPathStrategy;
 
         let mut rule_files = ProjectRules::default();
-
-        if !async_fs::metadata(dir_path).await?.is_dir() {
+        if !std::fs::metadata(dir_path)?.is_dir() {
             return Ok(rule_files);
         }
 
@@ -801,7 +805,7 @@ impl ProjectContextModel {
                 if matches_rules_pattern(file_name_str) {
                     // Read the content of the rule file
                     let local_path = file_metadata.path.to_local_path_lossy();
-                    let content = match async_fs::read_to_string(&local_path).await {
+                    let content = match std::fs::read_to_string(&local_path) {
                         Ok(content) => content,
                         Err(e) => {
                             log::warn!("Failed to read rule file {}: {e}", file_metadata.path,);
@@ -830,6 +834,21 @@ impl ProjectContextModel {
             .flat_map(|rule| [rule.warp_md, rule.agents_md])
             .flatten()
             .collect())
+    }
+    /// Reads the full fallback rule set using the same policy as local failed-index discovery.
+    #[cfg(feature = "local_fs")]
+    pub fn read_project_rule_snapshot_from_filesystem_fallback(
+        dir_path: &Path,
+    ) -> Vec<ProjectRule> {
+        let Ok(rules) = Self::scan_directory_for_rules_sync(dir_path) else {
+            return Vec::new();
+        };
+        rules
+            .rules
+            .into_iter()
+            .flat_map(|rules| [rules.warp_md, rules.agents_md])
+            .flatten()
+            .collect()
     }
 
     #[cfg(feature = "local_fs")]
@@ -954,16 +973,25 @@ impl ProjectContextModel {
             ctx,
         );
     }
+
     pub fn clear_remote_project_rules_for_host(
         &mut self,
         host_id: &HostId,
         ctx: &mut ModelContext<Self>,
     ) {
-        self.path_to_rules.retain(|root, _| match root {
-            LocalOrRemotePath::Remote(path) => path.host_id != *host_id,
-            LocalOrRemotePath::Local(_) => true,
-        });
-        ctx.emit(ProjectContextModelEvent::PathIndexed);
+        let remote_roots = self
+            .path_to_rules
+            .keys()
+            .filter_map(|root_path| match root_path {
+                LocalOrRemotePath::Remote(remote_root) if remote_root.host_id == *host_id => {
+                    Some(remote_root.clone())
+                }
+                LocalOrRemotePath::Local(_) | LocalOrRemotePath::Remote(_) => None,
+            })
+            .collect::<Vec<_>>();
+        for remote_root in remote_roots {
+            self.clear_remote_project_rules_for_removed_metadata_root(remote_root, ctx);
+        }
     }
 
     fn group_project_rules(rules: Vec<ProjectRule>) -> ProjectRules {

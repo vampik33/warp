@@ -58,6 +58,8 @@ impl FileSearchModel {
                 }
                 RepoMetadataEvent::FileTreeEntryUpdated { .. }
                 | RepoMetadataEvent::UpdatingRepositoryFailed { .. }
+                | RepoMetadataEvent::LazyDisplayTreeUpdated { .. }
+                | RepoMetadataEvent::LazyDisplayTreeRemoved { .. }
                 | RepoMetadataEvent::IncrementalUpdateReady { .. } => {}
             },
         );
