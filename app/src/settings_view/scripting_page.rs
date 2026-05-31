@@ -1,10 +1,10 @@
 //! Settings UI for local scripting and Warp control permissions.
 use super::{
     settings_page::{
-        render_dropdown_item, LocalOnlyIconState, MatchData, PageType, SettingsPageMeta,
+        render_body_item, LocalOnlyIconState, MatchData, PageType, SettingsPageMeta,
         SettingsPageViewHandle, SettingsWidget,
     },
-    SettingsSection,
+    SettingsSection, ToggleState,
 };
 use crate::appearance::Appearance;
 use crate::features::FeatureFlag;
@@ -14,8 +14,7 @@ use crate::view_components::{Dropdown, DropdownItem};
 use settings::Setting as _;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use warpui::elements::{Element, MouseStateHandle};
-use warpui::ui_components::components::UiComponent;
+use warpui::elements::{ChildView, Element, MouseStateHandle};
 use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -33,7 +32,7 @@ impl ScriptingSettingsPageView {
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
         let local_control_mode_dropdown = ctx.add_typed_action_view(|ctx| {
             let mut dropdown = Dropdown::new(ctx);
-            dropdown.set_top_bar_max_width(260.);
+            dropdown.set_top_bar_max_width(360.);
             dropdown
         });
         Self::update_local_control_mode_dropdown(local_control_mode_dropdown.clone(), ctx);
@@ -156,27 +155,19 @@ impl SettingsWidget for LocalControlModeWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let dropdown_subtext = appearance
-            .ui_builder()
-            .wrappable_text(
-                "Controls whether warpctrl can receive local-control credentials. Disabled blocks all invocation contexts. Enabled within Warp is reserved for verified Warp terminals once proof support lands and rejects requests today. Enabled everywhere, including outside Warp also allows local apps and scripts to request credentials.",
-                true,
-            )
-            .build()
-            .finish();
-        render_dropdown_item(
-            appearance,
-            "warpctrl",
-            Some("warpctrl CLI scripting"),
-            Some(dropdown_subtext),
+        render_body_item::<ScriptingSettingsPageAction>(
+            "warpctrl CLI".into(),
+            None,
             LocalOnlyIconState::for_setting(
                 LocalControlModeSetting::storage_key(),
                 LocalControlModeSetting::sync_to_cloud(),
                 &mut view.local_only_icon_tooltip_states.borrow_mut(),
                 app,
             ),
+            ToggleState::Enabled,
+            appearance,
+            ChildView::new(&view.local_control_mode_dropdown).finish(),
             None,
-            &view.local_control_mode_dropdown,
         )
     }
 }
