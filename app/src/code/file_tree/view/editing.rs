@@ -238,16 +238,15 @@ impl FileTreeView {
                         let mut new_std = (*metadata.path).clone();
                         new_std.set_file_name(&buffer_content);
                         let local_path = new_std.to_local_path_lossy();
-                        let mut metadata = metadata.clone();
-                        metadata.path = Arc::new(new_std);
+                        let new_path = Arc::new(new_std);
 
                         if let Err(e) = std::fs::File::create_new(&local_path) {
                             log::warn!("Failed to create file: {e}");
                             Err(())
                         } else {
+                            metadata.path = new_path;
                             send_telemetry_from_ctx!(TelemetryEvent::FileTreeItemCreated, ctx);
-
-                            Ok(FileTreeEntryState::File(metadata))
+                            Ok(FileTreeEntryState::File(metadata.clone()))
                         }
                     } else {
                         return;
@@ -271,6 +270,7 @@ impl FileTreeView {
 
                 self.open_in_new_pane(&file_tree_id, ctx);
                 self.rebuild_flattened_items();
+                ctx.notify();
             }
             PendingEditKind::CreateNewDirectory => {
                 let create_result = {
@@ -285,16 +285,15 @@ impl FileTreeView {
                         let mut new_std = (*directory.path).clone();
                         new_std.set_file_name(&buffer_content);
                         let local_path = new_std.to_local_path_lossy();
-                        let mut directory = directory.clone();
-                        directory.path = Arc::new(new_std);
+                        let new_path = Arc::new(new_std);
 
                         if let Err(e) = std::fs::create_dir(&local_path) {
                             log::warn!("Failed to create directory: {e}");
                             Err(())
                         } else {
+                            directory.path = new_path;
                             send_telemetry_from_ctx!(TelemetryEvent::FileTreeItemCreated, ctx);
-
-                            Ok(FileTreeEntryState::Directory(directory))
+                            Ok(FileTreeEntryState::Directory(directory.clone()))
                         }
                     } else {
                         return;
@@ -317,6 +316,7 @@ impl FileTreeView {
                 }
 
                 self.rebuild_flattened_items();
+                ctx.notify();
             }
             PendingEditKind::RenameExisting => {
                 let Some(root_dir) = self.root_directories.get(&file_tree_id.root) else {

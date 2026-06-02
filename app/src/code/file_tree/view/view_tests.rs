@@ -193,6 +193,11 @@ fn new_directory_action_creates_directory_and_updates_tree() {
                     .items
                     .iter()
                     .any(|item| item.path() == &new_directory));
+                let selected = view.selected_item.as_ref().unwrap();
+                assert_eq!(
+                    root_dir.items.get(selected.index).unwrap().path(),
+                    &new_directory
+                );
             });
         });
     });
