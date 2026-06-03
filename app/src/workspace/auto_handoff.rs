@@ -226,8 +226,12 @@ impl AutoCloudHandoffController {
                 );
                 return;
             };
-            AutoCloudHandoffEligibility::from_conversation(conversation, can_handoff_to_cloud, false)
-                .skip_reason()
+            AutoCloudHandoffEligibility::from_conversation(
+                conversation,
+                can_handoff_to_cloud,
+                false,
+            )
+            .skip_reason()
         };
 
         if let Some(reason) = skip_reason {
