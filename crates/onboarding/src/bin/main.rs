@@ -89,6 +89,8 @@ impl OnboardingMainView {
             OnboardingModelInfo {
                 id: LLMId::from("auto"),
                 title: "Auto".to_string(),
+                base_title: "Auto".to_string(),
+                effort_title: "Default".to_string(),
                 icon: Icon::Oz,
                 requires_upgrade: false,
                 is_default: true,
@@ -96,6 +98,8 @@ impl OnboardingMainView {
             OnboardingModelInfo {
                 id: LLMId::from("claude-sonnet"),
                 title: "Claude Sonnet".to_string(),
+                base_title: "Claude Sonnet".to_string(),
+                effort_title: "Default".to_string(),
                 icon: Icon::ClaudeLogo,
                 requires_upgrade: false,
                 is_default: false,
@@ -103,6 +107,8 @@ impl OnboardingMainView {
             OnboardingModelInfo {
                 id: LLMId::from("gpt-4o"),
                 title: "GPT-4o".to_string(),
+                base_title: "GPT-4o".to_string(),
+                effort_title: "Default".to_string(),
                 icon: Icon::OpenAILogo,
                 requires_upgrade: true,
                 is_default: false,

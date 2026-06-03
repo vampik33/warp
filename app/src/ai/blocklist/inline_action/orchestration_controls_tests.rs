@@ -2,9 +2,19 @@ use ai::agent::action::RunAgentsExecutionMode;
 use ai::agent::orchestration_config::{OrchestrationConfig, OrchestrationExecutionMode};
 
 use super::{
-    should_show_auth_secret_picker, should_show_harness_picker, AuthSecretSelection,
+    choose_harness_variant_for_group, grouped_harness_models, should_show_auth_secret_picker,
+    should_show_harness_picker, strip_trailing_effort_label, AuthSecretSelection,
     OrchestrationEditState,
 };
+use crate::ai::harness_availability::HarnessModelInfo;
+
+fn harness_model(id: &str, display_name: &str, reasoning_level: Option<&str>) -> HarnessModelInfo {
+    HarnessModelInfo {
+        id: id.to_string(),
+        display_name: display_name.to_string(),
+        reasoning_level: reasoning_level.map(str::to_string),
+    }
+}
 
 fn remote_claude_state() -> OrchestrationEditState {
     OrchestrationEditState::from_run_agents_fields(
@@ -16,6 +26,34 @@ fn remote_claude_state() -> OrchestrationEditState {
             computer_use_enabled: false,
         },
     )
+}
+
+#[test]
+fn effort_suffix_is_stripped_from_harness_model_name() {
+    assert_eq!(
+        strip_trailing_effort_label("Claude Sonnet 4.5 (high)", "high"),
+        "Claude Sonnet 4.5"
+    );
+    assert_eq!(
+        strip_trailing_effort_label("GPT 5.1 - Medium", "medium"),
+        "GPT 5.1"
+    );
+}
+
+#[test]
+fn harness_models_group_by_base_name_and_preserve_effort() {
+    let models = vec![
+        harness_model("sonnet-low", "Claude Sonnet 4.5 (low)", Some("low")),
+        harness_model("sonnet-high", "Claude Sonnet 4.5 (high)", Some("high")),
+        harness_model("opus-high", "Claude Opus 4.5 (high)", Some("high")),
+    ];
+    let groups = grouped_harness_models(&models);
+    assert_eq!(groups.len(), 2);
+    assert_eq!(groups[0].0, "Claude Sonnet 4.5");
+    assert_eq!(groups[0].1.len(), 2);
+
+    let selected = choose_harness_variant_for_group(&groups[0].1, Some("high"));
+    assert_eq!(selected.id, "sonnet-high");
 }
 
 fn local_config(harness_type: &str, model_id: &str) -> OrchestrationConfig {

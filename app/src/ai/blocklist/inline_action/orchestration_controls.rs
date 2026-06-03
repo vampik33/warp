@@ -34,8 +34,10 @@ use crate::ai::blocklist::inline_action::host_picker::HostPicker;
 use crate::ai::cloud_agent_settings::CloudAgentSettings;
 use crate::ai::cloud_environments::CloudAmbientAgentEnvironment;
 use crate::ai::connected_self_hosted_workers::{ConnectedSelfHostedWorkersModel, WARP_WORKER_HOST};
-use crate::ai::execution_profiles::model_menu_items::available_model_menu_items;
-use crate::ai::harness_availability::{AuthSecretFetchState, HarnessAvailabilityModel};
+use crate::ai::execution_profiles::model_menu_items::is_auto;
+use crate::ai::harness_availability::{
+    AuthSecretFetchState, HarnessAvailabilityModel, HarnessModelInfo,
+};
 use crate::ai::harness_display;
 use crate::ai::llms::LLMInfo;
 use crate::ai::local_harness_setup::{
@@ -70,6 +72,7 @@ pub const ORCHESTRATION_PICKER_RADIUS: f32 = 4.;
 pub const ORCHESTRATION_PICKER_MAX_WIDTH: f32 = 205.;
 
 const DEFAULT_MODEL_LABEL: &str = "Default model";
+const DEFAULT_EFFORT_LABEL: &str = "Default";
 const ORCHESTRATION_SEGMENTED_CONTROL_PADDING: f32 = 4.;
 const ORCHESTRATION_SEGMENT_VERTICAL_PADDING: f32 = 4.;
 
@@ -88,6 +91,7 @@ const AUTH_SECRET_CREATE_NEW_LABEL: &str = "New API key…";
 pub trait OrchestrationControlAction: DropdownItemAction + Clone {
     fn execution_mode_toggled(is_remote: bool) -> Self;
     fn model_changed(model_id: String) -> Self;
+    fn effort_changed(model_id: String) -> Self;
     fn harness_changed(harness_type: String) -> Self;
     fn environment_changed(environment_id: String) -> Self;
     fn create_environment_requested() -> Self;
@@ -351,6 +355,7 @@ impl OrchestrationEditState {
 #[derive(Clone)]
 pub struct OrchestrationPickerHandles<A: OrchestrationControlAction> {
     pub model_picker: Option<ViewHandle<FilterableDropdown<A>>>,
+    pub effort_picker: Option<ViewHandle<Dropdown<A>>>,
     pub harness_picker: Option<ViewHandle<Dropdown<A>>>,
     pub environment_picker: Option<ViewHandle<FilterableDropdown<A>>>,
     pub host_picker: Option<ViewHandle<HostPicker>>,
@@ -367,6 +372,7 @@ impl<A: OrchestrationControlAction> Default for OrchestrationPickerHandles<A> {
     fn default() -> Self {
         Self {
             model_picker: None,
+            effort_picker: None,
             harness_picker: None,
             environment_picker: None,
             host_picker: None,
@@ -482,14 +488,169 @@ fn get_base_model_choices<'a>(
         .get_base_llm_choices_for_agent_mode(app)
         .filter(move |llm| is_local || llm_prefs.custom_llm_info_for_id(&llm.id).is_none())
 }
+fn oz_model_group_label(llm: &LLMInfo) -> String {
+    if is_auto(llm) {
+        "auto".to_string()
+    } else if llm.has_reasoning_level() {
+        llm.base_model_name().to_string()
+    } else {
+        llm.menu_display_name()
+    }
+}
+
+fn oz_model_group_key(llm: &LLMInfo) -> String {
+    if is_auto(llm) {
+        "auto".to_string()
+    } else if llm.has_reasoning_level() {
+        format!("reasoning:{}", llm.base_model_name())
+    } else {
+        format!("id:{}", llm.id)
+    }
+}
+
+fn oz_effort_label(llm: &LLMInfo) -> String {
+    if is_auto(llm) && llm.display_name.starts_with("auto (") {
+        llm.display_name
+            .trim_start_matches("auto (")
+            .trim_end_matches(')')
+            .to_string()
+    } else {
+        llm.reasoning_level()
+            .unwrap_or_else(|| DEFAULT_EFFORT_LABEL.to_string())
+    }
+}
+
+fn selected_oz_model<'a>(
+    choices: &'a [&'a LLMInfo],
+    initial_model_id: &str,
+) -> Option<&'a LLMInfo> {
+    choices
+        .iter()
+        .copied()
+        .find(|llm| llm.id.to_string() == initial_model_id)
+}
+
+fn choose_oz_variant_for_group<'a>(
+    variants: &[&'a LLMInfo],
+    selected_effort: Option<&str>,
+) -> &'a LLMInfo {
+    if let Some(effort) = selected_effort {
+        if let Some(choice) = variants
+            .iter()
+            .copied()
+            .find(|llm| oz_effort_label(llm).eq_ignore_ascii_case(effort))
+        {
+            return choice;
+        }
+    }
+    variants[0]
+}
+
+fn grouped_oz_models<'a>(choices: Vec<&'a LLMInfo>) -> Vec<(String, Vec<&'a LLMInfo>)> {
+    let mut groups: Vec<(String, String, Vec<&'a LLMInfo>)> = Vec::new();
+    for llm in choices {
+        let key = oz_model_group_key(llm);
+        if let Some((_, _, variants)) = groups.iter_mut().find(|(existing, _, _)| *existing == key)
+        {
+            variants.push(llm);
+        } else {
+            groups.push((key, oz_model_group_label(llm), vec![llm]));
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(_, label, variants)| (label, variants))
+        .collect()
+}
+
+fn strip_trailing_effort_label(display_name: &str, effort: &str) -> String {
+    let display = display_name.trim();
+    let effort = effort.trim();
+    if effort.is_empty() {
+        return display.to_string();
+    }
+    let lower = display.to_lowercase();
+    let effort_lower = effort.to_lowercase();
+    for suffix in [
+        format!(" ({effort_lower})"),
+        format!(" - {effort_lower}"),
+        format!(" – {effort_lower}"),
+        format!(" {effort_lower}"),
+    ] {
+        if lower.ends_with(&suffix) {
+            let keep_len = display.len().saturating_sub(suffix.len());
+            return display[..keep_len].trim().to_string();
+        }
+    }
+    display.to_string()
+}
+
+fn harness_model_group_label(model: &HarnessModelInfo) -> String {
+    model
+        .reasoning_level
+        .as_deref()
+        .map(|effort| strip_trailing_effort_label(&model.display_name, effort))
+        .filter(|label| !label.is_empty())
+        .unwrap_or_else(|| model.display_name.clone())
+}
+
+fn harness_effort_label(model: &HarnessModelInfo) -> String {
+    model
+        .reasoning_level
+        .clone()
+        .unwrap_or_else(|| DEFAULT_EFFORT_LABEL.to_string())
+}
+
+fn selected_harness_model<'a>(
+    models: &'a [HarnessModelInfo],
+    initial_model_id: &str,
+) -> Option<&'a HarnessModelInfo> {
+    models.iter().find(|model| model.id == initial_model_id)
+}
+
+fn choose_harness_variant_for_group<'a>(
+    variants: &[&'a HarnessModelInfo],
+    selected_effort: Option<&str>,
+) -> &'a HarnessModelInfo {
+    if let Some(effort) = selected_effort {
+        if let Some(choice) = variants
+            .iter()
+            .copied()
+            .find(|model| harness_effort_label(model).eq_ignore_ascii_case(effort))
+        {
+            return choice;
+        }
+    }
+    variants[0]
+}
+
+fn grouped_harness_models<'a>(
+    models: &'a [HarnessModelInfo],
+) -> Vec<(String, Vec<&'a HarnessModelInfo>)> {
+    let mut groups: Vec<(String, Vec<&'a HarnessModelInfo>)> = Vec::new();
+    for model in models {
+        let label = harness_model_group_label(model);
+        if let Some((_, variants)) = groups
+            .iter_mut()
+            .find(|(existing, _)| existing.eq_ignore_ascii_case(&label))
+        {
+            variants.push(model);
+        } else {
+            groups.push((label, vec![model]));
+        }
+    }
+    groups
+}
+
 /// Populates the model picker based on the active harness.
 ///
-/// - **Oz / empty**: shows the Warp LLM catalog (existing behavior).
+/// - **Oz / empty**: shows unique Warp base models; effort variants are
+///   moved into the effort picker.
 /// - **Local Codex**: shows only a "Default model" entry (no model delivery
 ///   possible for local Codex children).
 /// - **Other non-Oz harnesses**: shows "Default model" at the top, followed
-///   by the server-provided harness model catalog from
-///   `HarnessAvailabilityModel::models_for()`.
+///   by unique base models derived from the server-provided harness model
+///   catalog from `HarnessAvailabilityModel::models_for()`.
 pub fn populate_model_picker_for_harness<A: OrchestrationControlAction, V: View>(
     dropdown: &ViewHandle<FilterableDropdown<A>>,
     initial_model_id: &str,
@@ -504,8 +665,8 @@ pub fn populate_model_picker_for_harness<A: OrchestrationControlAction, V: View>
         match harness {
             Some(Harness::Oz) | None => {
                 // Oz / unset: Warp LLM catalog. Custom models excluded for
-                // cloud runs (not supported by remote workers).
-                // Order: auto models first, then custom models, then other models.
+                // cloud runs (not supported by remote workers). Order: auto
+                // models first, then custom models, then other models.
                 let llm_prefs = LLMPreferences::as_ref(ctx_dropdown);
                 let (auto_models, rest): (Vec<_>, Vec<_>) =
                     get_base_model_choices(llm_prefs, ctx_dropdown, is_local)
@@ -518,23 +679,35 @@ pub fn populate_model_picker_for_harness<A: OrchestrationControlAction, V: View>
                     .chain(custom_models)
                     .chain(other_models)
                     .collect();
-                let selected_display_name = ordered_choices
-                    .iter()
-                    .find(|llm| llm.id.to_string() == initial_model_id)
-                    .map(|llm| llm.menu_display_name());
-                let items = available_model_menu_items(
-                    ordered_choices,
-                    move |llm| {
-                        DropdownAction::select_action_and_close(A::model_changed(
-                            llm.id.to_string(),
-                        ))
-                    },
-                    None,
-                    None,
-                    false,
-                    false,
-                    ctx_dropdown,
-                );
+                let selected_effort =
+                    selected_oz_model(&ordered_choices, &initial_model_id).map(oz_effort_label);
+                let groups = grouped_oz_models(ordered_choices);
+                let selected_display_name = groups.iter().find_map(|(label, variants)| {
+                    variants
+                        .iter()
+                        .any(|llm| llm.id.to_string() == initial_model_id)
+                        .then(|| label.clone())
+                });
+                let items = groups
+                    .into_iter()
+                    .map(|(label, variants)| {
+                        let selected_id =
+                            choose_oz_variant_for_group(&variants, selected_effort.as_deref())
+                                .id
+                                .to_string();
+                        let icon = variants[0].provider.icon().unwrap_or(Icon::Oz);
+                        MenuItem::Item(
+                            MenuItemFields::new(label)
+                                .with_icon(icon)
+                                .with_on_select_action(DropdownAction::select_action_and_close(
+                                    A::model_changed(selected_id),
+                                ))
+                                .with_disabled(
+                                    variants.iter().all(|llm| llm.disable_reason.is_some()),
+                                ),
+                        )
+                    })
+                    .collect();
                 dropdown.set_rich_items(items, ctx_dropdown);
                 if let Some(name) = &selected_display_name {
                     dropdown.set_selected_by_name(name, ctx_dropdown);
@@ -547,17 +720,21 @@ pub fn populate_model_picker_for_harness<A: OrchestrationControlAction, V: View>
                 dropdown.set_selected_by_name(DEFAULT_MODEL_LABEL, ctx_dropdown);
             }
             Some(harness) => {
-                // Non-Oz harness: "Default model" at top, then server-provided
-                // harness models.
+                // Non-Oz harness: "Default model" at top, then unique base
+                // models derived from the server-provided harness models.
                 let mut items: Vec<MenuItem<DropdownAction>> = vec![default_model_menu_item::<A>()];
                 let availability = HarnessAvailabilityModel::as_ref(ctx_dropdown);
                 if let Some(models) = availability.models_for(harness) {
-                    for model in models {
-                        let model_id = model.id.clone();
-                        let fields = MenuItemFields::new(&model.display_name)
-                            .with_on_select_action(DropdownAction::select_action_and_close(
-                                A::model_changed(model_id),
-                            ));
+                    let selected_effort =
+                        selected_harness_model(models, &initial_model_id).map(harness_effort_label);
+                    for (label, variants) in grouped_harness_models(models) {
+                        let model_id =
+                            choose_harness_variant_for_group(&variants, selected_effort.as_deref())
+                                .id
+                                .clone();
+                        let fields = MenuItemFields::new(label).with_on_select_action(
+                            DropdownAction::select_action_and_close(A::model_changed(model_id)),
+                        );
                         items.push(MenuItem::Item(fields));
                     }
                 }
@@ -568,10 +745,14 @@ pub fn populate_model_picker_for_harness<A: OrchestrationControlAction, V: View>
                     availability
                         .models_for(harness)
                         .and_then(|models| {
-                            models
-                                .iter()
-                                .find(|m| m.id == initial_model_id)
-                                .map(|m| m.display_name.clone())
+                            grouped_harness_models(models).into_iter().find_map(
+                                |(label, variants)| {
+                                    variants
+                                        .iter()
+                                        .any(|m| m.id == initial_model_id)
+                                        .then_some(label)
+                                },
+                            )
                         })
                         .or_else(|| Some(DEFAULT_MODEL_LABEL.to_string()))
                 };
@@ -580,6 +761,90 @@ pub fn populate_model_picker_for_harness<A: OrchestrationControlAction, V: View>
                     dropdown.set_selected_by_name(name, ctx_dropdown);
                 }
             }
+        }
+    });
+}
+
+/// Populates the effort picker for the currently selected base model.
+///
+/// The picker writes the original combined model ID back into `model_id`, so
+/// persisted configs and run_agents requests remain backwards compatible.
+pub fn populate_effort_picker_for_harness<A: OrchestrationControlAction, V: View>(
+    dropdown: &ViewHandle<Dropdown<A>>,
+    initial_model_id: &str,
+    harness_type: &str,
+    is_local: bool,
+    ctx: &mut ViewContext<V>,
+) {
+    let initial_model_id = initial_model_id.to_string();
+    let harness_type = harness_type.to_string();
+    dropdown.update(ctx, |dropdown, ctx_dropdown| {
+        let harness = Harness::parse_orchestration_harness(&harness_type);
+        let mut items: Vec<MenuItem<DropdownAction>> = Vec::new();
+        let mut selected_name = DEFAULT_EFFORT_LABEL.to_string();
+
+        match harness {
+            Some(Harness::Oz) | None => {
+                let llm_prefs = LLMPreferences::as_ref(ctx_dropdown);
+                let choices: Vec<_> =
+                    get_base_model_choices(llm_prefs, ctx_dropdown, is_local).collect();
+                if let Some(selected) = selected_oz_model(&choices, &initial_model_id) {
+                    let selected_key = oz_model_group_key(selected);
+                    selected_name = oz_effort_label(selected);
+                    for llm in choices
+                        .into_iter()
+                        .filter(|llm| oz_model_group_key(llm) == selected_key)
+                    {
+                        let label = oz_effort_label(llm);
+                        items.push(MenuItem::Item(
+                            MenuItemFields::new(label)
+                                .with_on_select_action(DropdownAction::select_action_and_close(
+                                    A::effort_changed(llm.id.to_string()),
+                                ))
+                                .with_disabled(llm.disable_reason.is_some()),
+                        ));
+                    }
+                }
+            }
+            Some(Harness::Codex) if is_local => {}
+            Some(harness) => {
+                if !initial_model_id.is_empty() {
+                    let availability = HarnessAvailabilityModel::as_ref(ctx_dropdown);
+                    if let Some(models) = availability.models_for(harness) {
+                        if let Some(selected) = selected_harness_model(models, &initial_model_id) {
+                            let selected_base = harness_model_group_label(selected);
+                            selected_name = harness_effort_label(selected);
+                            for model in models.iter().filter(|model| {
+                                harness_model_group_label(model)
+                                    .eq_ignore_ascii_case(&selected_base)
+                            }) {
+                                let label = harness_effort_label(model);
+                                items.push(MenuItem::Item(
+                                    MenuItemFields::new(label).with_on_select_action(
+                                        DropdownAction::select_action_and_close(A::effort_changed(
+                                            model.id.clone(),
+                                        )),
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if items.is_empty() {
+            items.push(MenuItem::Item(
+                MenuItemFields::new(DEFAULT_EFFORT_LABEL).with_disabled(true),
+            ));
+        }
+        let has_multiple_choices = items.iter().filter(|item| item.selectable()).count() > 1;
+        dropdown.set_rich_items(items, ctx_dropdown);
+        dropdown.set_selected_by_name(&selected_name, ctx_dropdown);
+        if has_multiple_choices {
+            dropdown.set_enabled(ctx_dropdown);
+        } else {
+            dropdown.set_disabled(ctx_dropdown);
         }
     });
 }
@@ -1424,6 +1689,15 @@ pub fn apply_harness_change<A: OrchestrationControlAction, V: View>(
             ctx,
         );
     }
+    if let Some(handle) = &handles.effort_picker {
+        populate_effort_picker_for_harness(
+            handle,
+            &state.model_id,
+            &state.harness_type,
+            is_local,
+            ctx,
+        );
+    }
 
     // Re-resolve auth selection from per-harness persisted state.
     // Honors an explicit `Inherit` choice for the new harness.
@@ -1479,6 +1753,15 @@ pub fn apply_execution_mode_change<A: OrchestrationControlAction, V: View>(
             ctx,
         );
     }
+    if let Some(handle) = &handles.effort_picker {
+        populate_effort_picker_for_harness(
+            handle,
+            &state.model_id,
+            &state.harness_type,
+            is_local,
+            ctx,
+        );
+    }
     if let Some(handle) = &handles.host_picker {
         let initial_host = match &state.execution_mode {
             RunAgentsExecutionMode::Remote { worker_host, .. } => worker_host.as_str(),
@@ -1515,6 +1798,15 @@ pub fn repopulate_all_pickers<A: OrchestrationControlAction, V: View>(
     }
     if let Some(handle) = &handles.model_picker {
         populate_model_picker_for_harness(
+            handle,
+            &state.model_id,
+            &state.harness_type,
+            is_local,
+            ctx,
+        );
+    }
+    if let Some(handle) = &handles.effort_picker {
+        populate_effort_picker_for_harness(
             handle,
             &state.model_id,
             &state.harness_type,
@@ -1576,28 +1868,50 @@ pub fn sync_picker_selections<A: OrchestrationControlAction, V: View>(
             let display_name = match harness {
                 Some(Harness::Oz) | None => {
                     let llm_prefs = LLMPreferences::as_ref(ctx_dropdown);
-                    llm_prefs
-                        .get_base_llm_choices_for_agent_mode(ctx_dropdown)
-                        .find(|llm| llm.id.to_string() == target_model_id)
-                        .map(|llm| llm.menu_display_name())
+                    let choices: Vec<_> =
+                        get_base_model_choices(llm_prefs, ctx_dropdown, true).collect();
+                    selected_oz_model(&choices, &target_model_id).map(oz_model_group_label)
                 }
                 Some(harness) => {
                     if target_model_id.is_empty() {
                         Some(DEFAULT_MODEL_LABEL.to_string())
                     } else {
                         let availability = HarnessAvailabilityModel::as_ref(ctx_dropdown);
-                        availability.models_for(harness).and_then(|models| {
-                            models
-                                .iter()
-                                .find(|m| m.id == target_model_id)
-                                .map(|m| m.display_name.clone())
-                        })
+                        availability
+                            .models_for(harness)
+                            .and_then(|models| selected_harness_model(models, &target_model_id))
+                            .map(harness_model_group_label)
                     }
                 }
             };
             if let Some(name) = &display_name {
                 dropdown.set_selected_by_name(name, ctx_dropdown);
             }
+        });
+    }
+    if let Some(effort_picker) = handles.effort_picker.clone() {
+        let target_model_id = state.model_id.clone();
+        let harness_type = state.harness_type.clone();
+        effort_picker.update(ctx, |dropdown, ctx_dropdown| {
+            let harness = Harness::parse_orchestration_harness(&harness_type);
+            let display_name = match harness {
+                Some(Harness::Oz) | None => {
+                    let llm_prefs = LLMPreferences::as_ref(ctx_dropdown);
+                    let choices: Vec<_> =
+                        get_base_model_choices(llm_prefs, ctx_dropdown, true).collect();
+                    selected_oz_model(&choices, &target_model_id).map(oz_effort_label)
+                }
+                Some(_) if target_model_id.is_empty() => Some(DEFAULT_EFFORT_LABEL.to_string()),
+                Some(harness) => {
+                    let availability = HarnessAvailabilityModel::as_ref(ctx_dropdown);
+                    availability
+                        .models_for(harness)
+                        .and_then(|models| selected_harness_model(models, &target_model_id))
+                        .map(harness_effort_label)
+                }
+            }
+            .unwrap_or_else(|| DEFAULT_EFFORT_LABEL.to_string());
+            dropdown.set_selected_by_name(&display_name, ctx_dropdown);
         });
     }
     if let Some(harness_picker) = handles.harness_picker.clone() {
@@ -2000,6 +2314,14 @@ pub fn render_picker_row_with_layout<A: OrchestrationControlAction>(
                 .as_ref()
                 .map(|p| ChildView::new(p).finish()),
         );
+        add(
+            &mut column,
+            "Effort",
+            handles
+                .effort_picker
+                .as_ref()
+                .map(|p| ChildView::new(p).finish()),
+        );
 
         Container::new(column.finish())
             .with_margin_top(12.)
@@ -2046,6 +2368,14 @@ pub fn render_picker_row_with_layout<A: OrchestrationControlAction>(
             "Base model",
             handles
                 .model_picker
+                .as_ref()
+                .map(|p| ChildView::new(p).finish()),
+        );
+        add_picker(
+            &mut row,
+            "Effort",
+            handles
+                .effort_picker
                 .as_ref()
                 .map(|p| ChildView::new(p).finish()),
         );

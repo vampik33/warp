@@ -70,7 +70,12 @@ impl button::Theme for UpgradeButtonTheme {
 #[derive(Clone, Debug)]
 pub struct OnboardingModelInfo {
     pub id: LLMId,
+    /// Full display title for the concrete model variant.
     pub title: String,
+    /// UI-only base model title used to collapse effort/reasoning variants.
+    pub base_title: String,
+    /// UI-only effort/reasoning label for this concrete model variant.
+    pub effort_title: String,
     pub icon: Icon,
     pub requires_upgrade: bool,
     pub is_default: bool,
@@ -126,8 +131,12 @@ impl AgentDevelopmentSettings {
 pub enum AgentSlideAction {
     /// Select model by its ID. When the picker is expanded this also collapses it.
     SelectModel(LLMId),
-    /// Toggle the expanded state of the collapsed picker chip.
+    /// Select the best concrete model variant for a base model group.
+    SelectModelGroup(String),
+    /// Toggle the expanded state of the collapsed model picker chip.
     ToggleModelListExpanded,
+    /// Toggle the expanded state of the collapsed effort picker chip.
+    ToggleEffortListExpanded,
     /// Update the keyboard/hover highlight cursor to the given model id.
     /// Dispatched from hover handlers on enabled rows.
     HighlightModel(LLMId),
@@ -155,6 +164,9 @@ pub struct AgentSlide {
 
     /// Mouse state handle for the collapsed model-picker chip (closed-state click target).
     chip_mouse_state: MouseStateHandle,
+    /// Mouse state handle for the collapsed effort-picker chip (closed-state click target).
+    effort_chip_mouse_state: MouseStateHandle,
+    effort_mouse_states: Vec<MouseStateHandle>,
 
     autonomy_full_mouse_state: MouseStateHandle,
     autonomy_partial_mouse_state: MouseStateHandle,
@@ -167,7 +179,9 @@ pub struct AgentSlide {
     upgrade_button: button::Button,
     scroll_state: ClippedScrollStateHandle,
     dropdown_scroll_state: ClippedScrollStateHandle,
+    effort_dropdown_scroll_state: ClippedScrollStateHandle,
     is_model_list_expanded: bool,
+    is_effort_list_expanded: bool,
     highlighted_model_id: Option<LLMId>,
     show_auth_prompt_bar: bool,
     copy_url_mouse_state: MouseStateHandle,
@@ -195,6 +209,83 @@ fn sorted_models(models: &[OnboardingModelInfo]) -> Vec<OnboardingModelInfo> {
     free.into_iter().chain(premium).collect()
 }
 
+#[derive(Clone)]
+struct OnboardingModelGroup {
+    title: String,
+    icon: Icon,
+    requires_upgrade: bool,
+    is_default: bool,
+    variants: Vec<OnboardingModelInfo>,
+}
+
+fn selected_model<'a>(
+    models: &'a [OnboardingModelInfo],
+    settings: &AgentDevelopmentSettings,
+) -> Option<&'a OnboardingModelInfo> {
+    models
+        .iter()
+        .find(|m| m.id == settings.selected_model_id)
+        .or_else(|| models.first())
+}
+
+fn sorted_model_groups(models: &[OnboardingModelInfo]) -> Vec<OnboardingModelGroup> {
+    let mut groups: Vec<OnboardingModelGroup> = Vec::new();
+    for model in sorted_models(models) {
+        if let Some(group) = groups
+            .iter_mut()
+            .find(|group| group.title.eq_ignore_ascii_case(&model.base_title))
+        {
+            group.requires_upgrade &= model.requires_upgrade;
+            group.is_default |= model.is_default;
+            group.variants.push(model);
+        } else {
+            groups.push(OnboardingModelGroup {
+                title: model.base_title.clone(),
+                icon: model.icon,
+                requires_upgrade: model.requires_upgrade,
+                is_default: model.is_default,
+                variants: vec![model],
+            });
+        }
+    }
+    groups
+}
+
+fn variants_for_selected_group(
+    models: &[OnboardingModelInfo],
+    settings: &AgentDevelopmentSettings,
+) -> Vec<OnboardingModelInfo> {
+    let Some(selected) = selected_model(models, settings) else {
+        return Vec::new();
+    };
+    sorted_models(models)
+        .into_iter()
+        .filter(|model| model.base_title.eq_ignore_ascii_case(&selected.base_title))
+        .collect()
+}
+
+fn choose_variant_for_group(
+    variants: &[OnboardingModelInfo],
+    selected_effort: Option<&str>,
+) -> Option<LLMId> {
+    selected_effort
+        .and_then(|effort| {
+            variants
+                .iter()
+                .find(|model| {
+                    !model.requires_upgrade && model.effort_title.eq_ignore_ascii_case(effort)
+                })
+                .map(|model| model.id.clone())
+        })
+        .or_else(|| {
+            variants
+                .iter()
+                .find(|model| !model.requires_upgrade)
+                .map(|model| model.id.clone())
+        })
+        .or_else(|| variants.first().map(|model| model.id.clone()))
+}
+
 impl AgentSlide {
     pub(crate) fn new(
         onboarding_state: warpui_core::ModelHandle<OnboardingStateModel>,
@@ -202,6 +293,9 @@ impl AgentSlide {
     ) -> Self {
         let model_count = onboarding_state.as_ref(ctx).models().len();
         let model_mouse_states = (0..model_count)
+            .map(|_| MouseStateHandle::default())
+            .collect();
+        let effort_mouse_states = (0..model_count)
             .map(|_| MouseStateHandle::default())
             .collect();
 
@@ -221,6 +315,7 @@ impl AgentSlide {
                     }
                     let model_count = state.models().len();
                     me.ensure_mouse_states_for_models(model_count, ctx);
+                    me.ensure_mouse_states_for_efforts(model_count, ctx);
                 }
                 OnboardingStateEvent::AuthStateChanged => {
                     let new_state = model.as_ref(ctx).auth_state();
@@ -253,6 +348,8 @@ impl AgentSlide {
             onboarding_state,
             model_mouse_states,
             chip_mouse_state: MouseStateHandle::default(),
+            effort_chip_mouse_state: MouseStateHandle::default(),
+            effort_mouse_states,
             autonomy_full_mouse_state: MouseStateHandle::default(),
             autonomy_partial_mouse_state: MouseStateHandle::default(),
             autonomy_none_mouse_state: MouseStateHandle::default(),
@@ -262,7 +359,9 @@ impl AgentSlide {
             upgrade_button: button::Button::default(),
             scroll_state: ClippedScrollStateHandle::new(),
             dropdown_scroll_state: ClippedScrollStateHandle::new(),
+            effort_dropdown_scroll_state: ClippedScrollStateHandle::new(),
             is_model_list_expanded: false,
+            is_effort_list_expanded: false,
             highlighted_model_id: None,
             show_auth_prompt_bar: false,
             copy_url_mouse_state: MouseStateHandle::default(),
@@ -278,6 +377,30 @@ impl AgentSlide {
         if self.model_mouse_states.len() < model_count {
             self.model_mouse_states.extend(
                 (self.model_mouse_states.len()..model_count).map(|_| MouseStateHandle::default()),
+            );
+        }
+        ctx.notify();
+    }
+
+    fn set_effort_list_expanded(&mut self, expanded: bool, ctx: &mut ViewContext<Self>) {
+        if self.is_effort_list_expanded == expanded {
+            return;
+        }
+        self.is_effort_list_expanded = expanded;
+        if expanded {
+            self.is_model_list_expanded = false;
+        }
+        ctx.notify();
+    }
+
+    fn ensure_mouse_states_for_efforts(
+        &mut self,
+        effort_count: usize,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        if self.effort_mouse_states.len() < effort_count {
+            self.effort_mouse_states.extend(
+                (self.effort_mouse_states.len()..effort_count).map(|_| MouseStateHandle::default()),
             );
         }
         ctx.notify();
@@ -424,17 +547,103 @@ impl AgentSlide {
         settings: &AgentDevelopmentSettings,
         app: &AppContext,
     ) -> Box<dyn Element> {
+        let model_picker = self.render_model_picker_section(appearance, settings, app);
+        let effort_picker = self.render_effort_picker_section(appearance, settings, app);
+
+        let has_disabled = self
+            .onboarding_state
+            .as_ref(app)
+            .models()
+            .iter()
+            .any(|m| m.requires_upgrade);
+
+        let mut col = Flex::column()
+            .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .with_child(
+                Flex::row()
+                    .with_main_axis_size(MainAxisSize::Max)
+                    .with_cross_axis_alignment(CrossAxisAlignment::Start)
+                    .with_child(ConstrainedBox::new(model_picker).with_width(260.).finish())
+                    .with_child(
+                        Container::new(
+                            ConstrainedBox::new(effort_picker).with_width(180.).finish(),
+                        )
+                        .with_margin_left(12.)
+                        .finish(),
+                    )
+                    .finish(),
+            );
+
+        if has_disabled {
+            col = col.with_child(
+                Container::new(self.render_upgrade_banner(appearance))
+                    .with_margin_top(12.)
+                    .finish(),
+            );
+        }
+
+        col.finish()
+    }
+
+    fn render_model_picker_section(
+        &self,
+        appearance: &Appearance,
+        settings: &AgentDevelopmentSettings,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
         let header = self.render_section_header("Default model", appearance);
+        let chip = self.render_collapsed_model_chip(
+            appearance,
+            settings,
+            app,
+            self.is_model_list_expanded,
+        );
+        let stack = self.render_picker_stack(
+            chip,
+            self.is_model_list_expanded,
+            self.render_model_list_overlay(appearance, app),
+        );
 
-        let expanded = self.is_model_list_expanded;
-        let chip = self.render_collapsed_model_chip(appearance, settings, app, expanded);
+        Flex::column()
+            .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .with_child(header)
+            .with_child(Container::new(stack).with_margin_top(12.).finish())
+            .finish()
+    }
 
-        // Wrap the chip in a `Stack` so the floating dropdown overlay can live
-        // inline here (as a child of the left column) and inherit the chip's
-        // full column width via `ParentOffsetBounds::ParentBySize`. When the
-        // picker is collapsed the Stack has just the chip as its single child
-        // and lays out exactly like a bare chip would.
-        let mut chip_stack = Stack::new().with_child(chip);
+    fn render_effort_picker_section(
+        &self,
+        appearance: &Appearance,
+        settings: &AgentDevelopmentSettings,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let header = self.render_section_header("Effort level", appearance);
+        let chip = self.render_collapsed_effort_chip(
+            appearance,
+            settings,
+            app,
+            self.is_effort_list_expanded,
+        );
+        let stack = self.render_picker_stack(
+            chip,
+            self.is_effort_list_expanded,
+            self.render_effort_list_overlay(appearance, app),
+        );
+
+        Flex::column()
+            .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .with_child(header)
+            .with_child(Container::new(stack).with_margin_top(12.).finish())
+            .finish()
+    }
+
+    fn render_picker_stack(
+        &self,
+        chip: Box<dyn Element>,
+        expanded: bool,
+        overlay: Box<dyn Element>,
+    ) -> Box<dyn Element> {
+        let mut stack = Stack::new().with_child(chip);
         if expanded {
             let positioning = OffsetPositioning::from_axes(
                 PositioningAxis::relative_to_parent(
@@ -448,37 +657,9 @@ impl AgentSlide {
                     AnchorPair::new(YAxisAnchor::Bottom, YAxisAnchor::Top),
                 ),
             );
-            chip_stack.add_positioned_overlay_child(
-                self.render_model_list_overlay(appearance, app),
-                positioning,
-            );
+            stack.add_positioned_overlay_child(overlay, positioning);
         }
-
-        let has_disabled = self
-            .onboarding_state
-            .as_ref(app)
-            .models()
-            .iter()
-            .any(|m| m.requires_upgrade);
-
-        let mut col = Flex::column()
-            .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .with_child(header)
-            .with_child(
-                Container::new(chip_stack.finish())
-                    .with_margin_top(12.)
-                    .finish(),
-            );
-
-        if has_disabled {
-            col = col.with_child(
-                Container::new(self.render_upgrade_banner(appearance))
-                    .with_margin_top(12.)
-                    .finish(),
-            );
-        }
-
-        col.finish()
+        stack.finish()
     }
 
     /// Renders the single-row collapsed picker button: provider icon, selected title,
@@ -499,13 +680,10 @@ impl AgentSlide {
         let ui_font_family = appearance.ui_font_family();
 
         let models = self.onboarding_state.as_ref(app).models();
-        let selected = models
-            .iter()
-            .find(|m| m.id == settings.selected_model_id)
-            .or_else(|| models.first());
+        let selected = selected_model(models, settings);
 
         let (title_text, icon) = match selected {
-            Some(model) => (model.title.clone(), Some(model.icon)),
+            Some(model) => (model.base_title.clone(), Some(model.icon)),
             None => ("".to_string(), None),
         };
         let is_disabled = settings.disable_oz;
@@ -590,10 +768,96 @@ impl AgentSlide {
         }
     }
 
-    /// Renders the vertical list of model rows shown inside the floating dropdown
-    /// overlay. Each row: provider icon + title on the left, pill on the right
-    /// (Premium for paywalled rows). Disabled rows are rendered dimmed and are
-    /// not clickable or hover-selectable.
+    fn render_collapsed_effort_chip(
+        &self,
+        appearance: &Appearance,
+        settings: &AgentDevelopmentSettings,
+        app: &AppContext,
+        expanded: bool,
+    ) -> Box<dyn Element> {
+        const CHIP_HEIGHT: f32 = 48.;
+        const CHIP_RADIUS: f32 = 8.;
+
+        let theme = appearance.theme();
+        let background_for_text = theme.background().into_solid();
+        let ui_font_family = appearance.ui_font_family();
+
+        let models = self.onboarding_state.as_ref(app).models();
+        let selected = selected_model(models, settings);
+        let title_text = selected
+            .map(|model| model.effort_title.clone())
+            .unwrap_or_else(|| "Default".to_string());
+        let has_multiple_efforts = variants_for_selected_group(models, settings)
+            .iter()
+            .filter(|model| !model.requires_upgrade)
+            .count()
+            > 1;
+        let is_disabled = settings.disable_oz || !has_multiple_efforts;
+
+        let title_color: ColorU = if is_disabled {
+            internal_colors::text_disabled(theme, background_for_text)
+        } else {
+            internal_colors::text_main(theme, background_for_text)
+        };
+
+        let border_color = if expanded && !is_disabled {
+            theme.accent()
+        } else {
+            Fill::Solid(internal_colors::neutral_4(theme))
+        };
+
+        let mouse_state = self.effort_chip_mouse_state.clone();
+
+        let hoverable = Hoverable::new(mouse_state, move |_| {
+            let title_el = Text::new(title_text.clone(), ui_font_family, 14.0)
+                .with_color(title_color)
+                .with_style(Properties {
+                    weight: Weight::Normal,
+                    ..Default::default()
+                })
+                .with_line_height_ratio(1.0)
+                .finish();
+
+            let chevron = ConstrainedBox::new(Box::new(WarpUiIcon::new(
+                "bundled/svg/chevron-down.svg",
+                title_color,
+            )))
+            .with_width(14.)
+            .with_height(14.)
+            .finish();
+
+            let row = Flex::row()
+                .with_main_axis_size(MainAxisSize::Max)
+                .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                .with_child(title_el)
+                .with_child(chevron)
+                .finish();
+
+            ConstrainedBox::new(
+                Container::new(row)
+                    .with_horizontal_padding(16.)
+                    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(CHIP_RADIUS)))
+                    .with_border(Border::all(1.).with_border_fill(border_color))
+                    .finish(),
+            )
+            .with_min_height(CHIP_HEIGHT)
+            .finish()
+        });
+
+        if is_disabled {
+            hoverable.finish()
+        } else {
+            hoverable
+                .with_cursor(Cursor::PointingHand)
+                .on_click(|ctx, _, _| {
+                    ctx.dispatch_typed_action(AgentSlideAction::ToggleEffortListExpanded);
+                })
+                .finish()
+        }
+    }
+
+    /// Renders the vertical list of grouped base-model rows shown inside the floating dropdown.
     fn render_model_list_rows(
         &self,
         appearance: &Appearance,
@@ -605,27 +869,66 @@ impl AgentSlide {
         let state = self.onboarding_state.as_ref(app);
         let highlighted_id = self.highlighted_model_id.clone();
         let selected_id = state.agent_settings().selected_model_id.clone();
-        let models = sorted_models(state.models());
+        let selected_base = selected_model(state.models(), state.agent_settings())
+            .map(|model| model.base_title.clone());
+        let groups = sorted_model_groups(state.models());
 
         let mut col = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
 
-        for (index, model) in models.iter().enumerate() {
+        for (index, group) in groups.iter().enumerate() {
             let mouse_state = self
                 .model_mouse_states
                 .get(index)
                 .cloned()
                 .unwrap_or_default();
 
-            let is_highlighted = highlighted_id.as_ref() == Some(&model.id)
-                || (highlighted_id.is_none() && model.id == selected_id);
-            let row =
-                self.render_model_row(appearance, model, is_highlighted, mouse_state, ROW_HEIGHT);
-            // Wrap each row in `SavePosition` so the scrollable can scroll
-            // the keyboard-highlighted row into view (see
-            // `advance_highlighted_model`). Mirrors the pattern in
-            // `VerticalTabsPanelState::scroll_to_tab`.
+            let highlighted_base = highlighted_id.as_ref().and_then(|id| {
+                group
+                    .variants
+                    .iter()
+                    .find(|model| &model.id == id)
+                    .map(|model| model.base_title.clone())
+            });
+            let is_highlighted = highlighted_base.as_ref() == Some(&group.title)
+                || (highlighted_id.is_none() && selected_base.as_ref() == Some(&group.title));
+            let row = self.render_model_group_row(
+                appearance,
+                group,
+                is_highlighted,
+                mouse_state,
+                ROW_HEIGHT,
+                selected_id.clone(),
+            );
             let row = SavePosition::new(row, &model_row_position_id(index)).finish();
 
+            let margin_top = if index == 0 { 0. } else { ROW_GAP };
+            col = col.with_child(Container::new(row).with_margin_top(margin_top).finish());
+        }
+        col.finish()
+    }
+
+    fn render_effort_list_rows(
+        &self,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        const ROW_HEIGHT: f32 = 48.;
+        const ROW_GAP: f32 = 2.;
+
+        let state = self.onboarding_state.as_ref(app);
+        let selected_id = state.agent_settings().selected_model_id.clone();
+        let variants = variants_for_selected_group(state.models(), state.agent_settings());
+        let mut col = Flex::column().with_cross_axis_alignment(CrossAxisAlignment::Stretch);
+
+        for (index, model) in variants.iter().enumerate() {
+            let mouse_state = self
+                .effort_mouse_states
+                .get(index)
+                .cloned()
+                .unwrap_or_default();
+            let is_highlighted = model.id == selected_id;
+            let row =
+                self.render_effort_row(appearance, model, is_highlighted, mouse_state, ROW_HEIGHT);
             let margin_top = if index == 0 { 0. } else { ROW_GAP };
             col = col.with_child(Container::new(row).with_margin_top(margin_top).finish());
         }
@@ -637,17 +940,41 @@ impl AgentSlide {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
+        self.render_picker_overlay(
+            self.render_model_list_rows(appearance, app),
+            self.dropdown_scroll_state.clone(),
+            AgentSlideAction::ToggleModelListExpanded,
+            appearance,
+        )
+    }
+
+    fn render_effort_list_overlay(
+        &self,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        self.render_picker_overlay(
+            self.render_effort_list_rows(appearance, app),
+            self.effort_dropdown_scroll_state.clone(),
+            AgentSlideAction::ToggleEffortListExpanded,
+            appearance,
+        )
+    }
+
+    fn render_picker_overlay(
+        &self,
+        list: Box<dyn Element>,
+        scroll_state: ClippedScrollStateHandle,
+        dismiss_action: AgentSlideAction,
+        appearance: &Appearance,
+    ) -> Box<dyn Element> {
         const OVERLAY_RADIUS: f32 = 8.;
         const OVERLAY_PADDING: f32 = 4.;
         const OVERLAY_MAX_HEIGHT: f32 = 400.;
 
         let theme = appearance.theme();
-        let list = self.render_model_list_rows(appearance, app);
-
-        // Wrap the list in a vertical `ClippedScrollable` so rows scroll when
-        // they exceed `OVERLAY_MAX_HEIGHT`.
         let scrollable = ClippedScrollable::vertical(
-            self.dropdown_scroll_state.clone(),
+            scroll_state,
             list,
             ScrollbarWidth::Auto,
             theme.disabled_text_color(theme.surface_1()).into(),
@@ -671,42 +998,66 @@ impl AgentSlide {
 
         Dismiss::new(card)
             .prevent_interaction_with_other_elements()
-            .on_dismiss(|ctx, _| {
-                ctx.dispatch_typed_action(AgentSlideAction::ToggleModelListExpanded);
+            .on_dismiss(move |ctx, _| {
+                ctx.dispatch_typed_action(dismiss_action.clone());
             })
             .finish()
     }
 
-    fn render_model_row(
+    fn render_pill(&self, label: &'static str, appearance: &Appearance) -> Box<dyn Element> {
+        let theme = appearance.theme();
+        let background_for_text = theme.background().into_solid();
+        let badge = Text::new(label.to_string(), appearance.ui_font_family(), 11.0)
+            .with_color(internal_colors::text_sub(theme, background_for_text))
+            .with_style(Properties {
+                weight: Weight::Normal,
+                ..Default::default()
+            })
+            .with_line_height_ratio(1.0)
+            .finish();
+        Container::new(badge)
+            .with_padding_left(8.)
+            .with_padding_right(8.)
+            .with_padding_top(4.)
+            .with_padding_bottom(4.)
+            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
+            .with_background(Fill::Solid(internal_colors::neutral_3(theme)))
+            .finish()
+    }
+
+    fn render_model_group_row(
         &self,
         appearance: &Appearance,
-        model: &OnboardingModelInfo,
+        group: &OnboardingModelGroup,
         is_highlighted: bool,
         mouse_state: MouseStateHandle,
         height: f32,
+        selected_id: LLMId,
     ) -> Box<dyn Element> {
         const ROW_RADIUS: f32 = 6.;
 
         let theme = appearance.theme();
         let background_for_text = theme.background().into_solid();
         let ui_font_family = appearance.ui_font_family();
-
-        let is_disabled = model.requires_upgrade;
-
+        let is_disabled = group.requires_upgrade;
         let title_color: ColorU = if is_disabled {
             internal_colors::text_disabled(theme, background_for_text)
         } else {
             internal_colors::text_main(theme, background_for_text)
         };
 
-        let row_id = model.id.clone();
-        let title = model.title.clone();
-        let icon = model.icon;
-        let requires_upgrade = model.requires_upgrade;
-        let is_default = model.is_default;
+        let title = group.title.clone();
+        let icon = group.icon;
+        let requires_upgrade = group.requires_upgrade;
+        let is_default = group.is_default;
+        let group_variants = group.variants.clone();
+        let click_group_title = title.clone();
+        let hover_id = choose_variant_for_group(&group_variants, None);
+        let row_title = title;
+        let row_variants = group_variants.clone();
 
         let hoverable_body = Hoverable::new(mouse_state, move |_| {
-            let title_el = Text::new(title.clone(), ui_font_family, 14.0)
+            let title_el = Text::new(row_title.clone(), ui_font_family, 14.0)
                 .with_color(title_color)
                 .with_style(Properties {
                     weight: Weight::Normal,
@@ -725,34 +1076,13 @@ impl AgentSlide {
                 .with_child(icon_el)
                 .with_child(Container::new(title_el).with_margin_left(8.).finish())
                 .finish();
-
-            // Trailing pills: "Recommended" on the server-designated default
-            // model, "Premium" on paywalled rows. In practice a single row is
-            // at most one of these, but both can be shown side-by-side if the
-            // default is also premium for any reason.
-            let make_pill = |label: &'static str| -> Box<dyn Element> {
-                let badge = Text::new(label.to_string(), ui_font_family, 11.0)
-                    .with_color(internal_colors::text_sub(theme, background_for_text))
-                    .with_style(Properties {
-                        weight: Weight::Normal,
-                        ..Default::default()
-                    })
-                    .with_line_height_ratio(1.0)
-                    .finish();
-                Container::new(badge)
-                    .with_padding_left(8.)
-                    .with_padding_right(8.)
-                    .with_padding_top(4.)
-                    .with_padding_bottom(4.)
-                    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-                    .with_background(Fill::Solid(internal_colors::neutral_3(theme)))
-                    .finish()
-            };
-
-            let trailing: Box<dyn Element> = if is_default {
-                make_pill("Recommended")
-            } else if requires_upgrade {
-                make_pill("Premium")
+            let is_selected = row_variants.iter().any(|model| model.id == selected_id);
+            let trailing: Box<dyn Element> = if requires_upgrade {
+                self.render_pill("Premium", appearance)
+            } else if is_default {
+                self.render_pill("Recommended", appearance)
+            } else if is_selected {
+                self.render_pill("Selected", appearance)
             } else {
                 Empty::new().finish()
             };
@@ -784,20 +1114,93 @@ impl AgentSlide {
         });
 
         if is_disabled {
-            // Disabled rows: no click, no hover-updates-highlight, muted.
             hoverable_body.finish()
         } else {
-            let click_id = row_id.clone();
-            let hover_id = row_id;
             hoverable_body
                 .with_cursor(Cursor::PointingHand)
                 .on_hover(move |is_hovered, ctx, _, _| {
-                    if is_hovered {
+                    if let (true, Some(hover_id)) = (is_hovered, hover_id.as_ref()) {
                         ctx.dispatch_typed_action(AgentSlideAction::HighlightModel(
                             hover_id.clone(),
                         ));
                     }
                 })
+                .on_click(move |ctx, _, _| {
+                    ctx.dispatch_typed_action(AgentSlideAction::SelectModelGroup(
+                        click_group_title.clone(),
+                    ));
+                })
+                .finish()
+        }
+    }
+
+    fn render_effort_row(
+        &self,
+        appearance: &Appearance,
+        model: &OnboardingModelInfo,
+        is_highlighted: bool,
+        mouse_state: MouseStateHandle,
+        height: f32,
+    ) -> Box<dyn Element> {
+        const ROW_RADIUS: f32 = 6.;
+
+        let theme = appearance.theme();
+        let background_for_text = theme.background().into_solid();
+        let ui_font_family = appearance.ui_font_family();
+        let is_disabled = model.requires_upgrade;
+        let title_color: ColorU = if is_disabled {
+            internal_colors::text_disabled(theme, background_for_text)
+        } else {
+            internal_colors::text_main(theme, background_for_text)
+        };
+        let click_id = model.id.clone();
+        let title = model.effort_title.clone();
+        let requires_upgrade = model.requires_upgrade;
+
+        let hoverable_body = Hoverable::new(mouse_state, move |_| {
+            let title_el = Text::new(title.clone(), ui_font_family, 14.0)
+                .with_color(title_color)
+                .with_style(Properties {
+                    weight: Weight::Normal,
+                    ..Default::default()
+                })
+                .with_line_height_ratio(1.0)
+                .finish();
+            let trailing: Box<dyn Element> = if requires_upgrade {
+                self.render_pill("Premium", appearance)
+            } else if is_highlighted {
+                self.render_pill("Selected", appearance)
+            } else {
+                Empty::new().finish()
+            };
+            let row = Flex::row()
+                .with_main_axis_size(MainAxisSize::Max)
+                .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                .with_child(title_el)
+                .with_child(trailing)
+                .finish();
+            let background = if is_highlighted && !is_disabled {
+                Some(Fill::Solid(internal_colors::neutral_2(theme)))
+            } else {
+                None
+            };
+            let mut container = Container::new(row)
+                .with_horizontal_padding(12.)
+                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(ROW_RADIUS)));
+            if let Some(bg) = background {
+                container = container.with_background(bg);
+            }
+            ConstrainedBox::new(container.finish())
+                .with_min_height(height)
+                .finish()
+        });
+
+        if is_disabled {
+            hoverable_body.finish()
+        } else {
+            hoverable_body
+                .with_cursor(Cursor::PointingHand)
                 .on_click(move |ctx, _, _| {
                     ctx.dispatch_typed_action(AgentSlideAction::SelectModel(click_id.clone()));
                 })
@@ -1374,19 +1777,40 @@ impl AgentSlide {
         ctx.notify();
     }
 
+    fn select_model_group(&mut self, base_title: &str, ctx: &mut ViewContext<Self>) {
+        let state = self.onboarding_state.as_ref(ctx);
+        let selected_effort = selected_model(state.models(), state.agent_settings())
+            .map(|model| model.effort_title.clone());
+        let groups = sorted_model_groups(state.models());
+        let Some(group) = groups
+            .iter()
+            .find(|group| group.title.eq_ignore_ascii_case(base_title))
+        else {
+            return;
+        };
+        let Some(model_id) = choose_variant_for_group(&group.variants, selected_effort.as_deref())
+        else {
+            return;
+        };
+        self.select_model(model_id, ctx);
+    }
+
     fn set_model_list_expanded(&mut self, expanded: bool, ctx: &mut ViewContext<Self>) {
         if self.is_model_list_expanded == expanded {
             return;
         }
         self.is_model_list_expanded = expanded;
         if expanded {
+            self.is_effort_list_expanded = false;
             // Seed the highlight from the current selection so keyboard nav
             // starts on the selected row.
             let state = self.onboarding_state.as_ref(ctx);
             let selected_id = state.agent_settings().selected_model_id.clone();
-            if let Some(index) = sorted_models(state.models())
+            let selected_base = selected_model(state.models(), state.agent_settings())
+                .map(|model| model.base_title.clone());
+            if let Some(index) = sorted_model_groups(state.models())
                 .iter()
-                .position(|m| m.id == selected_id)
+                .position(|group| selected_base.as_ref() == Some(&group.title))
             {
                 self.dropdown_scroll_state.scroll_to_position(ScrollTarget {
                     position_id: model_row_position_id(index),
@@ -1485,6 +1909,9 @@ impl OnboardingSlide for AgentSlide {
             self.advance_highlighted_model(/* forward */ false, ctx);
             return;
         }
+        if self.is_effort_list_expanded {
+            return;
+        }
         if self.workspace_enforces_autonomy(ctx) {
             return;
         }
@@ -1506,6 +1933,9 @@ impl OnboardingSlide for AgentSlide {
         }
         if self.is_model_list_expanded {
             self.advance_highlighted_model(/* forward */ true, ctx);
+            return;
+        }
+        if self.is_effort_list_expanded {
             return;
         }
         if self.workspace_enforces_autonomy(ctx) {
@@ -1542,6 +1972,10 @@ impl OnboardingSlide for AgentSlide {
             self.set_model_list_expanded(false, ctx);
             return;
         }
+        if self.is_effort_list_expanded {
+            self.set_effort_list_expanded(false, ctx);
+            return;
+        }
         self.next(ctx);
     }
 
@@ -1549,6 +1983,9 @@ impl OnboardingSlide for AgentSlide {
         // Escape closes the expanded picker without mutating selection.
         if self.is_model_list_expanded {
             self.set_model_list_expanded(false, ctx);
+        }
+        if self.is_effort_list_expanded {
+            self.set_effort_list_expanded(false, ctx);
         }
     }
 }
@@ -1561,7 +1998,18 @@ impl TypedActionView for AgentSlide {
             AgentSlideAction::SelectModel(model_id) => {
                 if !self.agent_settings(ctx).disable_oz {
                     self.select_model(model_id.clone(), ctx);
-                    // If the picker is open, clicking a row collapses it after selecting.
+                    // If either picker is open, clicking a row collapses it after selecting.
+                    if self.is_model_list_expanded {
+                        self.set_model_list_expanded(false, ctx);
+                    }
+                    if self.is_effort_list_expanded {
+                        self.set_effort_list_expanded(false, ctx);
+                    }
+                }
+            }
+            AgentSlideAction::SelectModelGroup(base_title) => {
+                if !self.agent_settings(ctx).disable_oz {
+                    self.select_model_group(base_title, ctx);
                     if self.is_model_list_expanded {
                         self.set_model_list_expanded(false, ctx);
                     }
@@ -1572,6 +2020,12 @@ impl TypedActionView for AgentSlide {
                     return;
                 }
                 self.set_model_list_expanded(!self.is_model_list_expanded, ctx);
+            }
+            AgentSlideAction::ToggleEffortListExpanded => {
+                if self.agent_settings(ctx).disable_oz {
+                    return;
+                }
+                self.set_effort_list_expanded(!self.is_effort_list_expanded, ctx);
             }
             AgentSlideAction::HighlightModel(model_id) => {
                 // Only update if the id corresponds to an enabled row. Callers

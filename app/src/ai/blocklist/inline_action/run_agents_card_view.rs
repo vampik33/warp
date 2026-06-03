@@ -155,6 +155,9 @@ impl OrchestrationControlAction for RunAgentsCardViewAction {
     fn model_changed(model_id: String) -> Self {
         Self::ModelChanged { model_id }
     }
+    fn effort_changed(model_id: String) -> Self {
+        Self::EffortChanged { model_id }
+    }
     fn harness_changed(harness_type: String) -> Self {
         Self::HarnessChanged { harness_type }
     }
@@ -190,6 +193,9 @@ pub enum RunAgentsCardViewAction {
         is_remote: bool,
     },
     ModelChanged {
+        model_id: String,
+    },
+    EffortChanged {
         model_id: String,
     },
     HarnessChanged {
@@ -404,6 +410,16 @@ impl RunAgentsCardView {
                 if let Some(handle) = &me.handles.pickers.model_picker {
                     let is_local = !me.state.orch.execution_mode.is_remote();
                     oc::populate_model_picker_for_harness(
+                        handle,
+                        &me.state.orch.model_id,
+                        &me.state.orch.harness_type,
+                        is_local,
+                        ctx,
+                    );
+                }
+                if let Some(handle) = &me.handles.pickers.effort_picker {
+                    let is_local = !me.state.orch.execution_mode.is_remote();
+                    oc::populate_effort_picker_for_harness(
                         handle,
                         &me.state.orch.model_id,
                         &me.state.orch.harness_type,
@@ -746,6 +762,25 @@ impl RunAgentsCardView {
             Self::subscribe_filterable_picker_close(&handle, ctx);
             self.handles.pickers.model_picker = Some(handle);
         }
+        if self.handles.pickers.effort_picker.is_none() {
+            let initial_model_id = if state.orch.model_id.trim().is_empty() {
+                initial_model_id_default.clone()
+            } else {
+                state.orch.model_id.clone()
+            };
+            let is_local = !state.orch.execution_mode.is_remote();
+            let handle = oc::new_standard_picker_dropdown(&colors, ctx);
+            Self::set_upward_menu_position(&handle, ctx);
+            oc::populate_effort_picker_for_harness(
+                &handle,
+                &initial_model_id,
+                &state.orch.harness_type,
+                is_local,
+                ctx,
+            );
+            Self::subscribe_picker_close(&handle, ctx);
+            self.handles.pickers.effort_picker = Some(handle);
+        }
 
         if self.handles.pickers.harness_picker.is_none() {
             let handle = oc::new_standard_picker_dropdown(&colors, ctx);
@@ -1077,6 +1112,20 @@ impl TypedActionView for RunAgentsCardView {
                 ctx.notify();
             }
             RunAgentsCardViewAction::ModelChanged { model_id } => {
+                self.state.orch.model_id = model_id.clone();
+                if let Some(handle) = &self.handles.pickers.effort_picker {
+                    oc::populate_effort_picker_for_harness(
+                        handle,
+                        &self.state.orch.model_id,
+                        &self.state.orch.harness_type,
+                        !self.state.orch.execution_mode.is_remote(),
+                        ctx,
+                    );
+                }
+                self.refresh_accept_button_state(ctx);
+                ctx.notify();
+            }
+            RunAgentsCardViewAction::EffortChanged { model_id } => {
                 self.state.orch.model_id = model_id.clone();
                 self.refresh_accept_button_state(ctx);
                 ctx.notify();

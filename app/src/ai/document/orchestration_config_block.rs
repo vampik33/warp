@@ -122,6 +122,9 @@ pub enum OrchestrationConfigBlockAction {
     ModelChanged {
         model_id: String,
     },
+    EffortChanged {
+        model_id: String,
+    },
     HarnessChanged {
         harness_type: String,
     },
@@ -145,6 +148,9 @@ impl OrchestrationControlAction for OrchestrationConfigBlockAction {
     }
     fn model_changed(model_id: String) -> Self {
         Self::ModelChanged { model_id }
+    }
+    fn effort_changed(model_id: String) -> Self {
+        Self::EffortChanged { model_id }
     }
     fn harness_changed(harness_type: String) -> Self {
         Self::HarnessChanged { harness_type }
@@ -250,6 +256,16 @@ impl OrchestrationConfigBlockView {
                 if let Some(handle) = &me.pickers.model_picker {
                     let is_local = !me.edit_state.execution_mode.is_remote();
                     oc::populate_model_picker_for_harness(
+                        handle,
+                        &me.edit_state.model_id,
+                        &me.edit_state.harness_type,
+                        is_local,
+                        ctx,
+                    );
+                }
+                if let Some(handle) = &me.pickers.effort_picker {
+                    let is_local = !me.edit_state.execution_mode.is_remote();
+                    oc::populate_effort_picker_for_harness(
                         handle,
                         &me.edit_state.model_id,
                         &me.edit_state.harness_type,
@@ -453,6 +469,16 @@ impl OrchestrationConfigBlockView {
         );
         self.pickers.model_picker = Some(model_handle);
 
+        let effort_handle = oc::new_standard_picker_dropdown(&colors, ctx);
+        effort_handle.update(ctx, |d, c| d.set_use_overlay_layer(true, c));
+        oc::populate_effort_picker_for_harness(
+            &effort_handle,
+            &display_model_id,
+            &self.edit_state.harness_type,
+            is_local,
+            ctx,
+        );
+        self.pickers.effort_picker = Some(effort_handle);
         let harness_handle = oc::new_standard_picker_dropdown(&colors, ctx);
         harness_handle.update(ctx, |d, c| d.set_use_overlay_layer(true, c));
         oc::populate_harness_picker(
@@ -826,6 +852,20 @@ impl TypedActionView for OrchestrationConfigBlockView {
                 ctx.notify();
             }
             OrchestrationConfigBlockAction::ModelChanged { model_id } => {
+                self.edit_state.model_id = model_id.clone();
+                if let Some(handle) = &self.pickers.effort_picker {
+                    oc::populate_effort_picker_for_harness(
+                        handle,
+                        &self.edit_state.model_id,
+                        &self.edit_state.harness_type,
+                        !self.edit_state.execution_mode.is_remote(),
+                        ctx,
+                    );
+                }
+                self.apply_field_change(ctx);
+                ctx.notify();
+            }
+            OrchestrationConfigBlockAction::EffortChanged { model_id } => {
                 self.edit_state.model_id = model_id.clone();
                 self.apply_field_change(ctx);
                 ctx.notify();

@@ -6,15 +6,42 @@ use onboarding::OnboardingAuthState;
 use warp_core::ui::icons::Icon;
 use warpui::{AppContext, SingletonEntity};
 
+use super::execution_profiles::model_menu_items::is_auto;
 use super::llms::{DisableReason, LLMInfo, LLMPreferences};
 use crate::auth::AuthStateProvider;
 use crate::workspaces::user_workspaces::UserWorkspaces;
+
+const DEFAULT_EFFORT_LABEL: &str = "Default";
+
+fn onboarding_base_title(llm: &LLMInfo) -> String {
+    if is_auto(llm) {
+        "auto".to_string()
+    } else if llm.has_reasoning_level() {
+        llm.base_model_name().to_string()
+    } else {
+        llm.menu_display_name()
+    }
+}
+
+fn onboarding_effort_title(llm: &LLMInfo) -> String {
+    if is_auto(llm) && llm.display_name.starts_with("auto (") {
+        llm.display_name
+            .trim_start_matches("auto (")
+            .trim_end_matches(')')
+            .to_string()
+    } else {
+        llm.reasoning_level()
+            .unwrap_or_else(|| DEFAULT_EFFORT_LABEL.to_string())
+    }
+}
 
 impl From<&LLMInfo> for OnboardingModelInfo {
     fn from(llm: &LLMInfo) -> Self {
         Self {
             id: llm.id.clone(),
             title: llm.display_name.clone(),
+            base_title: onboarding_base_title(llm),
+            effort_title: onboarding_effort_title(llm),
             icon: llm.provider.icon().unwrap_or(Icon::Oz),
             requires_upgrade: matches!(llm.disable_reason, Some(DisableReason::RequiresUpgrade)),
             is_default: false,
