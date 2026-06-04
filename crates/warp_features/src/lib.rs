@@ -688,24 +688,9 @@ pub enum FeatureFlag {
     /// content changes via auto-reload.
     CodeReviewScrollPreservation,
 
-    /// Enables server-side durable messaging for orchestration (v2).
-    /// When enabled, messages and events are stored in Postgres and the client
-    /// opens a persistent SSE connection to the server to receive events in
-    /// real time.
-    OrchestrationV2,
-
     /// Re-enables local Claude Code and Codex child harnesses in orchestration
     /// flows while the default behavior temporarily keeps them disabled.
     LocalClaudeCodexChildHarnesses,
-
-    /// Gates client-side support for the `orchestrate` tool, which batches
-    /// multiple child agents into a single tool call with an inline
-    /// confirmation card. When enabled, the client advertises
-    /// `RequestSettings.SupportsOrchestrate = true` and the server's
-    /// orchestrate tool replaces `start_agent` / `start_agent_v2` for
-    /// orchestration-capable conversations. Layered on top of
-    /// `OrchestrationV2`; has no effect when v2 is off.
-    RunAgentsTool,
 
     /// Renders a horizontal pill bar in the agent view pane header showing the
     /// orchestrator agent and all of its child agents, with click-to-switch
@@ -749,6 +734,9 @@ pub enum FeatureFlag {
 
     /// Enables header rows on all inline menus (label, tabs, resize handle).
     InlineMenuHeaders,
+    /// Clears the current prompt when opening the inline model selector from the
+    /// model chip, then restores that prompt when the selector closes.
+    RestorePromptOnInlineModelSelectorSearch,
 
     /// Enables associating a tab color with a directory so tabs automatically
     /// adopt the configured color when their working directory matches.
@@ -949,6 +937,7 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::RemoteCodebaseIndexing,
     FeatureFlag::GroupedTabs,
     FeatureFlag::AsyncFind,
+    FeatureFlag::RestorePromptOnInlineModelSelectorSearch,
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Warp).
@@ -1050,7 +1039,6 @@ impl FeatureFlag {
             MarkdownTables => Some("Enables rendering and interaction support for markdown tables in notebooks."),
             SettingsFile => Some("Enables configuring Warp via a user-editable `settings.toml` file, with hot reload and error reporting for invalid values."),
             GitOperationsInCodeReview => Some("Enables commit, push, and create-PR actions directly from the code review panel."),
-            OrchestrationV2 => Some("Enables orchestration of teams of agents with dedicated UI, lifecycle events and inter-agent messaging."),
             _ => None,
         }
     }
