@@ -19371,10 +19371,8 @@ impl Workspace {
             // The center slot holds the search bar. When the user hides it, we
             // keep an empty flexible spacer in its place so the right-side
             // controls remain right-aligned.
-            let center_slot: Box<dyn Element> = if *TabSettings::as_ref(ctx)
-                .show_vertical_tabs_search_bar
-                .value()
-            {
+            let show_search_bar = *TabSettings::as_ref(ctx).show_vertical_tabs_search_bar;
+            let center_slot: Box<dyn Element> = if show_search_bar {
                 Clipped::new(
                     Container::new(
                         Align::new(self.render_title_bar_search_bar(appearance)).finish(),
