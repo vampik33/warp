@@ -1,4 +1,5 @@
-use std::{collections::HashSet, ffi::OsString};
+use std::collections::HashSet;
+use std::ffi::OsString;
 
 use clap::Parser as _;
 use clap_complete::aot::Shell;
@@ -30,6 +31,29 @@ fn parses_first_slice_tab_create() {
         panic!("expected tab create command");
     };
     assert_eq!(target.instance.as_deref(), Some("inst_123"));
+}
+#[test]
+fn rejects_conflicting_instance_selectors() {
+    let err = ControlArgs::try_parse_from([
+        "warpctrl",
+        "tab",
+        "create",
+        "--instance",
+        "inst_123",
+        "--pid",
+        "123",
+    ])
+    .expect_err("instance and pid conflict");
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+#[test]
+fn parses_pid_instance_selector() {
+    let args = ControlArgs::try_parse_from(["warpctrl", "app", "ping", "--pid", "123"])
+        .expect("pid selector parses");
+    let ControlCommand::App(AppCommand::Ping(target)) = args.command else {
+        panic!("expected app ping command");
+    };
+    assert_eq!(target.pid, Some(123));
 }
 
 #[test]
@@ -68,6 +92,7 @@ fn parses_catalog_metadata_commands() {
         ControlArgs::try_parse_from(["warpctrl", "capability", "inspect", "tab.create"]).is_ok()
     );
 }
+
 #[test]
 fn parses_control_mode_args_after_hidden_flag() {
     let args = ControlArgs::try_parse_control_mode_from([
@@ -171,7 +196,7 @@ fn parses_readonly_capability_and_target_commands() {
     assert!(ControlArgs::try_parse_from(["warpctrl", "theme", "get"]).is_ok());
     assert!(ControlArgs::try_parse_from(["warpctrl", "keybinding", "get", "copy"]).is_ok());
     assert!(ControlArgs::try_parse_from(["warpctrl", "file", "list"]).is_ok());
-    assert!(ControlArgs::try_parse_from(["warpctrl", "project", "active"]).is_ok());
+    assert!(ControlArgs::try_parse_from(["warpctrl", "app", "active"]).is_ok());
     assert!(ControlArgs::try_parse_from(["warpctrl", "drive", "inspect", "drive_1"]).is_ok());
 }
 
@@ -257,6 +282,42 @@ fn structured_error_output_uses_stable_error_code() {
     );
 }
 
+#[test]
+fn renders_human_readable_tab_create_output() {
+    let rendered = render_human_readable_for_test(
+        local_control::protocol::ActionKind::TabCreate,
+        &json!({
+            "tab": {
+                "id": "tab_123",
+                "active_index": 2,
+                "count": 3
+            },
+            "window": {
+                "id": "window_123"
+            }
+        }),
+    );
+    assert_eq!(
+        rendered,
+        "Created tab tab_123 in window window_123 (active index 2, tab count 3)"
+    );
+}
+
+#[test]
+#[serial]
+fn instance_list_without_discovery_records_succeeds() {
+    let dir = std::env::temp_dir().join(format!(
+        "warpctrl-empty-discovery-{}",
+        uuid::Uuid::new_v4().simple()
+    ));
+    std::fs::create_dir_all(&dir).expect("temp discovery dir is created");
+    let previous = set_discovery_dir(&dir);
+    let args = ControlArgs::try_parse_from(["warpctrl", "instance", "list"])
+        .expect("instance list parses");
+    let result = run_inner(args);
+    restore_discovery_dir(previous);
+    result.expect("empty instance list succeeds");
+}
 #[test]
 #[serial]
 fn tab_create_without_discovery_records_reports_no_instance() {
@@ -542,15 +603,6 @@ fn implemented_action_examples() -> Vec<(ActionKind, Vec<&'static str>)> {
             ActionKind::FileOpen,
             vec!["warpctrl", "file", "open", "/tmp/example.txt"],
         ),
-        (
-            ActionKind::ProjectActive,
-            vec!["warpctrl", "project", "active"],
-        ),
-        (ActionKind::ProjectList, vec!["warpctrl", "project", "list"]),
-        (
-            ActionKind::ProjectOpen,
-            vec!["warpctrl", "project", "open", "/tmp"],
-        ),
         (ActionKind::DriveList, vec!["warpctrl", "drive", "list"]),
         (
             ActionKind::DriveInspect,
@@ -733,11 +785,6 @@ fn parsed_action_kind(command: &ControlCommand) -> Option<ActionKind> {
         ControlCommand::File(command) => match command {
             FileCommand::List(_) => Some(ActionKind::FileList),
             FileCommand::Open(_) => Some(ActionKind::FileOpen),
-        },
-        ControlCommand::Project(command) => match command {
-            ProjectCommand::Active(_) => Some(ActionKind::ProjectActive),
-            ProjectCommand::List(_) => Some(ActionKind::ProjectList),
-            ProjectCommand::Open(_) => Some(ActionKind::ProjectOpen),
         },
         ControlCommand::Drive(command) => match command {
             DriveCommand::List(_) => Some(ActionKind::DriveList),
