@@ -63,30 +63,33 @@ fn compute_layout(frame: &Frame) -> Layout {
     let total = frame.total_rows as usize;
     let has_input = frame.agent_input.is_some();
     let has_status = frame.agent_status.is_some();
+    let hide_active = has_input || has_status;
+
     let reserved = 1
         + if has_input { 1 } else { 0 }
         + if has_status { 1 } else { 0 };
     let usable = total.saturating_sub(reserved);
 
-    // Dynamic active block height: show rows up to cursor + 1 (minimum 1 row for
-    // the prompt), not the full grid. This leaves room for scrollback.
-    let content_height = (frame.active_cursor.0 + 1).max(1);
-    let active_height = content_height.min(usable);
+    let active_height = if hide_active {
+        0
+    } else {
+        let content_height = (frame.active_cursor.0 + 1).max(1);
+        content_height.min(usable)
+    };
     let scrollback_height = usable.saturating_sub(active_height);
 
-    // Layout from bottom: status_bar, then agent_input, then agent_status,
-    // then active block, then scrollback.
     let status_bar_row = (total - 1) as u16;
-    let mut next_row = total - 2;
-    let agent_input_row = if has_input {
-        let row = next_row as u16;
-        next_row = next_row.saturating_sub(1);
-        Some(row)
+
+    // Agent status/input render inline, immediately after scrollback.
+    let after_content = scrollback_height + active_height;
+    let agent_status_row = if has_status {
+        Some(after_content as u16)
     } else {
         None
     };
-    let agent_status_row = if has_status {
-        Some(next_row as u16)
+    let agent_input_row = if has_input {
+        let row = after_content + if has_status { 1 } else { 0 };
+        Some(row as u16)
     } else {
         None
     };
@@ -432,12 +435,13 @@ mod tests {
             agent_input: Some(("hello", 5)), agent_status: None,
             total_rows: 24,
             total_cols: 80,
-            show_cursor: true,
+            show_cursor: false,
         };
         let layout = compute_layout(&frame);
-        // cursor at (0,0) → content_height = 1, usable = 22
-        assert_eq!(layout.active_height, 1);
-        assert_eq!(layout.scrollback_height, 21);
+        // active hidden when agent_input present; usable = 22, all scrollback
+        assert_eq!(layout.active_height, 0);
+        assert_eq!(layout.scrollback_height, 22);
+        // agent_input inline right after scrollback
         assert_eq!(layout.agent_input_row, Some(22));
         assert_eq!(layout.status_bar_row, 23);
     }
@@ -505,12 +509,40 @@ mod tests {
             agent_input: Some(("", 0)), agent_status: None,
             total_rows: 3,
             total_cols: 40,
-            show_cursor: true,
+            show_cursor: false,
         };
         let layout = compute_layout(&frame);
-        // usable = 3 - 1 - 1 = 1, active = min(2, 1) = 1
-        assert_eq!(layout.active_height, 1);
-        assert_eq!(layout.scrollback_height, 0);
+        // usable = 3 - 1(status) - 1(input) = 1, active hidden
+        assert_eq!(layout.active_height, 0);
+        assert_eq!(layout.scrollback_height, 1);
+        assert_eq!(layout.agent_input_row, Some(1));
+    }
+
+    #[test]
+    fn layout_with_agent_status() {
+        let frame = Frame {
+            completed_rows: &[],
+            active_grid: &[],
+            active_cursor: (0, 0),
+            status_bar: StatusBar {
+                mode: "AGENT",
+                model: "warp",
+                hint: "",
+            },
+            scroll_offset: 0,
+            agent_input: None,
+            agent_status: Some("⠋ working..."),
+            total_rows: 24,
+            total_cols: 80,
+            show_cursor: false,
+        };
+        let layout = compute_layout(&frame);
+        // active hidden; usable = 22, all scrollback
+        assert_eq!(layout.active_height, 0);
+        assert_eq!(layout.scrollback_height, 22);
+        assert_eq!(layout.agent_status_row, Some(22));
+        assert!(layout.agent_input_row.is_none());
+        assert_eq!(layout.status_bar_row, 23);
     }
 
     // -- Color conversion tests --
