@@ -185,24 +185,7 @@ fn parse_agent_event(line: &str, cols: usize) -> Option<(String, Color, CellFlag
     let event_type = json.get("type")?.as_str()?;
 
     match event_type {
-        "system" => {
-            let sub = json.get("event_type").and_then(|e| e.as_str());
-            match sub {
-                Some("run_started") => {
-                    let url = json.get("run_url").and_then(|u| u.as_str()).unwrap_or("");
-                    if !url.is_empty() {
-                        let display = if url.len() > cols {
-                            format!("{}…", &url[..cols.saturating_sub(1)])
-                        } else {
-                            url.to_string()
-                        };
-                        return Some((display, Color::Indexed(8), CellFlags::DIM));
-                    }
-                    None
-                }
-                _ => None,
-            }
-        }
+        "system" => None,
         "agent" | "agent_reasoning" => {
             let text = json.get("text")?.as_str()?;
             if text.trim().is_empty() {
@@ -318,6 +301,7 @@ pub fn run(master_fd: RawFd) -> Result<()> {
         cols,
         rows,
         should_exit: false,
+        spinner_tick: 0,
     };
     state.render_frame();
 
@@ -341,6 +325,19 @@ pub fn run(master_fd: RawFd) -> Result<()> {
 
 // ── Core state ──────────────────────────────────────────────────────
 
+const SPINNER: &[&str] = &[
+    "⠋ agent working...",
+    "⠙ agent working...",
+    "⠹ agent working...",
+    "⠸ agent working...",
+    "⠼ agent working...",
+    "⠴ agent working...",
+    "⠦ agent working...",
+    "⠧ agent working...",
+    "⠇ agent working...",
+    "⠏ agent working...",
+];
+
 struct Wsh {
     mode: Mode,
     master_fd: RawFd,
@@ -351,6 +348,7 @@ struct Wsh {
     cols: u16,
     rows: u16,
     should_exit: bool,
+    spinner_tick: usize,
 }
 
 impl Wsh {
@@ -427,6 +425,9 @@ impl Wsh {
             }
 
             if needs_render {
+                if matches!(self.mode, Mode::AgentRunning) {
+                    self.spinner_tick = self.spinner_tick.wrapping_add(1);
+                }
                 self.render_frame();
             }
         }
@@ -453,7 +454,7 @@ impl Wsh {
                 _ => None,
             },
             agent_status: match &self.mode {
-                Mode::AgentRunning => Some("⠋ agent working..."),
+                Mode::AgentRunning => Some(SPINNER[self.spinner_tick % SPINNER.len()]),
                 _ => None,
             },
             total_rows: self.rows,
