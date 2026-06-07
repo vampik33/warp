@@ -17,8 +17,8 @@
 //! Before following a record, clients require the endpoint host to be exactly
 //! `127.0.0.1` and the broker filename to be derived from the instance ID. A
 //! discovery scan also rejects incompatible records, prunes dead PIDs, and
-//! performs an authenticated `app.ping` probe. When outside-Warp control is
-//! disabled, records contain neither an endpoint nor a broker reference.
+//! performs an authenticated `app.ping` probe. When Scripting is disabled,
+//! records contain neither an endpoint nor a broker reference.
 //!
 //! The owner-only directory, records, and broker sockets protect against other
 //! OS users. The broker's kernel-reported peer-UID check is the authoritative
@@ -173,7 +173,7 @@ impl InstanceRecord {
         let credential_broker = self.credential_broker.as_ref().ok_or_else(|| {
             ControlError::new(
                 ErrorCode::LocalControlDisabled,
-                "outside-Warp local control credential broker is disabled for this instance",
+                "local-control credential broker is disabled for this instance",
             )
         })?;
         Ok(discovery_dir().join(&credential_broker.socket_path))

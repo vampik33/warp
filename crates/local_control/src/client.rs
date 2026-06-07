@@ -8,8 +8,8 @@
 //! 2. Before using either reference, the client validates that the endpoint is
 //!    loopback and that the broker filename is derived from the selected
 //!    instance ID.
-//! 3. The client requests a credential for one action and invocation context
-//!    over the owner-only broker socket. On Unix, the server authenticates the
+//! 3. The client requests a credential for one action over the owner-only
+//!    broker socket. On Unix, the server authenticates the
 //!    connecting process through kernel-reported peer credentials before
 //!    issuing a short-lived, action-scoped credential.
 //! 4. The client keeps that credential in memory and presents it as a bearer
@@ -48,7 +48,7 @@ pub fn send_request(
     let endpoint = instance.endpoint.as_ref().ok_or_else(|| {
         ControlError::new(
             ErrorCode::LocalControlDisabled,
-            "outside-Warp local control endpoint is disabled for this instance",
+            "local control endpoint is disabled for this instance",
         )
     })?;
     let client = reqwest::blocking::Client::new();
@@ -97,7 +97,7 @@ pub fn send_request(
     request_credential(instance, request.action.kind)?;
     Err(ControlError::new(
         ErrorCode::LocalControlDisabled,
-        "outside-Warp local control requires a native HTTP transport",
+        "local control requires a native HTTP transport",
     ))
 }
 #[cfg(unix)]
@@ -167,7 +167,7 @@ fn request_credential_over_owner_ipc(
 ) -> Result<String, ControlError> {
     Err(ControlError::new(
         ErrorCode::LocalControlDisabled,
-        "outside-Warp local control requires an owner-authenticated credential broker",
+        "local control requires an owner-authenticated credential broker",
     ))
 }
 
