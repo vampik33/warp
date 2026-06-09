@@ -113,9 +113,8 @@ use warpui::{
 use self::vertical_tabs::telemetry::{VerticalTabsDisplayOption, VerticalTabsTelemetryEvent};
 use self::vertical_tabs::{
     htab_group_position_id, pane_summary_kind, render_detail_sidecar, render_settings_popup,
-    render_summary_pane_kind_icon_circle, render_summary_pane_kind_icons, vtab_group_position_id,
-    SummaryPaneKind, SummaryPaneKindIcons, VerticalTabsPanelState,
-    VERTICAL_TABS_SETTINGS_BUTTON_POSITION_ID,
+    render_summary_pane_kind_icons, vtab_group_position_id, SummaryPaneKind, SummaryPaneKindIcons,
+    VerticalTabsPanelState, VERTICAL_TABS_SETTINGS_BUTTON_POSITION_ID,
 };
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use super::action::AutoCloudHandoffTrigger;
@@ -211,8 +210,8 @@ use crate::ai_assistant::panel::{AIAssistantPanelEvent, AIAssistantPanelView};
 use crate::ai_assistant::{AskAIType, AI_ASSISTANT_FEATURE_NAME, AI_ASSISTANT_LOGO_COLOR};
 use crate::app_state::{
     LeafContents, LeafSnapshot, LeftPanelDisplayedTab, LeftPanelSnapshot, NotebookPaneSnapshot,
-    PaneNodeSnapshot, PaneUuid, RightPanelSnapshot, SettingsPaneSnapshot, TabSnapshot,
-    TerminalPaneSnapshot, WindowSnapshot, WorkflowPaneSnapshot,
+    PaneNodeSnapshot, PaneUuid, RightPanelSnapshot, SettingsPaneSnapshot, TabGroupSnapshot,
+    TabSnapshot, TerminalPaneSnapshot, WindowSnapshot, WorkflowPaneSnapshot,
 };
 use crate::appearance::{Appearance, AppearanceManager};
 use crate::auth::auth_manager::{AuthManager, AuthManagerEvent};
@@ -3757,6 +3756,27 @@ impl Workspace {
                 let active_tab_index = window_snapshot.active_tab_index;
                 let restored_left_panel_open = window_snapshot.left_panel_open;
 
+                // Restore groups first so per-tab `group_id` assignments
+                // below can validate membership against a populated map.
+                if FeatureFlag::GroupedTabs.is_enabled() {
+                    self.tab_groups = window_snapshot
+                        .tab_groups
+                        .iter()
+                        .map(|group_snapshot| {
+                            (
+                                group_snapshot.id,
+                                TabGroup {
+                                    id: group_snapshot.id,
+                                    name: group_snapshot.name.clone(),
+                                    color: group_snapshot.color,
+                                    collapsed: group_snapshot.collapsed,
+                                    draggable_state: Default::default(),
+                                },
+                            )
+                        })
+                        .collect();
+                }
+
                 window_snapshot
                     .tabs
                     .iter()
@@ -3772,6 +3792,10 @@ impl Workspace {
                         self.tabs[tab_index].default_directory_color =
                             saved_tab.default_directory_color;
                         self.tabs[tab_index].selected_color = saved_tab.selected_color;
+                        // Drop the group reference if the group itself didn't restore.
+                        self.tabs[tab_index].group_id = saved_tab
+                            .group_id
+                            .filter(|group_id| self.tab_groups.contains_key(group_id));
 
                         let pane_group = self.tabs[tab_index].pane_group.clone();
 
@@ -6821,6 +6845,7 @@ impl Workspace {
         let indices: Vec<usize> = group_member_indices(&self.tabs, group_id).collect();
         if indices.is_empty() {
             self.tab_groups.remove(&group_id);
+            ctx.dispatch_global_action("workspace:save_app", ());
             ctx.notify();
             return;
         }
@@ -6848,6 +6873,16 @@ impl Workspace {
     ) {
         if let Some(group) = self.tab_groups.get_mut(&group_id) {
             group.collapsed = !group.collapsed;
+            ctx.dispatch_global_action("workspace:save_app", ());
+            ctx.notify();
+        }
+    }
+
+    /// Ensures the group is expanded (not collapsed). No-op if the group does
+    /// not exist or is already expanded.
+    fn expand_tab_group(&mut self, group_id: TabGroupId, ctx: &mut ViewContext<Self>) {
+        if let Some(group) = self.tab_groups.get_mut(&group_id) {
+            group.collapsed = false;
             ctx.notify();
         }
     }
@@ -6883,8 +6918,10 @@ impl Workspace {
             });
     }
 
-    /// Creates a new group containing the tab and moves it to the top of
-    /// the tab list.
+    /// Creates a new group containing the tab, anchored at the tab's original
+    /// position. If the tab was pulled out of an existing group, leaving it in
+    /// place would split that group's contiguous run, so the new group lands
+    /// just past the old group's last remaining member instead.
     fn new_tab_group_from_tab(&mut self, tab_index: usize, ctx: &mut ViewContext<Self>) {
         if !FeatureFlag::GroupedTabs.is_enabled() {
             return;
@@ -6900,8 +6937,21 @@ impl Workspace {
         self.tab_groups.insert(group_id, group);
 
         self.tabs[tab_index].group_id = Some(group_id);
-        self.move_tab_to_index(tab_index, 0, ctx);
-        self.set_active_tab_index(0, ctx);
+
+        // When the tab leaves an existing group, reposition it just past that
+        // group's last remaining member so the old group stays contiguous.
+        if let Some(prev_group_id) = previous_group_id {
+            if let Some(last) = group_member_indices(&self.tabs, prev_group_id).last() {
+                self.move_tab_to_index(tab_index, last + 1, ctx);
+            }
+        }
+
+        // The move above may have shifted the tab; the new group has exactly
+        // one member, so its position is the new active index.
+        let new_active = group_member_indices(&self.tabs, group_id)
+            .next()
+            .unwrap_or(tab_index);
+        self.set_active_tab_index(new_active, ctx);
 
         if let Some(prev_group_id) = previous_group_id {
             self.prune_empty_tab_group(prev_group_id, ctx);
@@ -6939,6 +6989,7 @@ impl Workspace {
             .map(|i| i + 1)
             .unwrap_or(self.tabs.len());
         self.tabs[tab_index].group_id = Some(group_id);
+        self.expand_tab_group(group_id, ctx);
         self.move_tab_to_index(tab_index, target_index, ctx);
 
         if let Some(prev) = previous_group_id {
@@ -6986,6 +7037,7 @@ impl Workspace {
             }
         }
         self.tab_groups.remove(&group_id);
+        ctx.dispatch_global_action("workspace:save_app", ());
         ctx.notify();
     }
 
@@ -7024,7 +7076,7 @@ impl Workspace {
             }
             self.move_tab_to_index(new_idx, target_index, ctx);
         }
-        ctx.notify();
+        self.expand_tab_group(group_id, ctx);
     }
 
     /// Moves the whole group up or down by one "slot", where a slot is the
@@ -10957,7 +11009,7 @@ impl Workspace {
         } else {
             None
         };
-        let tabs = self
+        let tabs: Vec<TabSnapshot> = self
             .tab_views()
             .enumerate()
             .filter(|(tab_index, _)| Some(*tab_index) != transferred_tab_index)
@@ -10999,6 +11051,11 @@ impl Workspace {
                         .unwrap_or_default(),
                     left_panel,
                     right_panel,
+                    group_id: if FeatureFlag::GroupedTabs.is_enabled() {
+                        self.tabs.get(tab_index).and_then(|tab| tab.group_id)
+                    } else {
+                        None
+                    },
                 }
             })
             .filter(|tab| {
@@ -11015,6 +11072,25 @@ impl Workspace {
                 )
             })
             .collect();
+
+        // Skip orphan groups whose members were all filtered out above.
+        // This is a safety net and ensures empty groups are not saved/restored.
+        let tab_groups: Vec<TabGroupSnapshot> = if FeatureFlag::GroupedTabs.is_enabled() {
+            let referenced_group_ids: HashSet<TabGroupId> =
+                tabs.iter().filter_map(|tab| tab.group_id).collect();
+            self.tab_groups
+                .values()
+                .filter(|group| referenced_group_ids.contains(&group.id))
+                .map(|group| TabGroupSnapshot {
+                    id: group.id,
+                    name: group.name.clone(),
+                    color: group.color,
+                    collapsed: group.collapsed,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         let resizable_data = ResizableData::handle(app);
         let modal_sizes = resizable_data.as_ref(app).get_all_handles(window_id);
@@ -11082,6 +11158,7 @@ impl Workspace {
             left_panel_width,
             right_panel_width,
             agent_management_filters,
+            tab_groups,
         }
     }
 
@@ -12034,7 +12111,22 @@ impl Workspace {
                         .push(self.tabs.last().unwrap().pane_group.id());
                     self.activate_tab_internal(self.tab_count() - 1, ctx);
                 } else {
-                    let insert_idx = self.active_tab_index + 1;
+                    // Restoration-based tabs (settings, notebooks, etc.) don't
+                    // inherit the active tab's group. If the active tab is inside
+                    // a group, land after the group's last member so we don't
+                    // split it.
+                    let insert_idx = if is_restoration {
+                        active_tab
+                            .and_then(|t| t.group_id)
+                            .and_then(|gid| {
+                                group_member_indices(&self.tabs, gid)
+                                    .last()
+                                    .map(|last| last + 1)
+                            })
+                            .unwrap_or(self.active_tab_index + 1)
+                    } else {
+                        self.active_tab_index + 1
+                    };
                     self.tabs.insert(insert_idx, TabData::new(new_pane_group));
                     self.tab_mru_order
                         .push(self.tabs[insert_idx].pane_group.id());
@@ -12043,12 +12135,13 @@ impl Workspace {
             }
         }
 
-        // Inherit the active tab's group membership. D
+        // Inherit the active tab's group membership.
         if let Some(group_id) = active_tab_group_id {
             let new_idx = self.active_tab_index;
             if let Some(new_tab) = self.tabs.get_mut(new_idx) {
                 new_tab.group_id = Some(group_id);
             }
+            self.expand_tab_group(group_id, ctx);
         }
 
         if !is_restoration {
@@ -12548,6 +12641,10 @@ impl Workspace {
         }
 
         let history_model = BlocklistAIHistoryModel::handle(ctx);
+        let is_local_conversation = history_model
+            .as_ref(ctx)
+            .get_conversation_metadata(&conversation_id)
+            .is_some_and(|m| m.has_local_data);
         let future = history_model
             .as_ref(ctx)
             .load_conversation_data(conversation_id, ctx);
@@ -12581,6 +12678,7 @@ impl Workspace {
                     conversation,
                     FeatureFlag::AgentView.is_enabled(),
                     RestoreConversationEntryBehavior::PreserveAgentViewState,
+                    is_local_conversation,
                     move |terminal_view, ctx| {
                         terminal_view.enter_agent_view_for_conversation(
                             None,
@@ -18994,7 +19092,8 @@ impl Workspace {
         let header_selected = is_collapsed && any_member_active;
 
         let member_kinds = self.compute_group_member_kinds(group.id, ctx);
-        let icon_circle = render_group_member_icon_collage(&member_kinds, appearance);
+        let icon_circle =
+            render_group_member_icon_collage(&member_kinds, GROUP_ICON_COLLAGE_SIZE, appearance);
 
         let is_being_renamed = self
             .current_workspace_state
@@ -27193,10 +27292,6 @@ fn should_reserve_traffic_light_space_in_tab_bar(side: TrafficLightSide) -> bool
 
 /// Total width/height of the collage area in the group header.
 const GROUP_ICON_COLLAGE_SIZE: f32 = 22.0;
-/// Size of each icon when the collage shows 3 or 4 of them.
-const GROUP_ICON_COLLAGE_MINI_SIZE: f32 = 12.0;
-/// How far inside the collage area each mini icon's center sits.
-const GROUP_ICON_COLLAGE_CENTER_INSET: f32 = 2.0;
 
 /// Renders the icon block for a tab-group header from 0-4 deduped pane kinds.
 /// 1 or 2 icons reuse the vertical Summary `Single`/`Pair` layout so the
@@ -27205,19 +27300,20 @@ const GROUP_ICON_COLLAGE_CENTER_INSET: f32 = 2.0;
 /// define a layout beyond 2 icons.
 fn render_group_member_icon_collage(
     kinds: &[SummaryPaneKind],
+    total_size: f32,
     appearance: &Appearance,
 ) -> Box<dyn Element> {
     let count = kinds.len().min(4);
     if count == 0 {
         return ConstrainedBox::new(Empty::new().finish())
-            .with_width(GROUP_ICON_COLLAGE_SIZE)
-            .with_height(GROUP_ICON_COLLAGE_SIZE)
+            .with_width(total_size)
+            .with_height(total_size)
             .finish();
     }
     if count == 1 {
         return render_summary_pane_kind_icons(
             SummaryPaneKindIcons::Single(kinds[0].clone()),
-            GROUP_ICON_COLLAGE_SIZE,
+            total_size,
             appearance,
         );
     }
@@ -27227,43 +27323,68 @@ fn render_group_member_icon_collage(
                 primary: kinds[0].clone(),
                 secondary: kinds[1].clone(),
             },
-            GROUP_ICON_COLLAGE_SIZE,
+            total_size,
             appearance,
         );
     }
 
-    // Corners at radius/sqrt(2) on each axis; bottom-middle (3-icon) at radius.
-    let radius = GROUP_ICON_COLLAGE_SIZE / 2.0 - GROUP_ICON_COLLAGE_CENTER_INSET;
-    let diag = radius / std::f32::consts::SQRT_2;
+    // icon_diameter = total/2 - 1 gives a constant 2 px gap between adjacent circles.
+    let icon_diameter = total_size / 2.0 - 1.0;
+    // Distance from the collage center to each icon center; keeps icon edges within bounds.
+    let icon_center_offset = total_size / 2.0 - icon_diameter / 2.0;
+
+    // 3 icons: equilateral triangle (one vertex down), vertically centered.
+    // 4 icons: 2×2 grid. This maps (number of icons, index of icon) -> position.
+    let positions: [Vector2F; 4] = if count == 3 {
+        let sqrt_3 = 3.0_f32.sqrt();
+        let r = 2.0 * icon_center_offset / sqrt_3;
+        [
+            vec2f(-r * sqrt_3 / 2.0, -0.75 * r),
+            vec2f(r * sqrt_3 / 2.0, -0.75 * r),
+            vec2f(0.0, 0.75 * r),
+            vec2f(0.0, 0.0), // unused
+        ]
+    } else {
+        [
+            vec2f(-icon_center_offset, -icon_center_offset),
+            vec2f(icon_center_offset, -icon_center_offset),
+            vec2f(-icon_center_offset, icon_center_offset),
+            vec2f(icon_center_offset, icon_center_offset),
+        ]
+    };
 
     let mut stack = Stack::new().with_child(
         ConstrainedBox::new(Empty::new().finish())
-            .with_width(GROUP_ICON_COLLAGE_SIZE)
-            .with_height(GROUP_ICON_COLLAGE_SIZE)
+            .with_width(total_size)
+            .with_height(total_size)
             .finish(),
     );
     for (idx, kind) in kinds.iter().take(count).enumerate() {
-        let mini = render_summary_pane_kind_icon_circle(
+        let mini = vertical_tabs::render_summary_pane_kind_icon_circle(
             kind.clone(),
-            GROUP_ICON_COLLAGE_MINI_SIZE,
+            icon_diameter,
             appearance,
         );
-        // Placement mapping for each icon.
-        // (number of icons, index of icon) -> position.
-        let offset = match (count, idx) {
-            (3, 0) => vec2f(-diag, -diag),
-            (3, 1) => vec2f(diag, -diag),
-            (3, 2) => vec2f(0.0, radius),
-            (4, 0) => vec2f(-diag, -diag),
-            (4, 1) => vec2f(diag, -diag),
-            (4, 2) => vec2f(-diag, diag),
-            (4, 3) => vec2f(diag, diag),
-            _ => vec2f(0.0, 0.0),
+
+        // Ambient icons place their brand circle at the top-left of a total_size
+        // element (leaving room for the cloud badge). Shift right-down by
+        // (1 - CIRCLE_RATIO)/2 * icon_diameter so the circle centers on the grid point.
+        let collage_pos = match &kind {
+            SummaryPaneKind::OzAgent { is_ambient: true }
+            | SummaryPaneKind::CLIAgent {
+                is_ambient: true, ..
+            } => {
+                let shift = icon_diameter
+                    * (1.0 - crate::ui_components::icon_with_status::CIRCLE_RATIO)
+                    / 2.0;
+                positions[idx] + vec2f(shift, shift)
+            }
+            _ => positions[idx],
         };
         stack.add_positioned_child(
             mini,
             OffsetPositioning::offset_from_parent(
-                offset,
+                collage_pos,
                 ParentOffsetBounds::Unbounded,
                 ParentAnchor::Center,
                 ChildAnchor::Center,
