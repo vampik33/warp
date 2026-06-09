@@ -19,12 +19,15 @@ use crate::ai::agent::conversation::{
 };
 use crate::ai::agent::{
     AIAgentExchange, AIAgentExchangeId, AIAgentInput, AIAgentOutputStatus, FinishedAIAgentOutput,
-    Shared, UserQueryMode,
+    RenderableAIError, Shared, UserQueryMode,
 };
-use crate::ai::ambient_agents::AmbientAgentTaskId;
+use crate::ai::ambient_agents::{
+    conversation_output_status_from_conversation, AmbientAgentTaskId, AmbientConversationStatus,
+};
 use crate::ai::blocklist::controller::RequestInput;
 use crate::ai::blocklist::ResponseStreamId;
 use crate::ai::llms::LLMId;
+use crate::auth::AuthStateProvider;
 use crate::cloud_object::{Owner, Revision, ServerMetadata, ServerPermissions};
 use crate::input_suggestions::HistoryInputSuggestion;
 use crate::persistence::model::{
@@ -32,6 +35,7 @@ use crate::persistence::model::{
 };
 use crate::persistence::ModelEvent;
 use crate::server::ids::ServerId;
+use crate::server::telemetry::context_provider::AppTelemetryContextProvider;
 use crate::terminal::model::session::SessionId;
 use crate::test_util::settings::{
     initialize_history_persistence_for_tests, initialize_settings_for_tests,
@@ -3370,4 +3374,108 @@ fn hydrate_remote_child_placeholder_with_cloud_transcript_preserves_placeholder_
             "error must surface the missing-placeholder reason; got: {err:#}",
         );
     });
+}
+
+// --- conversation_output_status_from_conversation ---
+
+/// Builds a conversation with one in-flight exchange, completes it with the
+/// given error (mirroring what the controller does when a response stream
+/// fails), and returns the derived [`AmbientConversationStatus`].
+fn output_status_after_stream_error(error: RenderableAIError) -> Option<AmbientConversationStatus> {
+    let derived: Arc<Mutex<Option<AmbientConversationStatus>>> = Arc::new(Mutex::new(None));
+    let derived_for_test = Arc::clone(&derived);
+    App::test((), |mut app| async move {
+        initialize_history_persistence_for_tests(&mut app);
+        // Completing a request with an error emits telemetry, which requires
+        // the telemetry context provider (and the auth state it reads).
+        app.add_singleton_model(|_| AuthStateProvider::new_for_test());
+        app.add_singleton_model(AppTelemetryContextProvider::new_context_provider);
+        let terminal_view_id = EntityId::new();
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
+
+        let conversation_id = history_model.update(&mut app, |model, ctx| {
+            model.start_new_conversation(terminal_view_id, false, false, false, ctx)
+        });
+
+        let stream_id = ResponseStreamId::new_for_test();
+        history_model.update(&mut app, |model, ctx| {
+            let exchange = create_exchange_with_query("test query", Local::now(), None);
+            let task_id = model
+                .conversation(&conversation_id)
+                .unwrap()
+                .get_root_task_id()
+                .clone();
+            let request_input = RequestInput {
+                conversation_id,
+                input_messages: HashMap::from([(task_id, exchange.input)]),
+                working_directory: exchange.working_directory,
+                model_id: exchange.model_id,
+                coding_model_id: exchange.coding_model_id,
+                cli_agent_model_id: exchange.cli_agent_model_id,
+                computer_use_model_id: exchange.computer_use_model_id,
+                shared_session_response_initiator: exchange.response_initiator,
+                request_start_ts: exchange.start_time,
+                supported_tools_override: None,
+            };
+            model
+                .update_conversation_for_new_request_input(
+                    request_input,
+                    stream_id.clone(),
+                    terminal_view_id,
+                    ctx,
+                )
+                .unwrap();
+        });
+
+        history_model.update(&mut app, |model, ctx| {
+            model.mark_response_stream_completed_with_error(
+                error,
+                &stream_id,
+                conversation_id,
+                terminal_view_id,
+                ctx,
+            );
+        });
+
+        *derived_for_test.lock().unwrap() = history_model.read(&app, |model, _| {
+            conversation_output_status_from_conversation(
+                model.conversation(&conversation_id).unwrap(),
+            )
+        });
+    });
+    let derived = derived.lock().unwrap().take();
+    derived
+}
+
+/// A stream error marked with `will_attempt_resume: true` must survive the
+/// conversion to `AmbientConversationStatus` so the agent driver keeps the
+/// run alive while the automatic resume is pending. The conversation-level
+/// `status_error_message` is a plain string and would otherwise drop the flag.
+#[test]
+fn resume_pending_stream_error_keeps_resume_flag_in_output_status() {
+    let status =
+        output_status_after_stream_error(RenderableAIError::transient_network_error(true, false));
+
+    let Some(AmbientConversationStatus::Error { error }) = status else {
+        panic!("expected an error status, got {status:?}");
+    };
+    assert!(
+        error.will_attempt_resume(),
+        "will_attempt_resume must be preserved from the exchange error, got {error:?}"
+    );
+}
+
+/// A stream error without a pending resume stays terminal.
+#[test]
+fn non_resumable_stream_error_stays_terminal_in_output_status() {
+    let status =
+        output_status_after_stream_error(RenderableAIError::transient_network_error(false, false));
+
+    let Some(AmbientConversationStatus::Error { error }) = status else {
+        panic!("expected an error status, got {status:?}");
+    };
+    assert!(
+        !error.will_attempt_resume(),
+        "will_attempt_resume must be false for a non-resumable error, got {error:?}"
+    );
 }

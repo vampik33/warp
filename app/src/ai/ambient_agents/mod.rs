@@ -82,6 +82,22 @@ pub fn conversation_output_status_from_conversation(
         });
     }
     if let ConversationStatus::Error = conversation.status() {
+        // Prefer the structured error recorded on the last exchange when available: it
+        // preserves `will_attempt_resume`/`waiting_for_network`, which the string-only
+        // `status_error_message` cannot carry. The agent driver relies on that flag to
+        // keep the run alive while an automatic resume is pending instead of reporting
+        // a terminal error and tearing down the execution.
+        if let Some(AIAgentOutputStatus::Finished {
+            finished_output: FinishedAIAgentOutput::Error { error, .. },
+        }) = conversation
+            .root_task_exchanges()
+            .last()
+            .map(|exchange| &exchange.output_status)
+        {
+            return Some(AmbientConversationStatus::Error {
+                error: error.clone(),
+            });
+        }
         if let Some(error_message) = conversation.status_error_message() {
             return Some(AmbientConversationStatus::Error {
                 error: RenderableAIError::Other {
