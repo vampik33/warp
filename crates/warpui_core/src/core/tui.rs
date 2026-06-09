@@ -189,6 +189,18 @@ impl AppContext {
             .or_insert(handler);
     }
 
+    /// Renders the registered [`TuiView`] with the given id to its type-erased
+    /// output (a `Box<dyn Any>` wrapping the view's `RenderOutput`), or `None`
+    /// if no such view is registered. This is the TUI analogue of
+    /// [`render_view`](Self::render_view): the `warpui_tui` presenter calls it to
+    /// resolve a (root or child) view and downcasts the result back to the
+    /// concrete boxed element to lay out and paint it.
+    pub fn render_tui_view(&self, view_id: EntityId) -> Option<Box<dyn Any>> {
+        let window_id = *self.view_to_window.get(&view_id)?;
+        let view = self.windows.get(&window_id)?.views.get(&view_id)?;
+        Some(AnyTuiView::render_tui(view.as_ref(), self))
+    }
+
     /// Returns a handle to the window's root [`TuiView`], if it is of type `T`.
     pub fn root_view_tui<T: TuiView>(&self, window_id: WindowId) -> Option<TuiViewHandle<T>> {
         self.windows
