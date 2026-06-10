@@ -719,6 +719,9 @@ pub enum WorkspaceAction {
         image: lightbox::LightboxImage,
     },
     StartAgentOnboardingTutorial(OnboardingTutorial),
+    NavigateBack,
+    NavigateForward,
+    ClearNavigationStack,
     ShowSessionConfigModal,
     DismissSessionConfigTabConfigChip,
     /// Start the HOA onboarding flow (for debugging)
@@ -1047,6 +1050,9 @@ impl WorkspaceAction {
             | OpenLightbox { .. }
             | UpdateLightboxImage { .. }
             | StartAgentOnboardingTutorial(_)
+            | NavigateBack
+            | NavigateForward
+            | ClearNavigationStack
             | ShowSessionConfigModal
             | DismissSessionConfigTabConfigChip
             | SaveCurrentTabAsNewConfig(_)

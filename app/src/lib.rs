@@ -183,7 +183,6 @@ use crate::ai::mcp::{FileBasedMCPManager, FileMCPWatcher};
 use crate::uri::web_intent_parser::maybe_rewrite_web_url_to_intent;
 pub mod workflows;
 pub mod workspace;
-
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ops::Deref;
@@ -197,6 +196,8 @@ use anyhow::Context;
 use anyhow::{anyhow, Result};
 use appearance::{Appearance, AppearanceManager};
 use channel::ChannelState;
+#[cfg(feature = "integration_tests")]
+pub use code::editor::view::CodeEditorViewAction;
 use interval_timer::IntervalTimer;
 use itertools::Itertools;
 #[cfg(feature = "integration_tests")]
