@@ -21,7 +21,6 @@ use crate::terminal::input::{
 use crate::terminal::model::escape_sequences::{self, EscCodes};
 use crate::terminal::model::selection::SelectionDirection;
 use crate::terminal::shared_session::{SharedSessionActionSource, SharedSessionStatus};
-use crate::terminal::ssh::error::{SshErrorBlockAction, SSH_ERROR_BLOCK_VISIBLE_KEY};
 use crate::terminal::view::passive_suggestions::PromptSuggestionResolution;
 use crate::terminal::view::{
     LONG_RUNNING_AGENT_REQUESTED_COMMAND_CONTEXT_KEY,
@@ -63,7 +62,6 @@ fn init_overlapping_keybindings(app: &mut AppContext) {
     use warpui::keymap::macros::*;
 
     let escape_key: &str = "escape";
-    let cmd_or_ctrl_enter: &str = "cmdorctrl-enter";
 
     // No Active Block Context
     app.register_fixed_bindings([FixedBinding::new(
@@ -71,24 +69,8 @@ fn init_overlapping_keybindings(app: &mut AppContext) {
         TerminalAction::MaybeDismissToolTip {
             from_keybinding: true,
         },
-        !id!(SSH_ERROR_BLOCK_VISIBLE_KEY) & id!("Terminal"),
+        id!("Terminal"),
     )]);
-
-    let block_action_context = || id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand");
-
-    // SSH Error Block Context
-    app.register_fixed_bindings([
-        FixedBinding::new(
-            escape_key,
-            TerminalAction::NotifySshErrorBlock(SshErrorBlockAction::ContinueWithoutWarpification),
-            id!(SSH_ERROR_BLOCK_VISIBLE_KEY) & block_action_context(),
-        ),
-        FixedBinding::new(
-            cmd_or_ctrl_enter,
-            TerminalAction::NotifySshErrorBlock(SshErrorBlockAction::ContinueWithoutWarpification),
-            id!(SSH_ERROR_BLOCK_VISIBLE_KEY) & block_action_context(),
-        ),
-    ]);
 }
 
 /// Register keybindings for [`TerminalView`] actions.
@@ -344,18 +326,6 @@ pub fn init(app: &mut AppContext) {
         .with_key_binding("ctrl-i")
         .with_context_predicate(
             id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand") & id!("SubshellBanner"),
-        ),
-        EditableBinding::new(
-            "terminal:warpify_ssh_session",
-            "Warpify ssh session",
-            TerminalAction::WarpifySSHSession,
-        )
-        .with_key_binding("ctrl-i")
-        .with_context_predicate(
-            id!("Terminal")
-                & !id!("IMEOpen")
-                & id!("LongRunningCommand")
-                & id!("SshWarpificationBanner"),
         ),
         EditableBinding::new(
             ACCEPT_PROMPT_SUGGESTION_KEYBINDING,
@@ -1220,8 +1190,7 @@ fn register_input_mode_bindings(app: &mut AppContext) {
         agent_mode_predicate.clone()
             & !id!("Input")
             & !id!(ROOT_CLOUD_MODE_PANE_KEY)
-            & !id!(flags::HAS_PENDING_PROMPT_SUGGESTION)
-            & !id!(SSH_ERROR_BLOCK_VISIBLE_KEY),
+            & !id!(flags::HAS_PENDING_PROMPT_SUGGESTION),
     )
     .with_enabled(|| FeatureFlag::AgentView.is_enabled())]);
 

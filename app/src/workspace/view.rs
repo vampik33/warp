@@ -327,8 +327,7 @@ use crate::settings::{
     AccessibilitySettings, AliasExpansionSettings, AppEditorSettings, BlockVisibilitySettings,
     ChangelogSettings, CodeSettings, CodeSettingsChangedEvent, CtrlTabBehavior, CursorBlink,
     DebugSettings, DefaultSessionMode, FontSettings, GPUSettings, InputModeSettings, InputSettings,
-    MonospaceFontSize, PaneSettings, PrivacySettings, SelectionSettings, Settings, SshSettings,
-    ThemeSettings,
+    MonospaceFontSize, PaneSettings, PrivacySettings, SelectionSettings, Settings, ThemeSettings,
 };
 use crate::settings_view::environments_page::EnvironmentsPage;
 use crate::settings_view::handoff_environment_creation_modal::{
@@ -21887,7 +21886,6 @@ impl Workspace {
         let reporting_setings = AltScreenReporting::as_ref(app);
         let general_settings = GeneralSettings::as_ref(app);
         let theme_settings = ThemeSettings::as_ref(app);
-        let ssh_settings = SshSettings::as_ref(app);
         let warpify_settings = WarpifySettings::as_ref(app);
         let terminal_settings = TerminalSettings::as_ref(app);
         let window_settings = WindowSettings::as_ref(app);
@@ -21934,16 +21932,8 @@ impl Workspace {
             context.set.insert(flags::WARP_SAME_LINE_PROMPT_FLAG);
         }
 
-        if *ssh_settings.enable_legacy_ssh_wrapper.value() {
-            #[allow(deprecated)]
-            context.set.insert(flags::LEGACY_SSH_WRAPPER_CONTEXT_FLAG);
-        }
         if *warpify_settings.enable_ssh_warpification.value() {
             context.set.insert(flags::SSH_WARPIFICATION_CONTEXT_FLAG);
-        }
-
-        if *warpify_settings.use_ssh_tmux_wrapper.value() {
-            context.set.insert(flags::SSH_TMUX_WRAPPER_CONTEXT_FLAG);
         }
 
         if keys_settings.extra_meta_keys.left_alt {
