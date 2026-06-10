@@ -56,3 +56,11 @@ fn application_level_failures_are_not_transient() {
         !AIApiError::Deserialization(DeserializationError::Json(json_err)).is_transient_failure()
     );
 }
+
+/// A truncated stream is a transport-level failure: the request can be retried and the
+/// conversation is resume-eligible.
+#[test]
+fn stream_truncated_is_retryable_and_transient() {
+    assert!(AIApiError::StreamTruncated.is_retryable());
+    assert!(AIApiError::StreamTruncated.is_transient_failure());
+}

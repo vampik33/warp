@@ -8,10 +8,10 @@ use warpui::App;
 
 use super::super::history_model::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
 use super::{
-    classify_renderable_error, map_cli_session_status, task_update_for_conversation_error,
-    LocalAgentTaskSyncModel,
+    classify_renderable_error, map_cli_session_status, map_conversation_status,
+    task_update_for_conversation_error, LocalAgentTaskSyncModel,
 };
-use crate::ai::agent::conversation::{AIConversation, AIConversationId};
+use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::agent::RenderableAIError;
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::server::server_api::ai::{AIClient, MockAIClient, TaskStatusUpdate};
@@ -128,16 +128,33 @@ fn other_error_is_error_with_internal() {
 // --- task_update_for_conversation_error ---
 
 #[test]
-fn resume_pending_error_keeps_task_in_progress() {
+fn transient_error_status_maps_to_in_progress() {
+    // A pending recovery is represented by the TransientError conversation status;
+    // the run is kept IN_PROGRESS so the execution isn't torn down mid-recovery.
+    let mut conversation = AIConversation::new(false, false);
+    conversation.set_status_for_test(ConversationStatus::TransientError);
+    assert_update(
+        map_conversation_status(&conversation),
+        AgentTaskState::InProgress,
+        None,
+        Some("attempting to resume"),
+    );
+}
+
+#[test]
+fn resume_rendering_hint_is_ignored_for_terminal_classification() {
+    // The will_attempt_resume flag on the error is a rendering hint only. An Error
+    // status always classifies terminally — in-flight recoveries surface as the
+    // non-terminal TransientError status instead.
     assert_update(
         task_update_for_conversation_error(Some(&RenderableAIError::Other {
             error_message: "connection reset".into(),
             will_attempt_resume: true,
             waiting_for_network: false,
         })),
-        AgentTaskState::InProgress,
-        None,
-        Some("attempting to resume"),
+        AgentTaskState::Error,
+        Some(PlatformErrorCode::InternalError),
+        Some("connection reset"),
     );
 }
 

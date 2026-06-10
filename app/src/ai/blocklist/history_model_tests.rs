@@ -15,7 +15,7 @@ use super::{
 };
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{
-    AIAgentHarness, AIConversationId, ServerAIConversationMetadata,
+    AIAgentHarness, AIConversationId, ConversationStatus, ServerAIConversationMetadata,
 };
 use crate::ai::agent::{
     AIAgentExchange, AIAgentExchangeId, AIAgentInput, AIAgentOutputStatus, FinishedAIAgentOutput,
@@ -3380,9 +3380,20 @@ fn hydrate_remote_child_placeholder_with_cloud_transcript_preserves_placeholder_
 
 /// Builds a conversation with one in-flight exchange, completes it with the
 /// given error (mirroring what the controller does when a response stream
-/// fails), and returns the derived [`AmbientConversationStatus`].
-fn output_status_after_stream_error(error: RenderableAIError) -> Option<AmbientConversationStatus> {
-    let derived: Arc<Mutex<Option<AmbientConversationStatus>>> = Arc::new(Mutex::new(None));
+/// fails), and returns the resulting [`ConversationStatus`] plus the derived
+/// [`AmbientConversationStatus`].
+fn statuses_after_stream_error(
+    error: RenderableAIError,
+    recovery_pending: bool,
+) -> (
+    Option<ConversationStatus>,
+    Option<AmbientConversationStatus>,
+) {
+    type Captured = (
+        Option<ConversationStatus>,
+        Option<AmbientConversationStatus>,
+    );
+    let derived: Arc<Mutex<Captured>> = Arc::new(Mutex::new((None, None)));
     let derived_for_test = Arc::clone(&derived);
     App::test((), |mut app| async move {
         initialize_history_persistence_for_tests(&mut app);
@@ -3430,6 +3441,7 @@ fn output_status_after_stream_error(error: RenderableAIError) -> Option<AmbientC
         history_model.update(&mut app, |model, ctx| {
             model.mark_response_stream_completed_with_error(
                 error,
+                recovery_pending,
                 &stream_id,
                 conversation_id,
                 terminal_view_id,
@@ -3438,45 +3450,69 @@ fn output_status_after_stream_error(error: RenderableAIError) -> Option<AmbientC
         });
 
         *derived_for_test.lock().unwrap() = history_model.read(&app, |model, _| {
-            conversation_output_status_from_conversation(
-                model.conversation(&conversation_id).unwrap(),
+            let conversation = model.conversation(&conversation_id).unwrap();
+            (
+                Some(conversation.status().clone()),
+                conversation_output_status_from_conversation(conversation),
             )
         });
     });
     // Two steps: a tail-expression `lock()` temporary would outlive `derived` (E0597).
-    let derived = derived.lock().unwrap().take();
-    derived
+    let result = std::mem::take(&mut *derived.lock().unwrap());
+    result
 }
 
-/// A stream error marked with `will_attempt_resume: true` must survive the
-/// conversion to `AmbientConversationStatus` so the agent driver keeps the
-/// run alive while the automatic resume is pending. The conversation-level
-/// `status_error_message` is a plain string and would otherwise drop the flag.
+/// A failure with a recovery scheduled moves the conversation to the
+/// non-terminal `TransientError` status, and the driver-facing conversion must
+/// not report a terminal outcome for it.
 #[test]
-fn resume_pending_stream_error_keeps_resume_flag_in_output_status() {
-    let status =
-        output_status_after_stream_error(RenderableAIError::transient_network_error(true, false));
+fn recovery_pending_error_sets_transient_error_status() {
+    let (status, derived) = statuses_after_stream_error(
+        RenderableAIError::transient_network_error(true, false),
+        /*recovery_pending*/ true,
+    );
 
-    let Some(AmbientConversationStatus::Error { error }) = status else {
-        panic!("expected an error status, got {status:?}");
-    };
+    assert_eq!(status, Some(ConversationStatus::TransientError));
     assert!(
-        error.will_attempt_resume(),
-        "will_attempt_resume must be preserved from the exchange error, got {error:?}"
+        derived.is_none(),
+        "a pending recovery must not derive a terminal outcome, got {derived:?}"
     );
 }
 
-/// A stream error without a pending resume stays terminal.
+/// The structured exchange error (and its rendering hints) must survive the
+/// conversion to `AmbientConversationStatus`; the conversation-level
+/// `status_error_message` is a plain string and would otherwise drop them.
+#[test]
+fn structured_exchange_error_is_preserved_in_output_status() {
+    let (status, derived) = statuses_after_stream_error(
+        RenderableAIError::transient_network_error(true, false),
+        /*recovery_pending*/ false,
+    );
+
+    assert_eq!(status, Some(ConversationStatus::Error));
+    let Some(AmbientConversationStatus::Error { error }) = derived else {
+        panic!("expected an error status, got {derived:?}");
+    };
+    assert!(
+        error.will_attempt_resume(),
+        "the structured exchange error must be preserved, got {error:?}"
+    );
+}
+
+/// A stream error without a pending recovery stays terminal.
 #[test]
 fn non_resumable_stream_error_stays_terminal_in_output_status() {
-    let status =
-        output_status_after_stream_error(RenderableAIError::transient_network_error(false, false));
+    let (status, derived) = statuses_after_stream_error(
+        RenderableAIError::transient_network_error(false, false),
+        /*recovery_pending*/ false,
+    );
 
-    let Some(AmbientConversationStatus::Error { error }) = status else {
-        panic!("expected an error status, got {status:?}");
+    assert_eq!(status, Some(ConversationStatus::Error));
+    let Some(AmbientConversationStatus::Error { error }) = derived else {
+        panic!("expected an error status, got {derived:?}");
     };
     assert!(
         !error.will_attempt_resume(),
-        "will_attempt_resume must be false for a non-resumable error, got {error:?}"
+        "will_attempt_resume must be false for a non-recoverable error, got {error:?}"
     );
 }

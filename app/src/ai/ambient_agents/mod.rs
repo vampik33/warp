@@ -76,6 +76,12 @@ pub enum AmbientConversationStatus {
 pub fn conversation_output_status_from_conversation(
     conversation: &AIConversation,
 ) -> Option<AmbientConversationStatus> {
+    // A transient failure with recovery pending is not a terminal outcome: the
+    // conversation is expected to return to InProgress (or fall to Error if the
+    // recovery is exhausted).
+    if conversation.status().is_transient_error() {
+        return None;
+    }
     if let ConversationStatus::Blocked { blocked_action } = conversation.status() {
         return Some(AmbientConversationStatus::Blocked {
             blocked_action: blocked_action.clone(),
@@ -83,10 +89,9 @@ pub fn conversation_output_status_from_conversation(
     }
     if let ConversationStatus::Error = conversation.status() {
         // Prefer the structured error recorded on the last exchange when available: it
-        // preserves `will_attempt_resume`/`waiting_for_network`, which the string-only
-        // `status_error_message` cannot carry. The agent driver relies on that flag to
-        // keep the run alive while an automatic resume is pending instead of reporting
-        // a terminal error and tearing down the execution.
+        // carries rendering hints (e.g. `will_attempt_resume`/`waiting_for_network`)
+        // and the precise error variant, which the string-only `status_error_message`
+        // cannot.
         if let Some(AIAgentOutputStatus::Finished {
             finished_output: FinishedAIAgentOutput::Error { error, .. },
         }) = conversation

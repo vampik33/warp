@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use chrono::{DateTime, Local, TimeDelta};
@@ -12,8 +13,54 @@ use crate::ai::agent::api::{self, generate_multi_agent_output, ConvertToAPITypeE
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::{AIIdentifiers, CancellationReason};
 use crate::network::NetworkStatus;
-use crate::server::server_api::ServerApiProvider;
+use crate::server::server_api::{AIApiError, ServerApiProvider};
 use crate::{report_error, send_telemetry_from_ctx};
+
+/// Maximum number of times a single MAA request is re-sent before the failure is
+/// surfaced.
+const MAX_RETRIES: usize = 3;
+
+/// What to do about a failed or truncated MAA response attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RecoveryAction {
+    /// Re-send the same request immediately.
+    RetryNow,
+    /// Re-send the same request once connectivity returns.
+    RetryWhenOnline,
+    /// Resume the conversation with a fresh request after the stream completes.
+    Resume,
+    /// Surface the error; the conversation ends in error.
+    Fail,
+}
+
+/// Decides how to recover from a failed response-stream attempt.
+///
+/// The split: before any client actions have been received, the original request can
+/// be re-sent verbatim (retry) — and an offline client parks the retry until
+/// connectivity returns rather than failing. Once actions have streamed (and possibly
+/// executed), re-sending is unsafe, so recovery uses a fresh `ResumeConversation`
+/// request instead. Pre-action budget exhaustion while online is terminal: the
+/// request has already been retried `MAX_RETRIES` times.
+fn recovery_action(
+    has_received_client_actions: bool,
+    is_retryable: bool,
+    is_transient_failure: bool,
+    has_retry_budget: bool,
+    can_attempt_resume_on_error: bool,
+    is_online: bool,
+) -> RecoveryAction {
+    if !has_received_client_actions && is_retryable && has_retry_budget {
+        if is_online {
+            RecoveryAction::RetryNow
+        } else {
+            RecoveryAction::RetryWhenOnline
+        }
+    } else if has_received_client_actions && is_transient_failure && can_attempt_resume_on_error {
+        RecoveryAction::Resume
+    } else {
+        RecoveryAction::Fail
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ResponseStreamId(String);
@@ -61,9 +108,24 @@ pub struct ResponseStream {
 
     /// Whether we should attempt to resume the conversation after the stream finishes.
     ///
-    /// This is set when we receive a transient network/server error that is not being
-    /// retried in-request and `can_attempt_resume_on_error` is true.
+    /// This is set when a transient network/server failure occurs after client actions
+    /// have been received (so an in-request retry is unsafe) and
+    /// `can_attempt_resume_on_error` is true.
     should_resume_conversation_after_stream_finished: bool,
+
+    /// Whether a `StreamFinished` event was received for the current request. The
+    /// server always sends one before ending the response, so a stream that completes
+    /// without it was truncated in transit and is recovered like a transport error.
+    stream_finished_received: bool,
+
+    /// Whether a terminal error event has already been emitted for the current
+    /// request, so stream completion doesn't synthesize a second failure for it.
+    error_event_emitted: bool,
+
+    /// Whether a retry is parked waiting for connectivity. While set, completion of
+    /// the failed attempt's underlying stream is ignored — the request is logically
+    /// still active. Cleared when the deferred retry fires (or via cancellation).
+    deferred_retry_pending: bool,
 
     /// Unique, internal id for the current request.
     ///
@@ -109,6 +171,9 @@ impl ResponseStream {
             ai_identifiers,
             can_attempt_resume_on_error,
             should_resume_conversation_after_stream_finished: false,
+            stream_finished_received: false,
+            error_event_emitted: false,
+            deferred_retry_pending: false,
             current_request_id: Some(request_id),
         }
     }
@@ -120,11 +185,6 @@ impl ResponseStream {
     /// Returns true if we should attempt to resume the conversation after the stream finishes.
     pub fn should_resume_conversation_after_stream_finished(&self) -> bool {
         self.should_resume_conversation_after_stream_finished
-    }
-
-    /// Returns true if this request may trigger an automatic conversation resume on error.
-    pub fn can_attempt_resume_on_error(&self) -> bool {
-        self.can_attempt_resume_on_error
     }
 
     /// Helper function to emit AgentModeError telemetry for error that is retryable (not user visible).
@@ -146,7 +206,11 @@ impl ResponseStream {
 
     fn retry(&mut self, ctx: &mut ModelContext<Self>) {
         self.retry_count += 1;
-        self.has_received_client_actions = false; // Reset for the new attempt
+        // Reset per-attempt state for the new attempt.
+        self.has_received_client_actions = false;
+        self.stream_finished_received = false;
+        self.error_event_emitted = false;
+        self.deferred_retry_pending = false;
 
         let (cancellation_tx, cancellation_rx) = oneshot::channel();
         if let Some(old_cancellation_tx) = self.cancellation_tx.take() {
@@ -238,6 +302,7 @@ impl ResponseStream {
                             self.has_received_client_actions = true;
                         }
                         warp_multi_agent_api::response_event::Type::Finished(finished_event) => {
+                            self.stream_finished_received = true;
                             // Emit retry success telemetry on successful completion
                             if matches!(
                                 finished_event.reason,
@@ -268,51 +333,48 @@ impl ResponseStream {
                     self.original_error = Some(format!("{e:?}"));
                 }
 
-                // Only retry if:
-                // 1. We haven't received any client actions yet (this is the first event or only init events)
-                // 2. The error is retryable
-                // 3. We haven't exceeded max retries
-                // 4. We're online
-                const MAX_RETRIES: usize = 3;
-                let network_status = NetworkStatus::as_ref(ctx);
-                let is_online = network_status.is_online();
-                let is_retryable = e.is_retryable();
-
-                let should_retry = !self.has_received_client_actions
-                    && is_retryable
-                    && self.retry_count < MAX_RETRIES
-                    && is_online;
-
-                if should_retry {
-                    log::warn!(
-                        "MultiAgent request failed, retrying (attempt {}/{}) - Error: {e:?}",
-                        self.retry_count + 1,
-                        MAX_RETRIES
-                    );
-                    // Only emit error telemetry here if we're retrying.
-                    // Final errors that aren't being retried are emitted elsewhere.
-                    self.emit_retryable_agent_mode_error_telemetry(format!("{e:?}"), ctx);
-                    self.retry(ctx);
-                    // Don't emit the error event, we're retrying
-                    // TODO: emit a separate event if controller needs to know about failures that are being retried
-                    return;
+                let is_online = NetworkStatus::as_ref(ctx).is_online();
+                match recovery_action(
+                    self.has_received_client_actions,
+                    e.is_retryable(),
+                    e.is_transient_failure(),
+                    self.retry_count < MAX_RETRIES,
+                    self.can_attempt_resume_on_error,
+                    is_online,
+                ) {
+                    RecoveryAction::RetryNow => {
+                        log::warn!(
+                            "MultiAgent request failed, retrying (attempt {}/{}) - Error: {e:?}",
+                            self.retry_count + 1,
+                            MAX_RETRIES
+                        );
+                        // Only emit error telemetry here if we're retrying.
+                        // Final errors that aren't being retried are emitted elsewhere.
+                        self.emit_retryable_agent_mode_error_telemetry(format!("{e:?}"), ctx);
+                        self.retry(ctx);
+                        // Don't emit the error event, we're retrying
+                        return;
+                    }
+                    RecoveryAction::RetryWhenOnline => {
+                        log::warn!(
+                            "MultiAgent request failed while offline; retrying (attempt {}/{}) once connectivity returns - Error: {e:?}",
+                            self.retry_count + 1,
+                            MAX_RETRIES
+                        );
+                        self.emit_retryable_agent_mode_error_telemetry(format!("{e:?}"), ctx);
+                        self.defer_retry_until_online(ctx);
+                        return;
+                    }
+                    RecoveryAction::Resume => {
+                        // Unlike an in-request retry (which re-sends the same request and is
+                        // unsafe once actions have executed), a resume sends a fresh
+                        // ResumeConversation request and is safe at any point. The resume
+                        // spawn itself waits for connectivity.
+                        self.should_resume_conversation_after_stream_finished = true;
+                    }
+                    RecoveryAction::Fail => {}
                 }
-
-                // If the error is a transient network/server failure but we're not retrying
-                // in-request (because client actions were already received, the retry budget is
-                // exhausted, or we're offline), signal that the controller should resume the
-                // conversation after the stream completes. Unlike an in-request retry (which
-                // re-sends the same request and is unsafe once actions have executed), a resume
-                // sends a fresh ResumeConversation request and is safe at any point.
-                //
-                // Note this is narrower than `is_retryable`: application-level failures like
-                // quota limits are retried in-request but would fail a resume identically, so
-                // they end the conversation instead.
-                let should_attempt_resume =
-                    e.is_transient_failure() && self.can_attempt_resume_on_error;
-                if should_attempt_resume {
-                    self.should_resume_conversation_after_stream_finished = true;
-                }
+                self.error_event_emitted = true;
 
                 #[cfg(feature = "crash_reporting")]
                 sentry::with_scope(
@@ -324,7 +386,10 @@ impl ResponseStream {
                         scope.set_tag("error", format!("{e:?}"));
                         scope.set_tag("is_retryable", e.is_retryable());
                         scope.set_tag("is_transient_failure", e.is_transient_failure());
-                        scope.set_tag("will_attempt_resume", should_attempt_resume);
+                        scope.set_tag(
+                            "will_attempt_resume",
+                            self.should_resume_conversation_after_stream_finished,
+                        );
                         scope.set_tag("is_online", is_online);
                         scope.set_tag("retry_count", self.retry_count);
                     },
@@ -352,8 +417,85 @@ impl ResponseStream {
         if self.current_request_id.is_none_or(|id| id != request_id) {
             return;
         }
+        // A retry is parked waiting for connectivity; the request is logically still
+        // active, so don't complete the stream for the failed attempt.
+        if self.deferred_retry_pending {
+            return;
+        }
+
+        // The server always sends a StreamFinished event before ending the response. A
+        // stream that completes without one (and without a transport error) was
+        // truncated in transit — e.g. a connection cut between chunks surfaces as a
+        // clean EOF. Synthesize the failure and recover like any transient error.
+        if !self.stream_finished_received && !self.error_event_emitted {
+            log::warn!(
+                "generate_multi_agent_output stream ended without emitting StreamFinished event."
+            );
+            let truncated = AIApiError::StreamTruncated;
+            match recovery_action(
+                self.has_received_client_actions,
+                truncated.is_retryable(),
+                truncated.is_transient_failure(),
+                self.retry_count < MAX_RETRIES,
+                self.can_attempt_resume_on_error,
+                NetworkStatus::as_ref(ctx).is_online(),
+            ) {
+                RecoveryAction::RetryNow => {
+                    log::warn!(
+                        "MultiAgent request failed, retrying (attempt {}/{}) - Error: {truncated:?}",
+                        self.retry_count + 1,
+                        MAX_RETRIES
+                    );
+                    self.emit_retryable_agent_mode_error_telemetry(format!("{truncated:?}"), ctx);
+                    self.retry(ctx);
+                    return;
+                }
+                RecoveryAction::RetryWhenOnline => {
+                    log::warn!(
+                        "MultiAgent request failed while offline; retrying (attempt {}/{}) once connectivity returns - Error: {truncated:?}",
+                        self.retry_count + 1,
+                        MAX_RETRIES
+                    );
+                    self.emit_retryable_agent_mode_error_telemetry(format!("{truncated:?}"), ctx);
+                    self.defer_retry_until_online(ctx);
+                    return;
+                }
+                RecoveryAction::Resume => {
+                    self.should_resume_conversation_after_stream_finished = true;
+                    self.error_event_emitted = true;
+                    ctx.emit(ResponseStreamEvent::ReceivedEvent(Consumable::new(Err(
+                        Arc::new(truncated),
+                    ))));
+                }
+                RecoveryAction::Fail => {
+                    self.error_event_emitted = true;
+                    ctx.emit(ResponseStreamEvent::ReceivedEvent(Consumable::new(Err(
+                        Arc::new(truncated),
+                    ))));
+                }
+            }
+        }
+
         ctx.emit(ResponseStreamEvent::AfterStreamFinished { cancellation: None });
         self.cancellation_tx = None;
+    }
+
+    /// Parks a retry until connectivity returns. The controller mirrors the parked
+    /// state on the conversation (`TransientError`) via the `WaitingForNetwork` event;
+    /// cancellation invalidates the parked retry through `current_request_id`.
+    fn defer_retry_until_online(&mut self, ctx: &mut ModelContext<Self>) {
+        self.deferred_retry_pending = true;
+        ctx.emit(ResponseStreamEvent::WaitingForNetwork { waiting: true });
+        let request_id_at_defer = self.current_request_id;
+        let wait_for_online = NetworkStatus::as_ref(ctx).wait_until_online();
+        let _ = ctx.spawn(wait_for_online, move |me, _, ctx| {
+            // Cancelled or superseded while waiting — drop the parked retry.
+            if request_id_at_defer.is_none() || me.current_request_id != request_id_at_defer {
+                return;
+            }
+            ctx.emit(ResponseStreamEvent::WaitingForNetwork { waiting: false });
+            me.retry(ctx);
+        });
     }
 }
 
@@ -393,6 +535,13 @@ pub struct StreamCancellation {
 #[derive(Debug, Clone)]
 pub enum ResponseStreamEvent {
     ReceivedEvent(Consumable<api::Event>),
+    /// A transient failure occurred while offline and the retry is parked until
+    /// connectivity returns (`waiting: true`), or the parked retry has just fired
+    /// (`waiting: false`). The controller mirrors this on the conversation status
+    /// (`TransientError` ↔ `InProgress`).
+    WaitingForNetwork {
+        waiting: bool,
+    },
     AfterStreamFinished {
         /// Some for cancellation (with context), None for natural completion (uses dynamic lookup).
         cancellation: Option<StreamCancellation>,
@@ -402,3 +551,7 @@ pub enum ResponseStreamEvent {
 impl Entity for ResponseStream {
     type Event = ResponseStreamEvent;
 }
+
+#[cfg(test)]
+#[path = "response_stream_tests.rs"]
+mod tests;

@@ -1708,9 +1708,13 @@ impl BlocklistAIHistoryModel {
         });
     }
 
+    /// Marks the stream's exchanges as finished with `error`. `recovery_pending`
+    /// moves the conversation to the non-terminal `TransientError` status (an
+    /// automatic resume has been scheduled) instead of `Error`.
     pub fn mark_response_stream_completed_with_error(
         &mut self,
         error: RenderableAIError,
+        recovery_pending: bool,
         stream_id: &ResponseStreamId,
         conversation_id: AIConversationId,
         terminal_view_id: EntityId,
@@ -1720,6 +1724,7 @@ impl BlocklistAIHistoryModel {
             if let Err(e) = conversation.mark_request_completed_with_error(
                 stream_id,
                 error.clone(),
+                recovery_pending,
                 terminal_view_id,
                 ctx,
             ) {

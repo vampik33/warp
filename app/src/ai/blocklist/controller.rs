@@ -2727,6 +2727,11 @@ impl BlocklistAIController {
                             });
                         }
 
+                        // A resume scheduled for this failure keeps the conversation in
+                        // the non-terminal TransientError status instead of Error.
+                        let recovery_pending = response_stream
+                            .as_ref(ctx)
+                            .should_resume_conversation_after_stream_finished();
                         let mut renderable_error: RenderableAIError = e.as_ref().into();
                         if let RenderableAIError::Other {
                             will_attempt_resume,
@@ -2734,11 +2739,10 @@ impl BlocklistAIController {
                             ..
                         } = &mut renderable_error
                         {
-                            let should_attempt_resume = response_stream
-                                .as_ref(ctx)
-                                .should_resume_conversation_after_stream_finished();
-                            *will_attempt_resume |= should_attempt_resume;
-                            if should_attempt_resume {
+                            // Rendering-only hints; state machine consumers key off the
+                            // TransientError conversation status instead.
+                            *will_attempt_resume |= recovery_pending;
+                            if recovery_pending {
                                 let network_status = NetworkStatus::as_ref(ctx);
                                 *waiting_for_network = !network_status.is_online();
                             }
@@ -2747,6 +2751,7 @@ impl BlocklistAIController {
                         history_model.update(ctx, |history_model, ctx| {
                             history_model.mark_response_stream_completed_with_error(
                                 renderable_error,
+                                recovery_pending,
                                 &stream_id,
                                 conversation_id,
                                 self.terminal_view_id,
@@ -2755,6 +2760,30 @@ impl BlocklistAIController {
                         });
                     }
                 }
+            }
+            ResponseStreamEvent::WaitingForNetwork { waiting } => {
+                let Some(conversation_id) = BlocklistAIHistoryModel::as_ref(ctx)
+                    .conversation_for_response_stream(&stream_id)
+                else {
+                    log::warn!("Could not find conversation for response stream: {stream_id:?}");
+                    return;
+                };
+                // Mirror the parked-retry state on the conversation: TransientError while
+                // the retry waits for connectivity, back to InProgress when it fires. No
+                // exchange is finished here — the request is still logically in flight.
+                let status = if *waiting {
+                    ConversationStatus::TransientError
+                } else {
+                    ConversationStatus::InProgress
+                };
+                BlocklistAIHistoryModel::handle(ctx).update(ctx, |history_model, ctx| {
+                    history_model.update_conversation_status(
+                        self.terminal_view_id,
+                        conversation_id,
+                        status,
+                        ctx,
+                    );
+                });
             }
             ResponseStreamEvent::AfterStreamFinished { cancellation } => {
                 // Cancellations provide conversation_id (survives truncation); otherwise use dynamic lookup.
@@ -2782,7 +2811,6 @@ impl BlocklistAIController {
                 let new_exchange_ids = conversation.new_exchange_ids_for_response(&stream_id);
                 let mut was_passive_request = false;
                 let mut is_any_exchange_unfinished = false;
-                let mut should_resume_after_abrupt_stream_end = false;
                 let mut actions_to_queue = vec![];
 
                 for new_exchange_id in new_exchange_ids {
@@ -2833,27 +2861,18 @@ impl BlocklistAIController {
                         self.set_input_mode_for_cancellation(ctx);
                     }
                 } else if is_any_exchange_unfinished {
+                    // Defensive: truncated streams are detected inside `ResponseStream`
+                    // (which synthesizes a `StreamTruncated` error event and drives
+                    // retry/resume recovery), so an unfinished exchange here means an
+                    // unexpected completion path. Surface a terminal error.
                     log::warn!(
-                        "generate_multi_agent_output stream ended without emitting StreamFinished event."
+                        "Response stream completed with an unfinished exchange and no error event."
                     );
-
-                    // The stream died mid-turn without surfacing a transport error (e.g. an
-                    // abrupt EOF). Treat it like a retryable mid-stream failure and attempt an
-                    // automatic resume when this request is allowed to.
-                    let will_attempt_resume =
-                        response_stream.as_ref(ctx).can_attempt_resume_on_error();
-                    if will_attempt_resume {
-                        should_resume_after_abrupt_stream_end = true;
-                    }
-                    let waiting_for_network =
-                        will_attempt_resume && !NetworkStatus::as_ref(ctx).is_online();
 
                     history_model.update(ctx, |history_model, ctx| {
                         history_model.mark_response_stream_completed_with_error(
-                            RenderableAIError::transient_network_error(
-                                will_attempt_resume,
-                                waiting_for_network,
-                            ),
+                            RenderableAIError::transient_network_error(false, false),
+                            /*recovery_pending*/ false,
                             &stream_id,
                             conversation_id,
                             self.terminal_view_id,
@@ -2876,10 +2895,9 @@ impl BlocklistAIController {
                 }
 
                 // Before cleaning up the response stream, check if we should attempt to resume.
-                if should_resume_after_abrupt_stream_end
-                    || response_stream
-                        .as_ref(ctx)
-                        .should_resume_conversation_after_stream_finished()
+                if response_stream
+                    .as_ref(ctx)
+                    .should_resume_conversation_after_stream_finished()
                 {
                     let network_status = NetworkStatus::handle(ctx);
                     let wait_for_online = network_status.as_ref(ctx).wait_until_online();
@@ -3025,6 +3043,7 @@ impl BlocklistAIController {
                             will_attempt_resume: false,
                             waiting_for_network: false,
                         },
+                        /*recovery_pending*/ false,
                         stream_id,
                         conversation_id,
                         self.terminal_view_id,
@@ -3037,6 +3056,7 @@ impl BlocklistAIController {
                 history_model.update(ctx, |history_model, ctx| {
                     history_model.mark_response_stream_completed_with_error(
                         RenderableAIError::ContextWindowExceeded(error_message.to_owned()),
+                        /*recovery_pending*/ false,
                         stream_id,
                         conversation_id,
                         self.terminal_view_id,
@@ -3050,6 +3070,7 @@ impl BlocklistAIController {
                         RenderableAIError::QuotaLimit {
                             user_display_message: None,
                         },
+                        /*recovery_pending*/ false,
                         stream_id,
                         conversation_id,
                         self.terminal_view_id,
@@ -3066,6 +3087,7 @@ impl BlocklistAIController {
                             will_attempt_resume: false,
                             waiting_for_network: false,
                         },
+                        /*recovery_pending*/ false,
                         stream_id,
                         conversation_id,
                         self.terminal_view_id,
@@ -3103,6 +3125,7 @@ impl BlocklistAIController {
                 history_model.update(ctx, |history_model, ctx| {
                     history_model.mark_response_stream_completed_with_error(
                         error,
+                        /*recovery_pending*/ false,
                         stream_id,
                         conversation_id,
                         self.terminal_view_id,
@@ -3122,6 +3145,7 @@ impl BlocklistAIController {
                             will_attempt_resume: false,
                             waiting_for_network: false,
                         },
+                        /*recovery_pending*/ false,
                         stream_id,
                         conversation_id,
                         self.terminal_view_id,
@@ -3134,6 +3158,7 @@ impl BlocklistAIController {
                 history_model.update(ctx, |history_model, ctx| {
                     history_model.mark_response_stream_completed_with_error(
                         RenderableAIError::ContextWindowExceeded(error_message.to_owned()),
+                        /*recovery_pending*/ false,
                         stream_id,
                         conversation_id,
                         self.terminal_view_id,

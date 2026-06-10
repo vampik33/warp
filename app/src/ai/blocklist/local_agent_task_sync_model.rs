@@ -317,6 +317,15 @@ fn map_conversation_status(
     match conversation.status() {
         ConversationStatus::InProgress => (AgentTaskState::InProgress, None),
         ConversationStatus::Success => (AgentTaskState::Succeeded, None),
+        // An automatic recovery (retry or resume) is pending: keep the run
+        // IN_PROGRESS so it is not terminated out from under the recovery attempt
+        // (terminal task states tear down cloud executions).
+        ConversationStatus::TransientError => (
+            AgentTaskState::InProgress,
+            Some(TaskStatusUpdate::message(
+                "Connection lost while receiving the agent response; attempting to resume.",
+            )),
+        ),
         ConversationStatus::Error => {
             // Extract the specific RenderableAIError from the last exchange to
             // classify ERROR vs FAILED and provide a PlatformErrorCode.
@@ -348,21 +357,15 @@ fn map_conversation_status(
     }
 }
 
-/// Maps a conversation-level error to a task update. While an automatic resume is
-/// pending for the error, the task is kept IN_PROGRESS so the run is not terminated
-/// out from under the recovery attempt (terminal task states tear down cloud
-/// executions). If the resume fails or times out, the follow-up error (or the
-/// driver's final classification) reports the terminal state.
+/// Maps a conversation-level error to a terminal task update. Recoveries in
+/// flight are represented by the non-terminal `ConversationStatus::TransientError`
+/// (handled in `map_conversation_status`), so an `Error` status here is always
+/// terminal — the `will_attempt_resume` rendering hint on the error is
+/// deliberately ignored.
 pub(crate) fn task_update_for_conversation_error(
     error: Option<&RenderableAIError>,
 ) -> (AgentTaskState, Option<TaskStatusUpdate>) {
     match error {
-        Some(error) if error.will_attempt_resume() => (
-            AgentTaskState::InProgress,
-            Some(TaskStatusUpdate::message(
-                "Connection lost while receiving the agent response; attempting to resume.",
-            )),
-        ),
         Some(error) => classify_renderable_error(error),
         None => (
             AgentTaskState::Error,

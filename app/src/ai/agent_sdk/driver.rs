@@ -35,8 +35,8 @@ use warpui::{AppContext, Entity, ModelContext, ModelHandle, ModelSpawner, Single
 
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::{
-    AIAgentActionResultType, AIAgentExchange, AIAgentInput, AIAgentOutput, CancellationReason,
-    RenderableAIError, RequestFileEditsResult,
+    AIAgentActionResultType, AIAgentExchange, AIAgentInput, AIAgentOutput, AIAgentOutputStatus,
+    CancellationReason, FinishedAIAgentOutput, RenderableAIError, RequestFileEditsResult,
 };
 use crate::ai::agent_sdk::driver::harness::{
     harness_model_env_vars, task_env_vars, HarnessCleanupDisposition, HarnessKind, HarnessRunner,
@@ -2790,6 +2790,36 @@ impl AgentDriver {
                         return;
                     }
 
+                    if conversation.status().is_transient_error() {
+                        // A transient failure is being recovered automatically (a resume is
+                        // scheduled, or a retry is parked waiting for connectivity). Don't
+                        // terminate yet — but bound the wait so the CLI doesn't hang if the
+                        // recovery never completes. A successful recovery moves the
+                        // conversation back to InProgress, which cancels this deadline above.
+                        log::info!("Transient error; automatic recovery pending — waiting up to {AUTO_RESUME_TIMEOUT:?}");
+                        log::info!(
+                            "Ambient agent idle lifecycle: event=idle_timeout_scheduled task_id={:?} terminal_view_id={terminal_id:?} timeout={AUTO_RESUME_TIMEOUT:?} outcome=automatic_resume_pending",
+                            me.task_id
+                        );
+                        let error = conversation
+                            .root_task_exchanges()
+                            .last()
+                            .and_then(|exchange| match &exchange.output_status {
+                                AIAgentOutputStatus::Finished {
+                                    finished_output: FinishedAIAgentOutput::Error { error, .. },
+                                } => Some(error.clone()),
+                                _ => None,
+                            })
+                            .unwrap_or_else(|| {
+                                RenderableAIError::transient_network_error(false, false)
+                            });
+                        run_exit.end_run_after(
+                            AUTO_RESUME_TIMEOUT,
+                            SDKConversationOutputStatus::Error { error },
+                        );
+                        return;
+                    }
+
                     // Conversation is no longer in progress. Handle completion based on the result.
                     if let Some(conversation_status) =
                          conversation_output_status_from_conversation(conversation)
@@ -2831,22 +2861,10 @@ impl AgentDriver {
                                     output_status,
                                 );
                             }
-                            // For errors, check if we expect an automatic retry.
-                            SDKConversationOutputStatus::Error { ref error } => {
-                                // If the error indicates that an automatic resume will be attempted,
-                                // don't terminate yet - give the retry a chance to succeed.
-                                // However, bound the wait so the CLI doesn't hang indefinitely
-                                // if the follow-up never arrives.
-                                if error.will_attempt_resume() {
-                                    log::info!("Error occurred but automatic resume will be attempted; waiting up to {AUTO_RESUME_TIMEOUT:?} for retry");
-                                    log::info!(
-                                        "Ambient agent idle lifecycle: event=idle_timeout_scheduled task_id={:?} terminal_view_id={terminal_id:?} timeout={AUTO_RESUME_TIMEOUT:?} outcome=automatic_resume_pending",
-                                        me.task_id
-                                    );
-                                    run_exit.end_run_after(AUTO_RESUME_TIMEOUT, output_status);
-                                    return;
-                                }
-
+                            // Errors here are terminal: recoveries in flight surface as the
+                            // non-terminal TransientError status (handled above), never as an
+                            // Error status.
+                            SDKConversationOutputStatus::Error { .. } => {
                                 log::info!(
                                     "Ambient agent idle lifecycle: event=run_completion_immediate task_id={:?} terminal_view_id={terminal_id:?} outcome=error",
                                     me.task_id

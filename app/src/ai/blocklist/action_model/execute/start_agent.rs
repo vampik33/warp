@@ -577,7 +577,10 @@ fn start_agent_error_message_for_status(
                 blocked_action.to_string()
             })
         }
-        ConversationStatus::InProgress | ConversationStatus::Success => None,
+        // TransientError is non-terminal: a recovery is in flight, so keep waiting.
+        ConversationStatus::InProgress
+        | ConversationStatus::TransientError
+        | ConversationStatus::Success => None,
     }
 }
 

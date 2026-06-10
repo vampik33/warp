@@ -184,6 +184,14 @@ pub enum AIApiError {
         #[source]
         source: anyhow::Error,
     },
+
+    /// The response stream ended before a logical completion was received.
+    ///
+    /// The server contract guarantees a stream-finished event is always sent, but the
+    /// transport can truncate the response between chunks, which surfaces as a clean EOF
+    /// rather than a transport error. Synthesized client-side when that happens.
+    #[error("Response stream ended unexpectedly before completion.")]
+    StreamTruncated,
 }
 
 impl From<http_client::ResponseError> for AIApiError {
@@ -347,6 +355,7 @@ impl AIApiError {
                 e.status().is_none_or(is_transient_status)
             }
             AIApiError::ErrorStatus(status, _) => is_transient_status(*status),
+            AIApiError::StreamTruncated => true,
             AIApiError::QuotaLimit { .. }
             | AIApiError::ServerOverloaded
             | AIApiError::Deserialization(DeserializationError::Json(_))
@@ -365,6 +374,7 @@ impl ErrorExt for AIApiError {
             AIApiError::Other(error) => error.is_actionable(),
             AIApiError::Stream { source, .. } => source.is_actionable(),
             AIApiError::ErrorStatus(_, _) => self.is_retryable(),
+            AIApiError::StreamTruncated => true,
             AIApiError::QuotaLimit { .. }
             | AIApiError::ServerOverloaded
             | AIApiError::NoContextFound => false,
