@@ -650,6 +650,19 @@ pub enum WorkspaceAction {
     /// Reset the orchestration launch modal dismissed state (for debugging)
     #[cfg(debug_assertions)]
     ResetOrchestrationLaunchModalState,
+    /// Open the auto-handoff sleep modal (for debugging)
+    #[cfg(debug_assertions)]
+    OpenAutoHandoffSleepModal,
+    /// Reset the auto-handoff sleep modal shown state (for debugging)
+    #[cfg(debug_assertions)]
+    ResetAutoHandoffSleepModalState,
+    /// Trigger the auto-handoff-to-cloud flow in-process, as if the machine
+    /// were about to sleep (for debugging)
+    #[cfg(debug_assertions)]
+    TriggerAutoHandoffToCloud,
+    /// Show the auto-handoff success toast directly (for debugging)
+    #[cfg(debug_assertions)]
+    ShowAutoHandoffSuccessToast,
     /// Install the opencode-warp plugin from GitHub into the global opencode config.
     #[cfg(debug_assertions)]
     InstallOpenCodeWarpPlugin,
@@ -1064,6 +1077,10 @@ impl WorkspaceAction {
             | ResetOpenWarpLaunchModalState
             | OpenOrchestrationLaunchModal
             | ResetOrchestrationLaunchModalState
+            | OpenAutoHandoffSleepModal
+            | ResetAutoHandoffSleepModalState
+            | TriggerAutoHandoffToCloud
+            | ShowAutoHandoffSuccessToast
             | InstallOpenCodeWarpPlugin
             | UseLocalOpenCodeWarpPlugin => false,
             #[cfg(not(target_family = "wasm"))]

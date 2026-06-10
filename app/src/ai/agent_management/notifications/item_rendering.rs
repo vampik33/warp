@@ -16,7 +16,6 @@ use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::{View, ViewContext, ViewHandle};
 
 use crate::ai::agent::conversation::ConversationStatus;
-use crate::ai::agent_management::notifications::action_buttons::NotificationActionButtonsRow;
 use crate::ai::agent_management::notifications::item::NotificationSourceAgent;
 use crate::ai::agent_management::notifications::{NotificationCategory, NotificationItem};
 use crate::ai::agent_management::telemetry::{AgentManagementTelemetryEvent, ArtifactType};
@@ -87,11 +86,9 @@ pub(crate) type OnExpandClick = Box<dyn Fn(&mut warpui::EventContext)>;
 
 /// Renders the inner content of a notification item.
 /// Dispatches to the rich layout (with branch row) or simple layout based on `item.branch`.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn render_notification_item_content(
     item: &NotificationItem,
     artifact_buttons: Option<&ViewHandle<ArtifactButtonsRow>>,
-    action_buttons: Option<&ViewHandle<NotificationActionButtonsRow>>,
     context: NotificationRenderContext,
     message_expanded: bool,
     on_expand_click: OnExpandClick,
@@ -104,7 +101,6 @@ pub(crate) fn render_notification_item_content(
         render_rich_text_column(
             item,
             artifact_buttons,
-            action_buttons,
             context,
             message_expanded,
             on_expand_click,
@@ -115,7 +111,6 @@ pub(crate) fn render_notification_item_content(
         render_simple_text_column(
             item,
             artifact_buttons,
-            action_buttons,
             context,
             message_expanded,
             on_expand_click,
@@ -138,11 +133,9 @@ pub(crate) fn render_notification_item_content(
 }
 
 /// Rich layout: branch row + clamped title + clamped message + artifact buttons.
-#[allow(clippy::too_many_arguments)]
 fn render_rich_text_column(
     item: &NotificationItem,
     artifact_buttons: Option<&ViewHandle<ArtifactButtonsRow>>,
-    action_buttons: Option<&ViewHandle<NotificationActionButtonsRow>>,
     context: NotificationRenderContext,
     message_expanded: bool,
     on_expand_click: OnExpandClick,
@@ -183,21 +176,14 @@ fn render_rich_text_column(
         .with_child(title)
         .with_child(Container::new(message).with_margin_top(2.).finish());
 
-    append_trailing_content(
-        &mut content,
-        artifact_buttons,
-        action_buttons,
-        extra_content,
-    );
+    append_trailing_content(&mut content, artifact_buttons, extra_content);
     content.finish()
 }
 
 /// Simple layout: title (+ optional chevron) | timestamp row + message + artifact buttons.
-#[allow(clippy::too_many_arguments)]
 fn render_simple_text_column(
     item: &NotificationItem,
     artifact_buttons: Option<&ViewHandle<ArtifactButtonsRow>>,
-    action_buttons: Option<&ViewHandle<NotificationActionButtonsRow>>,
     context: NotificationRenderContext,
     message_expanded: bool,
     on_expand_click: OnExpandClick,
@@ -236,32 +222,19 @@ fn render_simple_text_column(
         .with_child(title_row)
         .with_child(Container::new(message).with_margin_top(2.).finish());
 
-    append_trailing_content(
-        &mut content,
-        artifact_buttons,
-        action_buttons,
-        extra_content,
-    );
+    append_trailing_content(&mut content, artifact_buttons, extra_content);
     content.finish()
 }
 
-/// Appends artifact buttons, action buttons, and extra content to a text column.
+/// Appends artifact buttons and extra content to a text column.
 fn append_trailing_content(
     content: &mut Flex,
     artifact_buttons: Option<&ViewHandle<ArtifactButtonsRow>>,
-    action_buttons: Option<&ViewHandle<NotificationActionButtonsRow>>,
     extra_content: Option<Box<dyn Element>>,
 ) {
     if let Some(artifact_buttons) = artifact_buttons {
         content.add_child(
             Container::new(ChildView::new(artifact_buttons).finish())
-                .with_margin_top(8.)
-                .finish(),
-        );
-    }
-    if let Some(action_buttons) = action_buttons {
-        content.add_child(
-            Container::new(ChildView::new(action_buttons).finish())
                 .with_margin_top(8.)
                 .finish(),
         );
