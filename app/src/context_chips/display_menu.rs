@@ -1,6 +1,7 @@
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use fuzzy_match::{match_indices_case_insensitive, FuzzyMatchResult};
@@ -206,7 +207,7 @@ pub struct DisplayChipMenu {
     list_state: UniformListState,
     scroll_state: ScrollStateHandle,
     menu_items: Vec<Arc<dyn GenericMenuItem>>,
-    filtered_items: Arc<Vec<FilteredMenuItem>>,
+    filtered_items: Rc<Vec<FilteredMenuItem>>,
     selected_index: usize,
     is_footer_selected: bool,
     fixed_footer: Option<FixedFooter>,
@@ -279,9 +280,6 @@ impl DisplayChipMenu {
         DropShadow::default()
     }
 
-    // `FilteredMenuItem` holds an `Arc<dyn GenericMenuItem>`, which is
-    // intentionally not `Send`/`Sync`; the menu lives on a single (UI) thread.
-    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new<T: GenericMenuItem>(
         menu_items: Vec<T>,
         fixed_footer_option: Option<FixedFooter>,
@@ -371,7 +369,7 @@ impl DisplayChipMenu {
             })
             .collect();
 
-        let filtered_items: Arc<Vec<FilteredMenuItem>> = Arc::new(
+        let filtered_items: Rc<Vec<FilteredMenuItem>> = Rc::new(
             menu_items
                 .iter()
                 .map(|item| FilteredMenuItem {
@@ -446,13 +444,10 @@ impl DisplayChipMenu {
         ctx.notify();
     }
 
-    // `FilteredMenuItem` holds an `Arc<dyn GenericMenuItem>`, which is
-    // intentionally not `Send`/`Sync`; the menu lives on a single (UI) thread.
-    #[allow(clippy::arc_with_non_send_sync)]
     fn update_filtered_items(&mut self) {
         if self.search_query.is_empty() {
             // No search query - show all items
-            self.filtered_items = Arc::new(
+            self.filtered_items = Rc::new(
                 self.menu_items
                     .iter()
                     .map(|item| FilteredMenuItem {
@@ -509,7 +504,7 @@ impl DisplayChipMenu {
             }
         }
 
-        self.filtered_items = Arc::new(filtered_items);
+        self.filtered_items = Rc::new(filtered_items);
     }
 
     pub fn update_search_query(&mut self, query: String, ctx: &mut ViewContext<Self>) {
