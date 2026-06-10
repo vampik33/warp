@@ -1095,7 +1095,6 @@ impl TypedActionView for CodeEditorView {
                         let id = view.as_ref(ctx).id();
                         self.inline_comments.insert(id, view.clone());
                         self.mark_comment_blocks_dirty(ctx);
-                        self.sync_inline_comment_blocks(ctx);
                         ctx.emit(CodeEditorEvent::CommentEditorOpened);
                         view.update(ctx, |view, ctx| view.focus_body(ctx));
                         return;
@@ -1104,7 +1103,6 @@ impl TypedActionView for CodeEditorView {
                         model.open_comment_line(line_info, ctx);
                     });
                     self.mark_comment_blocks_dirty(ctx);
-                    self.sync_inline_comment_blocks(ctx);
                     ctx.emit(CodeEditorEvent::CommentEditorOpened);
 
                     ctx.focus(&self.active_comment_editor);

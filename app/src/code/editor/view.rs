@@ -1137,9 +1137,10 @@ impl CodeEditorView {
         }
     }
 
-    /// Mark inline comment blocks as needing reconciliation on the next sync pass.
+    /// Reconcile inline comment blocks immediately and notify.
     fn mark_comment_blocks_dirty(&mut self, ctx: &mut ViewContext<Self>) {
         self.comment_blocks_dirty = true;
+        self.sync_inline_comment_blocks(ctx);
         ctx.notify();
     }
 

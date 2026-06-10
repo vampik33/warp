@@ -19,7 +19,7 @@ use warpui::{
 use crate::appearance::Appearance;
 use crate::code::editor::comment_editor::{
     create_editable_comment_markdown_editor, inline_comment_background,
-    render_inline_comment_shell, COMMENT_CHROME_HEIGHT, MAX_COMMENT_HEIGHT,
+    render_inline_comment_shell, COMMENT_CHROME_HEIGHT,
 };
 use crate::code::editor::line::EditorLineLocation;
 use crate::code::editor::EditorReviewComment;
@@ -280,6 +280,10 @@ impl InlineCommentView {
     }
 
     pub fn inline_height(&self, app: &AppContext) -> Pixels {
+        // Read directly from the inner render state so the reserved block height is always
+        // current. The `inner_render_state` observer fires after every layout pass (including
+        // non-keystroke edits like select-all + delete), so `sync_inline_comment_blocks` always
+        // sees an up-to-date value here.
         let content_height = self.inner_render_state(app).as_ref(app).height().as_f32();
         Pixels::new(content_height + COMMENT_CHROME_HEIGHT)
     }
@@ -506,11 +510,7 @@ impl View for InlineCommentView {
         render_inline_comment_shell(
             ChildView::new(&self.body_editor).finish(),
             footer_row,
-            if self.is_editing() {
-                Some(MAX_COMMENT_HEIGHT)
-            } else {
-                None
-            },
+            None,
             12.,
             appearance,
         )
