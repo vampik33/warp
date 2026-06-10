@@ -54,7 +54,7 @@ pub(crate) fn handle(
         ActionKind::TabCreate => create_tab(instance_id, params, target, ctx),
         ActionKind::TabActivate => tab_activate(instance_id, params, target, ctx),
         ActionKind::TabMove => tab_move(instance_id, params, target, ctx),
-        ActionKind::PaneSplit => pane_direction_action(instance_id, action, params, target, ctx),
+        ActionKind::PaneSplit => pane_split(instance_id, params, target, ctx),
         ActionKind::PaneFocus | ActionKind::SessionActivate => {
             pane_focus(instance_id, action, target, ctx)
         }
@@ -465,7 +465,6 @@ fn pane_direction_action(
 ) -> Result<serde_json::Value, ControlError> {
     let direction = direction_param(params)?;
     let action = match action_kind {
-        ActionKind::PaneSplit => PaneGroupAction::Add(pane_direction(direction)?),
         ActionKind::PaneNavigate => match direction {
             ControlDirection::Left => PaneGroupAction::NavigateLeft,
             ControlDirection::Right => PaneGroupAction::NavigateRight,
@@ -477,6 +476,33 @@ fn pane_direction_action(
         _ => return invalid_params(action_kind),
     };
     pane_group_action(instance_id, action_kind, target, action, 1, ctx)
+}
+
+/// Splits the targeted pane and reports the created pane's opaque id so
+/// callers do not need to diff `pane.list` to find the new pane.
+fn pane_split(
+    instance_id: &Option<InstanceId>,
+    params: &serde_json::Value,
+    target: &TargetSelector,
+    ctx: &mut ModelContext<LocalControlBridge>,
+) -> Result<serde_json::Value, ControlError> {
+    let action_kind = ActionKind::PaneSplit;
+    let direction = pane_direction(direction_param(params)?)?;
+    let pane_group = active_target_pane_group(action_kind, target, ctx)?;
+    focus_explicit_pane_target(action_kind, target, &pane_group, ctx)?;
+    let panes_before = pane_group.read(ctx, |pane_group, _| pane_group.visible_pane_ids());
+    pane_group.update(ctx, |pane_group, ctx| {
+        pane_group.handle_action(&PaneGroupAction::Add(direction), ctx);
+    });
+    let created = pane_group
+        .read(ctx, |pane_group, _| pane_group.visible_pane_ids())
+        .into_iter()
+        .find(|pane_id| !panes_before.contains(pane_id));
+    let mut response = ack(instance_id, action_kind);
+    if let Some(created) = created {
+        response["pane"] = json!({ "id": created.to_string() });
+    }
+    Ok(response)
 }
 
 fn pane_focus(

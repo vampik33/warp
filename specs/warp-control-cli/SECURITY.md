@@ -180,6 +180,10 @@ Structured errors are part of the security contract:
 - `not_allowlisted` — action intentionally excluded from public surface.
 - `target_state_conflict` — target cannot support the requested action.
 - `no_instance` — no reachable Warp instance found.
+- `protocol_version_unsupported` — client and app protocol versions do not match.
+- `transport_unavailable` — the local transport (broker socket or loopback HTTP) failed.
+- `bridge_unavailable` — the app-side bridge cannot service requests.
+- `internal` — unexpected internal failure.
 The app never downgrades these failures into broader default actions.
 ## Platform requirements
 ### macOS

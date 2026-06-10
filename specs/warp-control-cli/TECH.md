@@ -66,7 +66,7 @@ Error response:
   }
 }
 ```
-Error codes include: `local_control_disabled`, `unauthorized_local_client`, `insufficient_permissions`, `ambiguous_instance`, `ambiguous_target`, `stale_target`, `missing_target`, `invalid_request`, `invalid_selector`, `invalid_params`, `unsupported_action`, `not_allowlisted`, `target_state_conflict`, `no_instance`.
+Error codes include: `local_control_disabled`, `unauthorized_local_client`, `insufficient_permissions`, `ambiguous_instance`, `ambiguous_target`, `stale_target`, `missing_target`, `invalid_request`, `invalid_selector`, `invalid_params`, `unsupported_action`, `not_allowlisted`, `target_state_conflict`, `no_instance`, `protocol_version_unsupported`, `transport_unavailable`, `bridge_unavailable`, `internal`.
 ### 2. Per-process discovery
 Keep the existing fixed-port `9277` HTTP behavior intact. Add a separate local-control listener per process.
 Design:
@@ -152,7 +152,7 @@ The CLI uses the same libraries as the Oz CLI:
 - **clap** (derive) for argument parsing and subcommand trees.
 - **serde** / **serde_json** for JSON serialization.
 - **clap_complete** for shell completion generation.
-- `OutputFormat` enum (`Pretty`, `Json`, `Text`) shared from `warp_cli`.
+- `OutputFormat` enum (`Pretty`, `Json`, `Ndjson`, `Text`) shared from `warp_cli`.
 New subcommand types live in `warp_cli::local_control` and follow existing `#[derive(Parser)]` patterns.
 ### 9. CLI packaging
 The shipped product is a bundled `warpctrl` wrapper script that calls the channel-specific Warp binary with a hidden `--warpctrl` flag:
@@ -231,7 +231,7 @@ sequenceDiagram
 - **Credential model:** Raw credentials never appear in discovery records. Credentials are instance-bound, action-bound, and short-lived. A credential for one action fails with `insufficient_permissions` for any other action.
 - **Selector resolution:** Tests for active, explicit ID, index, stale target, ambiguous target, missing target, and target-state-conflict cases.
 - **Input staging:** Only `input.insert` and `input.replace` exist. No `input.run`, `input.get`, `input.clear`, or `input.mode.set`. Tests prove no buffer submission occurs.
-- **Excluded families:** The Block, Auth, Drive, and History families are entirely absent. Requesting any of them returns `not_allowlisted`.
+- **Excluded families:** The Block, Auth, Drive, and History families are entirely absent. The CLI rejects their command routes at parse time, the protocol rejects their action names at deserialization (`invalid_request`), and `action.inspect`/`capability.inspect` report non-catalog names as `not_allowlisted`.
 - **Unsupported platforms:** Windows fails closed with no fallback.
 - **Action count:** Tests verify the catalog contains exactly 84 uniformly authorized actions.
 - **Bundled skill gate:** Tests verify the `warpctrl` bundled skill is discoverable and readable only while `FeatureFlag::WarpControlCli` is enabled, without affecting unrelated bundled skills.

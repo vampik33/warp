@@ -205,7 +205,7 @@ Command names are noun-oriented and discoverable. Examples:
 - `--tab <active|opaque-id>`, `--tab-index <n>`, and `--tab-title <title>` select a tab.
 - `--pane <active|opaque-id>` and `--pane-index <n>` select a pane.
 - `--session <active|opaque-id>` selects a session.
-- `--output-format <pretty|json|text>` controls output shape.
+- `--output-format <pretty|json|ndjson|text>` controls output shape.
 Within a selector family, specifying more than one form is invalid. Handlers reject selector forms that they cannot resolve safely.
 ### Wire protocol
 A request contains an action name from the catalog, a structured target selector, and validated parameters. A response contains success/failure status, resolved instance and target metadata, and result data or structured error data. The protocol is versioned.
@@ -225,5 +225,9 @@ Every protocol or runtime failure identifies a stable machine-readable error cod
 - `not_allowlisted` — action intentionally excluded from public surface.
 - `target_state_conflict` — target cannot support the requested action.
 - `no_instance` — no reachable Warp instance found.
+- `protocol_version_unsupported` — client and app protocol versions do not match.
+- `transport_unavailable` — the local transport (broker socket or loopback HTTP) failed.
+- `bridge_unavailable` — the app-side bridge cannot service requests.
+- `internal` — unexpected internal failure.
 ## Unsupported platforms
 On platforms where the owner-only filesystem discovery, Unix credential broker, or equivalent authenticated broker transport are not available, `warpctrl` fails closed. It does not fall back to unauthenticated control or weaker credential models. Windows local-control publication remains disabled until discovery-record ACL enforcement and an equivalent authenticated broker transport are implemented.

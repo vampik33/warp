@@ -186,6 +186,28 @@ fn parses_exact_window_tab_pane_and_session_selectors() {
 }
 
 #[test]
+fn instance_list_output_serializes_empty_and_populated_lists() {
+    let empty = serde_json::to_value(commands::instance_list_output(Vec::new()))
+        .expect("empty list serializes");
+    assert_eq!(empty, json!({ "instances": [] }));
+
+    let record = local_control::discovery::InstanceRecord::for_current_process(
+        None,
+        "dev",
+        "dev.warp.Warp",
+        Some("v0.1.0".to_owned()),
+        Vec::new(),
+    );
+    let instance_id = record.instance_id.0.clone();
+    let populated = serde_json::to_value(commands::instance_list_output(vec![record]))
+        .expect("populated list serializes");
+    assert_eq!(populated["instances"][0]["instance_id"], json!(instance_id));
+    assert_eq!(populated["instances"][0]["channel"], json!("dev"));
+    assert_eq!(populated["instances"][0]["app_id"], json!("dev.warp.Warp"));
+    assert_eq!(populated["instances"][0]["app_version"], json!("v0.1.0"));
+}
+
+#[test]
 fn excluded_actions_are_not_allowlisted_catalog_entries() {
     for excluded in ["auth.api_key.set", "file.write", "block.list"] {
         assert!(

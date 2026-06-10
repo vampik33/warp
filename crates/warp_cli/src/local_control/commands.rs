@@ -1,4 +1,5 @@
 //! Implementations for user-facing `warpctrl` command groups.
+use local_control::discovery::InstanceRecord;
 use local_control::protocol::{
     Action, ActionKind, ActionNameParams, BindingNameParams, BooleanValueParams, ColorValueParams,
     ControlError, DirectionParams, EmptyParams, ErrorCode, FileOpenParams, KeyParams,
@@ -151,6 +152,10 @@ fn render_human_readable(action: ActionKind, data: &serde_json::Value) -> String
             nested_value_or_unknown(data, &["tab", "active_index"]),
             nested_value_or_unknown(data, &["tab", "count"])
         ),
+        ActionKind::PaneSplit => format!(
+            "Split created pane {}",
+            nested_value_or_unknown(data, &["pane", "id"])
+        ),
         _ => serde_json::to_string_pretty(data).unwrap_or_else(|_| data.to_string()),
     }
 }
@@ -184,18 +189,79 @@ pub(super) fn run_instance_command(
     output_format: OutputFormat,
 ) -> Result<(), ControlError> {
     match command {
-        InstanceCommand::List => run_action_with_params(
-            TargetArgs::default(),
-            ActionKind::InstanceList,
-            EmptyParams {},
-            output_format,
-        ),
+        InstanceCommand::List => {
+            render_instance_list(local_control::discovery::list_instances(), output_format)
+        }
         InstanceCommand::Inspect(args) => run_action_with_params(
             args,
             ActionKind::InstanceInspect,
             EmptyParams {},
             output_format,
         ),
+    }
+}
+
+/// JSON payload for `warpctrl instance list`.
+#[derive(Serialize)]
+pub(super) struct InstanceListOutput {
+    instances: Vec<InstanceSummary>,
+}
+
+#[derive(Serialize)]
+struct InstanceSummary {
+    instance_id: String,
+    pid: u32,
+    channel: String,
+    app_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    app_version: Option<String>,
+    protocol_version: u32,
+}
+
+/// Builds the list payload from probed discovery records.
+pub(super) fn instance_list_output(records: Vec<InstanceRecord>) -> InstanceListOutput {
+    InstanceListOutput {
+        instances: records
+            .into_iter()
+            .map(|record| InstanceSummary {
+                instance_id: record.instance_id.0,
+                pid: record.pid,
+                channel: record.channel,
+                app_id: record.app_id,
+                app_version: record.app_version,
+                protocol_version: record.protocol_version,
+            })
+            .collect(),
+    }
+}
+
+/// Lists every reachable instance without selecting one. Zero reachable
+/// instances is a successful empty list, never an error.
+fn render_instance_list(
+    records: Vec<InstanceRecord>,
+    output_format: OutputFormat,
+) -> Result<(), ControlError> {
+    let output = instance_list_output(records);
+    match output_format {
+        OutputFormat::Json => write_json(&output),
+        OutputFormat::Ndjson => write_json_line(&output),
+        OutputFormat::Pretty | OutputFormat::Text => {
+            if output.instances.is_empty() {
+                println!("No running Warp instances with local control were found.");
+                return Ok(());
+            }
+            for instance in &output.instances {
+                println!(
+                    "{} (pid {}, channel {}, app {}, protocol {})",
+                    instance.instance_id,
+                    instance.pid,
+                    instance.channel,
+                    instance.app_id,
+                    instance.protocol_version
+                );
+            }
+            Ok(())
+        }
     }
 }
 
