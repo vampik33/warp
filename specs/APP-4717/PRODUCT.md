@@ -23,11 +23,11 @@ Figma: none provided. Reference is Cursor's queue UI, which shows an Enter-to-se
    - Enter-only conditions (non-empty buffer, CLI-agent rich input open) hide the hint and suppress Enter but do not disable the Send-now buttons.
 6. If the buffer contains any content (including whitespace-only content), Enter behaves exactly as it does today and the hint is hidden.
 7. Header hint:
-   - The panel header shows "⏎ to send" next to the "N queued" label, styled like the surrounding header sub-text.
+   - The panel header shows an ⏎ keycap followed by "to send" next to the "N queued" label, matching the look and spacing of Warp's existing keystroke hints (e.g. "? for help"). The "to send" text uses the same color as the "N queued" label; the keycap glyph is dimmer (disabled-text styling) so it reads as a secondary affordance.
    - The hint is visible exactly when an empty-buffer Enter would send the top row, and hidden otherwise (non-empty buffer, no sendable top row, sending unavailable per 5, panel hidden, or any case in 8–10). The hint and the Enter behavior must never disagree.
 8. Whenever the panel is not rendered (no queue, inline menu like slash commands or the model selector is open, feature flag off), Enter keeps its existing behavior and no hint is shown.
 9. While a queued row is in inline edit mode, Enter commits that edit as today (focus is in the row's editor, not the input). The header hint is hidden during an inline edit.
 10. When the CLI-agent rich input is open, Enter keeps its existing submit-to-CLI-agent behavior and the hint is hidden. (The `submit_on_ctrl_enter` setting only affects the CLI-agent rich input, so it never changes which key sends a queued row.)
-11. Sending via Enter does not touch the input buffer, its pending attachments, or focus: the buffer stays empty, attachments staged in the input are not consumed (the queued row carries its own), and focus remains in the input afterward.
+11. Sending via Enter does not touch the input buffer, its pending attachments, or focus: the buffer stays empty, attachments staged in the input are not consumed (the queued row carries its own), and focus remains in the input afterward. One pre-existing exception, shared with the Send-now button: on the shared-session viewer path an empty input temporarily shows the standard "<prompt> ◌" loading affordance until the sharer acknowledges the send.
 12. When the last queued row is sent, the panel disappears (existing behavior); a subsequent Enter behaves as it did before this feature.
 13. Sending a queued row records telemetry distinguishing the trigger: Send-now button click vs. Enter on empty input.

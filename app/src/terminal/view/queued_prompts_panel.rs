@@ -22,6 +22,7 @@ use warpui::elements::{
     DEFAULT_UI_LINE_HEIGHT_RATIO,
 };
 use warpui::fonts::{Properties, Style, Weight};
+use warpui::keymap::Keystroke;
 use warpui::platform::Cursor;
 use warpui::text_layout::ClipConfig;
 use warpui::ui_components::components::UiComponent;
@@ -31,6 +32,7 @@ use warpui::{
 };
 
 use crate::ai::agent::conversation::AIConversationId;
+use crate::ai::blocklist::agent_view::shortcuts::render_keystroke_with_color_overrides;
 use crate::ai::blocklist::block::cli_controller::{CLISubagentController, CLISubagentEvent};
 use crate::ai::blocklist::{
     BlocklistAIHistoryEvent, BlocklistAIHistoryModel, QueuedQueryEvent, QueuedQueryId,
@@ -55,6 +57,10 @@ const INITIAL_CLOUD_MODE_PROMPT_TOOLTIP: &str = "The first cloud-mode prompt can
 const SEND_NOW_DURING_CLOUD_SETUP_TOOLTIP: &str =
     "Prompts cannot be sent until environment setup is complete.";
 const SEND_NOW_TO_FULL_TERMINAL_USE_AGENT_TOOLTIP: &str = "Send to full terminal use agent";
+const SEND_NOW_AS_READ_ONLY_VIEWER_TOOLTIP: &str = "Read-only viewers cannot send prompts.";
+/// Text of the header hint advertising that Enter on an empty input sends the top queued row;
+/// rendered after an enter keycap chip.
+const ENTER_TO_SEND_HINT_TEXT: &str = "to send";
 
 /// Returns the position-cache id used to look up a row's bounding rect during a drag.
 /// Indexed by the row's current visual index so swaps maintain stable lookups.
@@ -162,6 +168,12 @@ pub struct QueuedPromptsPanelView {
     /// because no other view reads this. Reset whenever the active conversation changes or the
     /// queue is cleared.
     collapsed: bool,
+    /// Host-pushed flag: whether the pane can send prompts at all (false for read-only
+    /// shared-session viewers). Gates every row's send-now button.
+    pane_can_send: bool,
+    /// Host-pushed flag: whether an Enter press right now would send the top queued row
+    /// (pane can send + empty input + CLI-agent rich input closed). Gates the header hint.
+    enter_can_send: bool,
     header_mouse_state: MouseStateHandle,
     row_states: HashMap<QueuedQueryId, QueuedPromptRowState>,
     dragging_query_id: Option<QueuedQueryId>,
@@ -242,6 +254,8 @@ impl QueuedPromptsPanelView {
             edit_editor_is_single_logical_line: true,
             edit_editor_scroll_state: Default::default(),
             collapsed: false,
+            pane_can_send: true,
+            enter_can_send: true,
             header_mouse_state: MouseStateHandle::default(),
             row_states: HashMap::new(),
             dragging_query_id: None,
@@ -257,6 +271,40 @@ impl QueuedPromptsPanelView {
     fn clear_drag_state(&mut self) {
         self.dragging_query_id = None;
         self.drag_start_index = None;
+    }
+
+    /// Updates the host-pushed send-availability flags (specs/APP-4717). `pane_can_send` gates
+    /// every row's send-now button; `enter_can_send` additionally gates the header's
+    /// "⏎ to send" hint.
+    pub fn set_send_availability(
+        &mut self,
+        pane_can_send: bool,
+        enter_can_send: bool,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        if self.pane_can_send == pane_can_send && self.enter_can_send == enter_can_send {
+            return;
+        }
+        self.pane_can_send = pane_can_send;
+        self.enter_can_send = enter_can_send;
+        self.update_send_now_availability(ctx);
+        ctx.notify();
+    }
+
+    /// Whether the header shows the "⏎ to send" hint: the host says Enter would send, no row
+    /// is in inline edit mode, and the head row is sendable (not the locked initial cloud-mode
+    /// prompt). Mirrors the host's empty-buffer Enter conditions exactly.
+    fn should_show_enter_hint(&self, ctx: &AppContext) -> bool {
+        let Some(conv_id) = self.active_conversation_id else {
+            return false;
+        };
+        let queue_model = QueuedQueryModel::as_ref(ctx);
+        self.enter_can_send
+            && queue_model.editing_row(conv_id).is_none()
+            && queue_model
+                .queue(conv_id)
+                .first()
+                .is_some_and(|row| !row.is_locked())
     }
 
     /// Reseed `row_states` for `conv_id`'s queue, dropping any state for rows not in that queue.
@@ -307,10 +355,13 @@ impl QueuedPromptsPanelView {
             else {
                 continue;
             };
-            let disabled =
+            let disabled_for_cloud_setup =
                 *origin == QueuedQueryOrigin::InitialCloudMode || cloud_setup_in_progress;
-            let tooltip = if disabled {
+            let disabled = disabled_for_cloud_setup || !self.pane_can_send;
+            let tooltip = if disabled_for_cloud_setup {
                 SEND_NOW_DURING_CLOUD_SETUP_TOOLTIP
+            } else if !self.pane_can_send {
+                SEND_NOW_AS_READ_ONLY_VIEWER_TOOLTIP
             } else if lrc_subagent_in_progress {
                 SEND_NOW_TO_FULL_TERMINAL_USE_AGENT_TOOLTIP
             } else {
@@ -575,6 +626,11 @@ impl QueuedPromptsPanelView {
             .get(&query_id)
             .map(|state| state.send_now_button.as_ref(ctx).is_disabled())
     }
+
+    /// Test accessor: whether the header currently shows the "⏎ to send" hint.
+    pub(super) fn enter_hint_shown_for_test(&self, ctx: &AppContext) -> bool {
+        self.should_show_enter_hint(ctx)
+    }
 }
 
 impl TypedActionView for QueuedPromptsPanelView {
@@ -735,14 +791,19 @@ impl View for QueuedPromptsPanelView {
             return Empty::new().finish();
         };
 
-        let appearance = Appearance::as_ref(app);
         let queue_model = QueuedQueryModel::as_ref(app);
         let queue: Vec<_> = queue_model.queue(conv_id).to_vec();
         let editing_row_id = queue_model.editing_row(conv_id);
         let collapsed = self.collapsed;
 
         let panel_view_id = self.view_id;
-        let header = render_header(queue.len(), collapsed, &self.header_mouse_state, appearance);
+        let header = render_header(
+            queue.len(),
+            collapsed,
+            self.should_show_enter_hint(app),
+            &self.header_mouse_state,
+            app,
+        );
         let mut panel = Flex::column()
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
             .with_child(header);
@@ -853,12 +914,16 @@ fn updated_index_from_vertical_drag(
 fn render_header(
     count: usize,
     collapsed: bool,
+    show_enter_hint: bool,
     header_mouse_state: &MouseStateHandle,
-    appearance: &Appearance,
+    app: &AppContext,
 ) -> Box<dyn Element> {
+    let appearance = Appearance::as_ref(app);
     let theme = appearance.theme();
     let label_text = header_label_text(count);
     let sub_text_color: ColorU = theme.sub_text_color(theme.surface_1()).into();
+    // The keycap is dimmed relative to the header text so it reads as a secondary affordance.
+    let keycap_color: ColorU = internal_colors::text_disabled(theme, theme.surface_1()).into();
     let banner_background: Fill = theme.surface_overlay_1().into();
     let border_color: Fill = theme.split_pane_border_color().into();
     let chevron_icon = if collapsed {
@@ -882,12 +947,37 @@ fn render_header(
             .with_color(sub_text_color)
             .with_selectable(false)
             .finish();
-        let row = Flex::row()
+        let mut row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_spacing(4.)
             .with_child(chevron)
-            .with_child(label)
-            .finish();
+            .with_child(label);
+        if show_enter_hint {
+            // Follow the message-bar hint spacing conventions (see
+            // `render_message_bar_items`): 8px between the label and the keycap, 4px between
+            // the keycap and its text. The row's 4px flex spacing provides part of each gap.
+            let keycap = render_keystroke_with_color_overrides(
+                &Keystroke {
+                    key: "enter".to_owned(),
+                    ..Default::default()
+                },
+                Some(keycap_color),
+                None,
+                app,
+            );
+            row.add_child(Container::new(keycap).with_margin_left(4.).finish());
+            row.add_child(
+                Text::new(ENTER_TO_SEND_HINT_TEXT, ui_font_family, ui_font_size)
+                    .with_style(Properties {
+                        style: Style::Normal,
+                        weight: Weight::Normal,
+                    })
+                    .with_color(sub_text_color)
+                    .with_selectable(false)
+                    .finish(),
+            );
+        }
+        let row = row.finish();
         Container::new(row)
             .with_horizontal_padding(16.)
             .with_vertical_padding(8.)

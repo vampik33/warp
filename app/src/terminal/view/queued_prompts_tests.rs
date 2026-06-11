@@ -1320,6 +1320,130 @@ fn send_now_disabled_for_all_rows_while_initial_cloud_mode_row_is_present() {
     });
 }
 
+/// Builds a panel keyed to a fresh terminal view with an active conversation, mirroring the
+/// construction the host `Input` performs. Returns the panel and the conversation id.
+fn build_panel_with_active_conversation(
+    app: &mut App,
+) -> (ViewHandle<QueuedPromptsPanelView>, AIConversationId) {
+    let terminal = add_window_with_terminal(app, None);
+    let terminal_view_id = terminal.read(app, |view, _| view.view_id);
+    let conversation_id = BlocklistAIHistoryModel::handle(app).update(app, |history, ctx| {
+        let id = history.start_new_conversation(terminal_view_id, false, false, false, ctx);
+        history.set_active_conversation_id(id, terminal_view_id, ctx);
+        id
+    });
+    let suggestions_mode_model = {
+        let input = terminal.read(app, |view, _| view.input.clone());
+        input.read(app, |input, _| input.suggestions_mode_model().clone())
+    };
+    let cli_subagent_controller =
+        terminal.read(app, |view, _| view.cli_subagent_controller.clone());
+    let panel = terminal.update(app, |_, ctx| {
+        ctx.add_view(move |ctx| {
+            QueuedPromptsPanelView::new(
+                terminal_view_id,
+                suggestions_mode_model,
+                cli_subagent_controller,
+                ctx,
+            )
+        })
+    });
+    (panel, conversation_id)
+}
+
+#[test]
+fn pane_send_unavailability_disables_send_now_buttons_but_enter_only_conditions_do_not() {
+    // PRODUCT §5 (specs/APP-4717): pane-level send unavailability (read-only viewer) disables
+    // every row's send-now button; Enter-only conditions (non-empty buffer / CLI rich input
+    // open) hide the hint but leave the buttons alone.
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+
+        let (panel, conversation_id) = build_panel_with_active_conversation(&mut app);
+        let row_id = QueuedQueryModel::handle(&app).update(&mut app, |model, ctx| {
+            model.append(conversation_id, user_query("send me"), ctx)
+        });
+
+        // Default: sendable, hint shown.
+        panel.read(&app, |panel, ctx| {
+            assert_eq!(
+                panel.send_now_button_disabled_for_test(row_id, ctx),
+                Some(false)
+            );
+            assert!(panel.enter_hint_shown_for_test(ctx));
+        });
+
+        // Pane cannot send: button disabled and hint hidden.
+        panel.update(&mut app, |panel, ctx| {
+            panel.set_send_availability(false, false, ctx);
+        });
+        panel.read(&app, |panel, ctx| {
+            assert_eq!(
+                panel.send_now_button_disabled_for_test(row_id, ctx),
+                Some(true)
+            );
+            assert!(!panel.enter_hint_shown_for_test(ctx));
+        });
+
+        // Enter-only condition (e.g. non-empty buffer): hint hidden, button stays enabled.
+        panel.update(&mut app, |panel, ctx| {
+            panel.set_send_availability(true, false, ctx);
+        });
+        panel.read(&app, |panel, ctx| {
+            assert_eq!(
+                panel.send_now_button_disabled_for_test(row_id, ctx),
+                Some(false)
+            );
+            assert!(!panel.enter_hint_shown_for_test(ctx));
+        });
+    });
+}
+
+#[test]
+fn enter_hint_hidden_during_inline_edit_and_for_locked_head() {
+    // PRODUCT §5/§9 (specs/APP-4717): the "⏎ to send" hint hides while a row is in inline edit
+    // mode and while the locked initial cloud-mode prompt sits at the head of the queue.
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+
+        let (panel, conversation_id) = build_panel_with_active_conversation(&mut app);
+        let row_id = QueuedQueryModel::handle(&app).update(&mut app, |model, ctx| {
+            model.append(conversation_id, user_query("editable"), ctx)
+        });
+
+        panel.read(&app, |panel, ctx| {
+            assert!(panel.enter_hint_shown_for_test(ctx));
+        });
+
+        // Inline edit hides the hint; cancelling restores it.
+        QueuedQueryModel::handle(&app).update(&mut app, |model, ctx| {
+            model.enter_edit_mode(conversation_id, row_id, ctx);
+        });
+        panel.read(&app, |panel, ctx| {
+            assert!(!panel.enter_hint_shown_for_test(ctx));
+        });
+        QueuedQueryModel::handle(&app).update(&mut app, |model, ctx| {
+            model.cancel_edit(conversation_id, ctx);
+        });
+        panel.read(&app, |panel, ctx| {
+            assert!(panel.enter_hint_shown_for_test(ctx));
+        });
+
+        // A locked initial cloud-mode head row hides the hint.
+        QueuedQueryModel::handle(&app).update(&mut app, |model, ctx| {
+            model.remove_by_id(conversation_id, row_id, ctx);
+            model.append(
+                conversation_id,
+                QueuedQuery::new("initial".to_owned(), QueuedQueryOrigin::InitialCloudMode),
+                ctx,
+            );
+        });
+        panel.read(&app, |panel, ctx| {
+            assert!(!panel.enter_hint_shown_for_test(ctx));
+        });
+    });
+}
+
 #[test]
 fn multi_cycle_queue_keeps_each_rows_attachments_independent() {
     // attach -> queue -> attach -> queue: each row owns its own attachments, and draining one

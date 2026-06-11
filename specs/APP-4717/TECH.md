@@ -26,7 +26,7 @@ See `specs/APP-4717/PRODUCT.md` for behavior. Researched at commit `e367c9de8b96
 4. Panel state + UI (`app/src/terminal/view/queued_prompts_panel.rs`):
    - Add `pane_can_send: bool` and `enter_can_send: bool` fields to `QueuedPromptsPanelView` with a `pub fn set_send_availability(&mut self, pane_can_send, enter_can_send, ctx)` that `ctx.notify()`s and re-runs `update_send_now_availability` on change. `Input` pushes both predicate values at panel construction, from the existing empty-transition detection (input.rs:9756), and from the sites where the other predicate inputs change (CLI-agent rich input open/close, shared-session role changes); a small `refresh_queued_panel_send_availability(ctx)` helper on `Input` keeps the push sites uniform. Exact subscription points to be confirmed during implementation.
    - `update_send_now_availability` (L285-324) additionally disables every row's Send-now button when `!pane_can_send`, with a tooltip explaining sending is unavailable (e.g. "Read-only viewers cannot send prompts."). Edit/delete buttons are unaffected.
-   - `render_header` gains the hint: when `enter_can_send`, no row is in inline edit mode, and the head row is sendable (`!is_locked()`), append a "⏎ to send" `Text` after the "N queued" label, same `sub_text_color` styling.
+   - `render_header` gains the hint: when `enter_can_send`, no row is in inline edit mode, and the head row is sendable (`!is_locked()`), append an enter keycap chip (`render_keystroke_with_color_overrides`, the same component the "? for help" message-bar hints use) followed by "to send" text. The text uses the header's `sub_text_color`; the keycap glyph uses `internal_colors::text_disabled` so it is dimmer. Spacing follows the message-bar hint rules (`render_message_bar_items`): 8px label→keycap, 4px keycap→text.
 5. Telemetry (`app/src/server/telemetry/events.rs`): new event `QueuedPromptSentNow { origin: TelemetryQueuedQueryOrigin, trigger: QueuedPromptSendNowTrigger }` with `QueuedPromptSendNowTrigger { SendNowButton, EnterOnEmptyInput }`, payload + descriptions following the adjacent `QueuedPrompt*` events. Emitted from the shared helper in (1). (Send-now currently has no telemetry; this adds it for both triggers.)
 
 No new feature flag: the behavior ships under the existing `QueueSlashCommand` gate the panel already requires.
@@ -35,13 +35,11 @@ No new feature flag: the behavior ships under the existing `QueueSlashCommand` g
 
 - Unit tests in `app/src/terminal/input_tests.rs` next to the existing queued-panel host tests (L1277+), driving `input_enter`:
   - empty buffer + queued prompt row → head row dispatched, removed from queue, buffer untouched (PRODUCT §1, §11); a second Enter sends the next row (§3).
-  - empty buffer + queued command row → command executed (§1).
-  - non-empty / whitespace buffer → no queue send (§6).
-  - shell-mode input with empty buffer → queue send instead of empty command (§2).
-  - locked initial cloud-mode head row → no send (§5).
-  - read-only shared-session viewer → no send (§5).
-  - panel hidden (inline menu open / no queue) → no send (§8).
-- Panel tests in `app/src/terminal/view/queued_prompts_tests.rs`: hint shown only when `enter_can_send` and head row sendable; hidden during inline edit and when the pushed flag is false (§7, §9); Send-now buttons disabled when `pane_can_send` is false (via `send_now_button_disabled_for_test`) but not merely because `enter_can_send` is false (§5).
+  - empty buffer + queued command row, default shell mode → command executed instead of an empty shell submission (§1, §2).
+  - non-empty buffer → no queue send (§6).
+  - locked initial cloud-mode head row → no send (§5) — the `!is_locked` filter in the Enter path is the only guard on this path.
+  Pane-level gating (read-only viewer) and the flag-off case are intentionally not host-tested: the former is a trivial two-line predicate whose effects are covered by the panel tests below, and with the flag off the panel (and hook target) doesn't exist.
+- Panel tests in `app/src/terminal/view/queued_prompts_tests.rs`: hint shown only when `enter_can_send` and head row sendable; hidden during inline edit and for a locked head (§7, §9); Send-now buttons disabled when `pane_can_send` is false (via `send_now_button_disabled_for_test`) but not merely because `enter_can_send` is false (§5).
 - `cargo check` + `./script/format`; manual smoke: queue two prompts during a running conversation, hit Enter twice with an empty input.
 
 ## Parallelization
