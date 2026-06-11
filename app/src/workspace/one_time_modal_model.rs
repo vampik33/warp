@@ -186,6 +186,15 @@ impl OneTimeModalModel {
         self.set_auto_handoff_sleep_modal_open(true, ctx);
     }
 
+    #[cfg(test)]
+    pub fn set_auto_handoff_sleep_modal_open_for_test(
+        &mut self,
+        is_open: bool,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        self.set_auto_handoff_sleep_modal_open(is_open, ctx);
+    }
+
     fn set_auto_handoff_sleep_modal_open(
         &mut self,
         is_open: bool,

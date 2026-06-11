@@ -79,6 +79,7 @@ use crate::terminal::model::session::SessionType;
 use crate::terminal::model::terminal_model::TerminalModel;
 use crate::terminal::view::inline_banner::ZeroStatePromptSuggestionType;
 use crate::terminal::ShellLaunchData;
+use crate::workspace::OneTimeModalModel;
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
@@ -339,6 +340,10 @@ pub struct BlocklistAIController {
     /// Pending auto-resume tasks that are waiting for network connectivity.
     /// These should be cancelled when a new request is sent for the same conversation.
     pending_auto_resume_handles: HashMap<AIConversationId, SpawnedFutureHandle>,
+    /// Auto-resume-after-error attempts deferred because the auto-handoff sleep modal was open
+    /// when their network wait resolved. Drained when the modal closes, and cleared by the same
+    /// paths that cancel pending auto-resumes.
+    auto_resumes_paused_for_auto_handoff_modal: HashSet<AIConversationId>,
     /// Pending dormant Claude wake preparations for success-idle child conversations.
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pending_local_claude_wakes: HashMap<AIConversationId, SpawnedFutureHandle>,
@@ -609,6 +614,14 @@ impl BlocklistAIController {
             OrchestrationEventStreamerEvent::ChildSpawned { .. }
             | OrchestrationEventStreamerEvent::ChildStatusChanged { .. } => {}
         });
+        // Auto-resume-after-error is paused while the auto-handoff sleep
+        // modal is open; drain any deferred resumes once it closes.
+        let one_time_modal_model = OneTimeModalModel::handle(ctx);
+        ctx.subscribe_to_model(&one_time_modal_model, |me, _, ctx| {
+            if !OneTimeModalModel::as_ref(ctx).is_auto_handoff_sleep_modal_open() {
+                me.drain_auto_resumes_paused_for_auto_handoff_modal(ctx);
+            }
+        });
         Self {
             input_model,
             context_model,
@@ -622,6 +635,7 @@ impl BlocklistAIController {
             ambient_agent_task_id: None,
             attachments_download_dir: None,
             pending_auto_resume_handles: HashMap::new(),
+            auto_resumes_paused_for_auto_handoff_modal: HashSet::new(),
             pending_local_claude_wakes: HashMap::new(),
             pending_passive_follow_ups: HashSet::new(),
             pending_passive_suggestion_results: HashMap::new(),
@@ -2001,6 +2015,59 @@ impl BlocklistAIController {
         );
     }
 
+    /// Schedules an auto-resume-after-error for the conversation once the network is online.
+    fn schedule_auto_resume_after_error(
+        &mut self,
+        conversation_id: AIConversationId,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        let network_status = NetworkStatus::handle(ctx);
+        let wait_for_online = network_status.as_ref(ctx).wait_until_online();
+        let handle = ctx.spawn(wait_for_online, move |me, _, ctx| {
+            // Clean up the pending handle now that the resume is executing.
+            me.pending_auto_resume_handles.remove(&conversation_id);
+            me.auto_resume_after_error_or_pause_for_modal(conversation_id, ctx);
+        });
+        self.pending_auto_resume_handles
+            .insert(conversation_id, handle);
+    }
+
+    /// Auto-resumes the conversation after an error, unless the auto-handoff sleep modal is
+    /// open, in which case the resume is parked until the modal closes so it doesn't race the
+    /// user's enable/dismiss decision.
+    fn auto_resume_after_error_or_pause_for_modal(
+        &mut self,
+        conversation_id: AIConversationId,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if OneTimeModalModel::as_ref(ctx).is_auto_handoff_sleep_modal_open() {
+            self.auto_resumes_paused_for_auto_handoff_modal
+                .insert(conversation_id);
+            return;
+        }
+        self.resume_conversation(
+            conversation_id,
+            // Don't allow a second resume-on-error to prevent a persistent loop.
+            /*can_attempt_resume_on_error*/
+            false,
+            /*is_auto_resume_after_error*/ true,
+            vec![],
+            ctx,
+        );
+    }
+
+    /// Resumes any auto-resume-after-error attempts that were deferred while the auto-handoff
+    /// sleep modal was open.
+    fn drain_auto_resumes_paused_for_auto_handoff_modal(&mut self, ctx: &mut ModelContext<Self>) {
+        let conversation_ids = self
+            .auto_resumes_paused_for_auto_handoff_modal
+            .drain()
+            .collect::<Vec<_>>();
+        for conversation_id in conversation_ids {
+            self.auto_resume_after_error_or_pause_for_modal(conversation_id, ctx);
+        }
+    }
+
     pub fn send_passive_code_diff_request(
         &mut self,
         query: String,
@@ -2324,6 +2391,8 @@ impl BlocklistAIController {
         {
             handle.abort();
         }
+        self.auto_resumes_paused_for_auto_handoff_modal
+            .remove(&request_input.conversation_id);
 
         // Make sure there's no existing response stream for the conversation. If
         // there is, something has gone wrong.
@@ -2564,6 +2633,8 @@ impl BlocklistAIController {
         if let Some(handle) = self.pending_auto_resume_handles.remove(&conversation_id) {
             handle.abort();
         }
+        self.auto_resumes_paused_for_auto_handoff_modal
+            .remove(&conversation_id);
 
         // Discard any queued passive suggestion results for this conversation.
         self.pending_passive_suggestion_results
@@ -2880,25 +2951,7 @@ impl BlocklistAIController {
                     .as_ref(ctx)
                     .should_resume_conversation_after_stream_finished()
                 {
-                    let network_status = NetworkStatus::handle(ctx);
-                    let wait_for_online = network_status.as_ref(ctx).wait_until_online();
-                    let handle = ctx.spawn(wait_for_online, move |me, _, ctx| {
-                        // Clean up the pending handle now that the resume is executing.
-                        me.pending_auto_resume_handles.remove(&conversation_id);
-                        me.resume_conversation(
-                            conversation_id,
-                            // Don't allow a second resume-on-error to prevent a persistent
-                            // loop.
-                            /*can_attempt_resume_on_error*/
-                            false,
-                            /*is_auto_resume_after_error*/
-                            true,
-                            vec![],
-                            ctx,
-                        );
-                    });
-                    self.pending_auto_resume_handles
-                        .insert(conversation_id, handle);
+                    self.schedule_auto_resume_after_error(conversation_id, ctx);
                 }
 
                 // Clean up the response stream tracking entry now that the stream is complete.
