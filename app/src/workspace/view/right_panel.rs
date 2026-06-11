@@ -30,7 +30,7 @@ use crate::code_review::code_review_header::HEADER_BUTTON_PADDING;
 use crate::code_review::code_review_view::CodeReviewAction;
 use crate::code_review::code_review_view::{
     render_file_navigation_button, CodeReviewCommentDebugState, CodeReviewView,
-    CodeReviewViewEvent, ReviewTerminalProvider, CONTENT_LEFT_MARGIN, CONTENT_RIGHT_MARGIN,
+    CodeReviewViewEvent, ReviewActionTargetProvider, CONTENT_LEFT_MARGIN, CONTENT_RIGHT_MARGIN,
 };
 use crate::code_review::diff_state::DiffStateModel;
 use crate::code_review::telemetry_event::CodeReviewContextDestination;
@@ -118,14 +118,14 @@ impl ReviewTerminalStatus {
     }
 }
 
-/// `ReviewTerminalProvider` backed by the right panel's active pane group, so
-/// code review actions resolve their target terminal at action time instead
+/// `ReviewActionTargetProvider` backed by the right panel's active pane group,
+/// so code review actions resolve their target terminal at action time instead
 /// of using a handle captured when the review view was created.
-struct RightPanelReviewTerminalProvider {
+struct RightPanelReviewActionTargetProvider {
     right_panel: WeakViewHandle<RightPanelView>,
 }
 
-impl ReviewTerminalProvider for RightPanelReviewTerminalProvider {
+impl ReviewActionTargetProvider for RightPanelReviewActionTargetProvider {
     fn attach_terminal(
         &self,
         repo_path: &LocalOrRemotePath,
@@ -1233,8 +1233,8 @@ impl RightPanelView {
                 .update(ctx, |working_directories, ctx| {
                     working_directories.get_or_create_code_review_comments(repo_path, ctx)
                 });
-        let terminal_provider: Box<dyn ReviewTerminalProvider> =
-            Box::new(RightPanelReviewTerminalProvider {
+        let action_target_provider: Box<dyn ReviewActionTargetProvider> =
+            Box::new(RightPanelReviewActionTargetProvider {
                 right_panel: ctx.handle(),
             });
         let code_review_view = ctx.add_typed_action_view(|ctx| {
@@ -1242,7 +1242,7 @@ impl RightPanelView {
                 Some(repo_path.clone()),
                 diff_state_model_clone,
                 code_review_comment_batch,
-                Some(terminal_provider),
+                Some(action_target_provider),
                 ctx,
             )
         });
@@ -1751,7 +1751,7 @@ impl RightPanelView {
                 .is_some_and(|mut repos| repos.any(|r| &r == repo_path));
 
             // Only create a view when a terminal exists for the repo. The view
-            // resolves its target terminal lazily via `ReviewTerminalProvider`,
+            // resolves its target terminal lazily via `ReviewActionTargetProvider`,
             // so this is purely a creation gate.
             let has_review_terminal = if is_known_repo {
                 let Some(terminal_view_id) = self

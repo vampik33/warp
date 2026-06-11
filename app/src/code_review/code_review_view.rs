@@ -590,10 +590,10 @@ struct RelocateCommentsResult {
 
 /// Resolves which terminal code review actions should target.
 ///
-/// Injected by the hosting view (`RightPanelView`) so terminal selection is
+/// Injected by the hosting view (`RightPanelView`) so target selection is
 /// late-bound: actions land in the conversation the user is currently focused
 /// on rather than a terminal handle captured when the view was constructed.
-pub trait ReviewTerminalProvider {
+pub trait ReviewActionTargetProvider {
     /// The terminal that should receive attach-as-context payloads. Uses the
     /// same selection as review comment submission (focused > repo-preferred >
     /// any available), falling back to the focused terminal inside `repo_path`
@@ -664,7 +664,7 @@ pub struct CodeReviewView {
     diff_state_model: ModelHandle<DiffStateModel>,
     diff_selector: ViewHandle<DiffSelector>,
     header: CodeReviewHeader,
-    terminal_provider: Option<Box<dyn ReviewTerminalProvider>>,
+    action_target_provider: Option<Box<dyn ReviewActionTargetProvider>>,
     position_id_prefix: String,
     /// Whether the view is currently open (subscribed to diff state model).
     is_open: bool,
@@ -1138,7 +1138,7 @@ impl CodeReviewView {
         repo_path: Option<LocalOrRemotePath>,
         diff_state_model: ModelHandle<DiffStateModel>,
         comment_batch_model: Option<ModelHandle<ReviewCommentBatch>>,
-        terminal_provider: Option<Box<dyn ReviewTerminalProvider>>,
+        action_target_provider: Option<Box<dyn ReviewActionTargetProvider>>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         // TODO(asweet): Migrate subscription and event handling of diff_state_model to RepositoryState
@@ -1356,7 +1356,7 @@ impl CodeReviewView {
             position_id_prefix: random_str,
             viewported_list_state: list_state,
             scroll_state: ScrollStateHandle::default(),
-            terminal_provider,
+            action_target_provider,
             window_id: ctx.window_id(),
             undo_action_button,
             last_revert: None,
@@ -2879,14 +2879,14 @@ impl CodeReviewView {
     /// or no suitable terminal.
     fn attach_target_terminal(&self, app: &AppContext) -> Option<ViewHandle<TerminalView>> {
         let repo_path = self.repo_path()?;
-        self.terminal_provider
+        self.action_target_provider
             .as_ref()?
             .attach_terminal(repo_path, app)
     }
 
     /// The focused terminal of the hosting pane group, if any.
     fn focused_terminal(&self, app: &AppContext) -> Option<ViewHandle<TerminalView>> {
-        self.terminal_provider.as_ref()?.focused_terminal(app)
+        self.action_target_provider.as_ref()?.focused_terminal(app)
     }
 
     fn diff_state(&self, app: &AppContext) -> DiffState {
