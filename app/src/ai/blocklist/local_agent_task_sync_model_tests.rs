@@ -125,6 +125,20 @@ fn other_error_is_error_with_internal() {
     );
 }
 
+#[test]
+fn transient_network_error_is_error_with_internal_and_debug_details() {
+    assert_update(
+        classify_renderable_error(&RenderableAIError::transient_network_error(
+            false,
+            false,
+            "connection reset",
+        )),
+        AgentTaskState::Error,
+        Some(PlatformErrorCode::InternalError),
+        Some("Debug info: connection reset"),
+    );
+}
+
 // --- task_update_for_conversation_error ---
 
 #[test]
