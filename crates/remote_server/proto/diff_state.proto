@@ -186,7 +186,6 @@ message DiffMetadata {
   bool has_head_commit = 5;
   repeated Commit unpushed_commits = 6;
   optional string upstream_ref = 7;
-  optional PrInfo pr_info = 8;
 }
 
 // Mirrors FileStatusInfo in Rust. Identifies a file and its git status
@@ -317,7 +316,7 @@ message GetBranchesError {
   string message = 1;
 }
 
-// ── Git operations (commit / push / create-PR / PR info) ──────────
+// ── Git operations (commit / push / create-PR) ────────────────────
 // Run git / gh on the remote filesystem. These mirror the local code
 // review git dialog operations in app/src/code_review/git_dialog/*.
 
@@ -406,24 +405,6 @@ message GitCreatePrResponse {
   }
 }
 
-// Client → server: look up the PR for the current branch (`gh pr view`).
-// This is the remote PR get/view command; it does not depend on a remote
-// git-status model.
-message GitGetPrInfoRequest {
-  string repo_path = 1;
-}
-
-message GitGetPrInfoResponse {
-  oneof result {
-    GitGetPrInfoSuccess success = 1;
-    GitOpError error = 2;
-  }
-}
-
-// `pr_info` absent => there is no open PR for the current branch.
-message GitGetPrInfoSuccess {
-  optional PrInfo pr_info = 1;
-}
 
 // Client → server: list the committed file changes for the current branch's
 // PR-ready diff (merge_base(HEAD, main)..HEAD). Backs the Create PR dialog's

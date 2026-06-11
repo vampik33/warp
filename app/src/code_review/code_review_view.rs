@@ -706,15 +706,6 @@ impl CodeReviewView {
             self.subscribe_to_git_repo_status_model(ctx);
             self.subscribe_to_github_repo_model(ctx);
         }
-        // Remote repos kick off a separate `GetPrInfo` fetch via the remote server manager.
-        // TODO: source the info from the `GitRepoStatusModel` as done for local repos.
-        if FeatureFlag::GitOperationsInCodeReview.is_enabled()
-            && self.repo_path().is_some_and(LocalOrRemotePath::is_remote)
-        {
-            self.diff_state_model.update(ctx, |model, ctx| {
-                model.fetch_pr_info(ctx);
-            });
-        }
         if self.repo_path().is_some() {
             self.fetch_branches_and_setup_dropdown(ctx);
         }
@@ -2319,17 +2310,6 @@ impl CodeReviewView {
             DiffStateModelEvent::CurrentBranchChanged => {
                 self.fetch_branches_and_setup_dropdown(ctx);
                 self.update_diff_selector_selection(ctx);
-                // PR info is branch-specific. Local repos re-fetch automatically
-                // via `GitRepoStatusModel` (it keys off branch changes); remote
-                // repos must re-issue `GetPrInfo` here, since the diff-state
-                // sync doesn't carry PR info.
-                if FeatureFlag::GitOperationsInCodeReview.is_enabled()
-                    && self.repo_path().is_some_and(LocalOrRemotePath::is_remote)
-                {
-                    self.diff_state_model.update(ctx, |model, ctx| {
-                        model.fetch_pr_info(ctx);
-                    });
-                }
             }
             DiffStateModelEvent::NewDiffsComputed {
                 diffs,

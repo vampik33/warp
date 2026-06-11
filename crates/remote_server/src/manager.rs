@@ -138,7 +138,6 @@ pub enum RemoteServerOperation {
     CommitChain,
     Push,
     CreatePr,
-    GetPrInfo,
     GenerateCommitMessage,
 }
 
@@ -573,13 +572,6 @@ pub enum RemoteServerManagerEvent {
         host_id: HostId,
         repo_path: StandardizedPath,
         result: Result<String, String>,
-    },
-    /// Response to a standalone get-PR-info (`gh pr view`). `Ok(None)` means
-    /// there is no open PR for the current branch.
-    GetPrInfoResponse {
-        host_id: HostId,
-        repo_path: StandardizedPath,
-        result: Result<Option<crate::proto::PrInfo>, String>,
     },
     /// Response to a committed-branch-files request (backs the Create PR
     /// dialog's Changes box). Carries the committed per-file entries
@@ -1085,38 +1077,6 @@ impl HostRequestHandle {
             }
             other => {
                 log::error!("Unexpected response variant for CreatePr: {other:?}");
-                Err(HostRequestError::UnexpectedResponse)
-            }
-        }
-    }
-
-    /// Looks up the PR for the current branch (`gh pr view`) on the remote
-    /// host. `Ok(None)` means there is no open PR.
-    pub async fn git_get_pr_info(
-        &self,
-        repo_path: &StandardizedPath,
-    ) -> Result<Option<crate::proto::PrInfo>, HostRequestError> {
-        let msg = self
-            .send(crate::proto::host_scoped_request::Message::GitGetPrInfo(
-                crate::proto::GitGetPrInfoRequest {
-                    repo_path: repo_path.to_string(),
-                },
-            ))
-            .await?;
-        match msg.message {
-            Some(crate::proto::server_message::Message::GitGetPrInfoResponse(resp)) => {
-                match resp.result {
-                    Some(crate::proto::git_get_pr_info_response::Result::Success(success)) => {
-                        Ok(success.pr_info)
-                    }
-                    Some(crate::proto::git_get_pr_info_response::Result::Error(e)) => {
-                        Err(HostRequestError::OperationFailed(e.message))
-                    }
-                    None => Err(HostRequestError::UnexpectedResponse),
-                }
-            }
-            other => {
-                log::error!("Unexpected response variant for GetPrInfo: {other:?}");
                 Err(HostRequestError::UnexpectedResponse)
             }
         }

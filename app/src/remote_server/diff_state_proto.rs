@@ -159,7 +159,6 @@ impl TryFrom<&proto::DiffMetadata> for DiffMetadata {
             has_head_commit: metadata.has_head_commit,
             unpushed_commits: metadata.unpushed_commits.iter().map(Commit::from).collect(),
             upstream_ref: metadata.upstream_ref.clone(),
-            pr_info: metadata.pr_info.as_ref().map(PrInfo::from),
         })
     }
 }
@@ -457,7 +456,6 @@ impl From<&DiffMetadata> for proto::DiffMetadata {
             has_head_commit: m.has_head_commit,
             unpushed_commits: m.unpushed_commits.iter().map(proto::Commit::from).collect(),
             upstream_ref: m.upstream_ref.clone(),
-            pr_info: m.pr_info.as_ref().map(proto::PrInfo::from),
         }
     }
 }

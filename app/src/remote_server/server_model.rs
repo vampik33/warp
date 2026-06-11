@@ -763,9 +763,6 @@ impl ServerModel {
                     Some(host_scoped_request::Message::GitCreatePr(m)) => {
                         self.handle_create_pr(m, &request_id, conn_id, ctx)
                     }
-                    Some(host_scoped_request::Message::GitGetPrInfo(m)) => {
-                        self.handle_get_pr_info(m, &request_id, conn_id, ctx)
-                    }
                     Some(host_scoped_request::Message::GitGenerateCommitMessage(m)) => {
                         self.handle_generate_git_commit_message(m, &request_id, conn_id, ctx)
                     }
@@ -3057,53 +3054,6 @@ impl ServerModel {
                     }),
                     Err(e) => server_message::Message::GitCreatePrResponse(GitCreatePrResponse {
                         result: Some(git_create_pr_response::Result::Error(GitOpError {
-                            message: format!("{e:#}"),
-                        })),
-                    }),
-                };
-                me.send_server_message(Some(conn_id), Some(&request_id_for_response), message);
-            },
-            ctx,
-        );
-        HandlerOutcome::Async(Some(handle))
-    }
-
-    /// Handles `GitGetPrInfoRequest` — runs `gh pr view` on the remote
-    /// filesystem. This is the remote PR get/view command.
-    fn handle_get_pr_info(
-        &mut self,
-        msg: GitGetPrInfoRequest,
-        request_id: &RequestId,
-        conn_id: ConnectionId,
-        ctx: &mut ModelContext<Self>,
-    ) -> HandlerOutcome {
-        let repo_path = match requested_repo_path(&msg.repo_path) {
-            Ok(p) => p,
-            Err(e) => return invalid_request_response(e),
-        };
-        log::info!(
-            "Handling GetPrInfo repo={} (request_id={request_id})",
-            msg.repo_path
-        );
-        let path_future = Self::interactive_path_future(ctx);
-        let request_id_for_response = request_id.clone();
-        let handle = self.spawn_request_handler(
-            request_id.clone(),
-            async move {
-                let path_env = path_future.await;
-                git_actions::get_pr(&repo_path, path_env.as_deref()).await
-            },
-            move |me, result, _ctx| {
-                let message = match result {
-                    Ok(pr) => server_message::Message::GitGetPrInfoResponse(GitGetPrInfoResponse {
-                        result: Some(git_get_pr_info_response::Result::Success(
-                            GitGetPrInfoSuccess {
-                                pr_info: pr.as_ref().map(super::proto::PrInfo::from),
-                            },
-                        )),
-                    }),
-                    Err(e) => server_message::Message::GitGetPrInfoResponse(GitGetPrInfoResponse {
-                        result: Some(git_get_pr_info_response::Result::Error(GitOpError {
                             message: format!("{e:#}"),
                         })),
                     }),
