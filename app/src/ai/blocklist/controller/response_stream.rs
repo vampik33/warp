@@ -265,6 +265,21 @@ impl ResponseStream {
             }
             Err(e) => {
                 log::error!("Failed to send request to multi-agent API: {e:?}");
+                if self.current_request_id.is_none_or(|id| id != request_id) {
+                    return;
+                }
+                // A request-conversion failure is a deterministic client-side error and
+                // no stream was ever created: retrying would fail identically, and
+                // letting completion synthesize `StreamTruncated` would misreport it as
+                // a transient network failure. Surface the original error and finish
+                // terminally. (HTTP send failures don't take this path — they arrive as
+                // in-stream error events.)
+                let error = Arc::new(AIApiError::Other(anyhow!(e)));
+                self.error_event_emitted = true;
+                self.report_request_failure(&error, NetworkStatus::as_ref(ctx).is_online());
+                ctx.emit(ResponseStreamEvent::ReceivedEvent(Consumable::new(Err(
+                    error,
+                ))));
                 self.on_response_stream_complete(request_id, ctx);
             }
         }
