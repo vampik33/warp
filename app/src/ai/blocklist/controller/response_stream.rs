@@ -32,48 +32,6 @@ impl ResponseStreamId {
     }
 }
 
-/// Spawns the multi-agent API request for `params`, routing the result to
-/// `ResponseStream::handle_response_stream_result`.
-///
-/// `pending_grok_token` is an optional in-flight Grok OAuth token refresh
-/// started by the controller (see `BlocklistAIController::send_request_input`)
-/// for a token that is already past its expiry. When present, the request
-/// blocks on it and carries the refreshed token; on failure it proceeds with
-/// the stale token — the server is the authority on validity. The refreshed
-/// token is also written back to `ResponseStream::params` so retries reuse it.
-fn spawn_request(
-    mut params: api::RequestParams,
-    pending_grok_token: Option<oneshot::Receiver<Option<String>>>,
-    cancellation_rx: oneshot::Receiver<()>,
-    request_id: Uuid,
-    ctx: &mut ModelContext<ResponseStream>,
-) {
-    let server_api = ServerApiProvider::as_ref(ctx).get();
-    let _ = ctx.spawn(
-        async move {
-            // `None` (refresh failed, or the refresher was dropped) keeps the
-            // stale token already present in the params.
-            let refreshed_token = match pending_grok_token {
-                Some(receiver) => receiver.await.ok().flatten(),
-                None => None,
-            };
-            if let (Some(token), Some(api_keys)) = (&refreshed_token, params.api_keys.as_mut()) {
-                api_keys.grok_oauth_access_token = token.clone();
-            }
-            let stream = generate_multi_agent_output(server_api, params, cancellation_rx).await;
-            (refreshed_token, stream)
-        },
-        move |me, (refreshed_token, stream), ctx| {
-            // Keep the stored params in sync so a retry sends the refreshed
-            // token rather than the stale one captured at build time.
-            if let (Some(token), Some(api_keys)) = (refreshed_token, me.params.api_keys.as_mut()) {
-                api_keys.grok_oauth_access_token = token;
-            }
-            me.handle_response_stream_result(request_id, stream, ctx);
-        },
-    );
-}
-
 /// Model wrapping an agent API response stream.
 ///
 /// Emits events when the output corresponding to the stream is updated, typically after receiving
@@ -122,20 +80,23 @@ impl ResponseStream {
         params: api::RequestParams,
         ai_identifiers: AIIdentifiers,
         can_attempt_resume_on_error: bool,
-        pending_grok_token: Option<oneshot::Receiver<Option<String>>>,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
+        let server_api = ServerApiProvider::as_ref(ctx).get();
         let (cancellation_tx, cancellation_rx) = oneshot::channel();
         let start_time = Local::now();
 
         let request_id = Uuid::new_v4();
-        spawn_request(
-            params.clone(),
-            pending_grok_token,
-            cancellation_rx,
-            request_id,
-            ctx,
-        );
+        let params_clone = params.clone();
+        let _ =
+            ctx.spawn(
+                async move {
+                    generate_multi_agent_output(server_api, params_clone, cancellation_rx).await
+                },
+                move |me, stream, ctx| {
+                    me.handle_response_stream_result(request_id, stream, ctx);
+                },
+            );
         Self {
             id: ResponseStreamId(Uuid::new_v4().to_string()),
             params: params.clone(),
@@ -190,7 +151,14 @@ impl ResponseStream {
 
         let request_id = Uuid::new_v4();
         self.current_request_id = Some(request_id);
-        spawn_request(self.params.clone(), None, cancellation_rx, request_id, ctx);
+        let params = self.params.clone();
+        let server_api = ServerApiProvider::as_ref(ctx).get();
+        let _ = ctx.spawn(
+            async move { generate_multi_agent_output(server_api, params, cancellation_rx).await },
+            move |me, stream, ctx| {
+                me.handle_response_stream_result(request_id, stream, ctx);
+            },
+        );
     }
 
     /// Cancels the stream. The conversation_id is preserved in the emitted event for async handling.

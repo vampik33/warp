@@ -20,6 +20,8 @@ pub mod oauth;
 use std::time::{Duration, SystemTime};
 
 use futures::channel::oneshot;
+use futures::future::{self, Either};
+use futures::pin_mut;
 use warpui_core::r#async::Timer;
 use warpui_core::ModelContext;
 
@@ -31,6 +33,12 @@ use crate::api_keys::{ApiKeyManager, GrokTokens};
 /// server is the authority on validity), so this lead time is purely about
 /// keeping the token fresh, not about when it stops being sent.
 const REFRESH_LEAD_TIME: Duration = Duration::from_secs(5 * 60);
+
+/// Hard cap on how long a request dispatch may be held waiting for the
+/// blocking refresh of an already-expired token
+/// ([`ApiKeyManager::refresh_expired_grok_tokens_before_send`]). On timeout
+/// the attempt is abandoned and the request proceeds with the stale token.
+const BLOCKING_REFRESH_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Builds [`GrokTokens`] from a token-endpoint [`TokenResponse`], computing the
 /// absolute `expires_at` from the relative `expires_in`. Values not present in
@@ -93,7 +101,7 @@ impl ApiKeyManager {
     /// never armed or died (e.g. a stale BYO policy at startup, or an earlier
     /// failed refresh). Tokens already past their hard expiry are instead
     /// refreshed by the request-blocking path
-    /// ([`Self::blocking_grok_refresh_for_request`]).
+    /// ([`Self::refresh_expired_grok_tokens_before_send`]).
     ///
     /// `byo_allowed` is the BYO API key policy as freshly evaluated by the
     /// caller at request time. It also re-syncs the stored policy mirror,
@@ -126,58 +134,77 @@ impl ApiKeyManager {
 
     /// When the stored Grok access token is already past its hard expiry,
     /// kicks off a single refresh attempt that the triggering request should
-    /// block on before being sent, returning a receiver that resolves to the
-    /// access token the request should carry: the refreshed token on success,
-    /// or `None` when the attempt failed (the request keeps its stale token;
-    /// the server is the authority on validity). Returns `None` when no
-    /// blocking refresh is needed or another refresh is already in flight.
+    /// block on before being dispatched. The returned receiver resolves when
+    /// the attempt finishes — success, failure, or timeout — after which the
+    /// caller should build the request, picking up whichever token is then
+    /// stored: refreshed on success, stale otherwise (the server is the
+    /// authority on token validity). Returns `None` when no blocking refresh
+    /// is needed or another refresh is already in flight.
     ///
     /// Persisting the refreshed tokens, releasing the in-flight guard, and
     /// scheduling the next proactive refresh all happen here on the manager's
-    /// own context — callers only observe the token to send.
-    pub fn blocking_grok_refresh_for_request(
+    /// own context — completion is the only signal callers receive.
+    pub fn refresh_expired_grok_tokens_before_send(
         &mut self,
         ctx: &mut ModelContext<Self>,
-    ) -> Option<oneshot::Receiver<Option<String>>> {
+    ) -> Option<oneshot::Receiver<()>> {
         let refresh_token = self.claim_blocking_grok_refresh()?;
-        let (tx, rx) = oneshot::channel();
+        let (done_tx, done_rx) = oneshot::channel();
         log::info!("Grok OAuth token is past its expiry; refreshing it before the request is sent");
         ctx.spawn(
-            async move { oauth::refresh_access_token(&refresh_token).await },
-            move |manager, result, ctx| {
+            async move {
+                // Cap the wait so a hung token endpoint can't stall the
+                // deferred request indefinitely. Timing out abandons this
+                // attempt; a later request may claim a new one.
+                let refresh = oauth::refresh_access_token(&refresh_token);
+                pin_mut!(refresh);
+                let cap = Timer::after(BLOCKING_REFRESH_TIMEOUT);
+                pin_mut!(cap);
+                match future::select(refresh, cap).await {
+                    Either::Left((result, _)) => Some(result),
+                    Either::Right(_) => None,
+                }
+            },
+            move |manager, outcome, ctx| {
                 manager.grok_refresh_in_flight = false;
-                match result {
-                    Ok(response) => {
+                match outcome {
+                    Some(Ok(response)) => {
                         log::info!(
                             "Refreshed expired Grok OAuth token before a request (expires_in={:?}, has_refresh_token={})",
                             response.expires_in,
                             response.refresh_token.is_some(),
                         );
-                        // Unblock the waiting request first, then persist and
-                        // reschedule the proactive refresh.
-                        let _ = tx.send(Some(response.access_token.clone()));
                         apply_grok_tokens(manager, response, ctx);
                     }
-                    Err(err) => {
+                    Some(Err(err)) => {
                         // Leave the stale tokens in place; the server remains
                         // the authority and will reject them if truly invalid.
                         log::error!(
                             "Failed to refresh the expired Grok OAuth token before a request; \
                              the request will send the stale token: {err:#}"
                         );
-                        let _ = tx.send(None);
+                    }
+                    None => {
+                        log::error!(
+                            "Timed out refreshing the expired Grok OAuth token before a request; \
+                             the request will send the stale token"
+                        );
                     }
                 }
+                // Unblock the deferred request regardless of outcome. The
+                // receiver may already be gone if the send was cancelled.
+                let _ = done_tx.send(());
             },
         );
-        Some(rx)
+        Some(done_rx)
     }
 
     /// Claims the request-blocking refresh performed by
-    /// [`Self::blocking_grok_refresh_for_request`]: returns the refresh token
-    /// to exchange when the access token is already past its hard expiry and
-    /// no other refresh is in flight, marking the refresh as in flight so the
-    /// proactive timer and the near-expiry safety net can't race it.
+    /// [`Self::refresh_expired_grok_tokens_before_send`]: returns the refresh
+    /// token to exchange when the access token is already past its hard
+    /// expiry and no other refresh is in flight, marking the refresh as in
+    /// flight so the proactive timer and the near-expiry safety net can't
+    /// race it.
     ///
     /// This intentionally ignores the stored BYO policy mirror: a blocking
     /// refresh is only claimed for a request that is already carrying the
