@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use itertools::{Either, Itertools};
 use warp_core::features::FeatureFlag;
@@ -466,6 +466,115 @@ impl Workspace {
         ctx.notify();
     }
 
+    /// Pins the tab. Grouped tabs are extracted from their group first
+    /// regardless of whether that group itself is pinned — tab pinning and
+    /// group pinning are independent concepts.
+    pub(super) fn pin_tab(&mut self, tab_index: usize, ctx: &mut ViewContext<Self>) {
+        if !FeatureFlag::PinnedTabs.is_enabled() {
+            return;
+        }
+        let Some(tab) = self.tabs.get(tab_index) else {
+            log::debug!("pin_tab: tab_index {tab_index} out of bounds");
+            return;
+        };
+        if tab.pinned {
+            log::debug!("pin_tab: tab {tab_index} is already pinned");
+            return;
+        }
+        let previous_group_id = tab.group_id;
+
+        // Identify where this newly pinned tab should land (after the last pinned item).
+        let target = pinned_boundary_index(&self.tabs, &self.tab_groups);
+
+        self.tabs[tab_index].group_id = None;
+        self.tabs[tab_index].pinned = true;
+        self.move_tab_to_index(tab_index, target, ctx);
+
+        if let Some(prev) = previous_group_id {
+            self.prune_empty_tab_group(prev, ctx);
+        }
+
+        ctx.dispatch_global_action("workspace:save_app", ());
+        ctx.notify();
+    }
+
+    /// Unpins a pinned tab and moves it to the start of the unpinned region.
+    pub(super) fn unpin_tab(&mut self, tab_index: usize, ctx: &mut ViewContext<Self>) {
+        if !FeatureFlag::PinnedTabs.is_enabled() {
+            return;
+        }
+        let Some(tab) = self.tabs.get(tab_index) else {
+            log::debug!("unpin_tab: tab_index {tab_index} out of bounds");
+            return;
+        };
+        if !tab.pinned {
+            log::debug!("unpin_tab: tab {tab_index} is not pinned");
+            return;
+        }
+
+        // This tab should land right after all pinned items.
+        let target = pinned_boundary_index(&self.tabs, &self.tab_groups);
+
+        self.tabs[tab_index].pinned = false;
+        self.move_tab_to_index(tab_index, target, ctx);
+
+        ctx.dispatch_global_action("workspace:save_app", ());
+        ctx.notify();
+    }
+
+    /// Pins the entire tab group: flips the group's `pinned` flag and moves
+    /// its contiguous block of members to the end of the pinned region. We
+    /// don't touch individual member `tab.pinned` flags because the block
+    /// always travels as a unit, and we want to support pinning a tab even if
+    /// it already belongs to a (pinned) group.
+    pub(super) fn pin_tab_group(&mut self, group_id: TabGroupId, ctx: &mut ViewContext<Self>) {
+        if !FeatureFlag::PinnedTabs.is_enabled() {
+            return;
+        }
+        let Some(group) = self.tab_groups.get(&group_id) else {
+            log::debug!("pin_tab_group: unknown group {group_id:?}");
+            return;
+        };
+        if group.pinned {
+            log::debug!("pin_tab_group: group {group_id:?} is already pinned");
+            return;
+        }
+
+        let target = pinned_boundary_index(&self.tabs, &self.tab_groups);
+        if let Some(group) = self.tab_groups.get_mut(&group_id) {
+            group.pinned = true;
+        }
+        self.move_group_block(group_id, target, ctx);
+
+        ctx.dispatch_global_action("workspace:save_app", ());
+        ctx.notify();
+    }
+
+    /// Unpins the entire tab group: clears the group's `pinned` flag and
+    /// moves the group's block to the start of the unpinned region.
+    pub(super) fn unpin_tab_group(&mut self, group_id: TabGroupId, ctx: &mut ViewContext<Self>) {
+        if !FeatureFlag::PinnedTabs.is_enabled() {
+            return;
+        }
+        let Some(group) = self.tab_groups.get(&group_id) else {
+            log::debug!("unpin_tab_group: unknown group {group_id:?}");
+            return;
+        };
+        if !group.pinned {
+            log::debug!("unpin_tab_group: group {group_id:?} is not pinned");
+            return;
+        }
+
+        let target = pinned_boundary_index(&self.tabs, &self.tab_groups);
+        if let Some(group) = self.tab_groups.get_mut(&group_id) {
+            group.pinned = false;
+        }
+        self.move_group_block(group_id, target, ctx);
+
+        ctx.dispatch_global_action("workspace:save_app", ());
+        ctx.notify();
+    }
+
     /// Builds the "Move to group" submenu. One builder serves both parent
     /// menus: `Some(tab_index)` for the single-tab pane menu, `None` for the
     /// multi-tab selection menu. Destination groups exclude the source's own
@@ -519,8 +628,26 @@ impl Workspace {
     }
 }
 
-/// Index where the unpinned region begins (count of leading pinned tabs).
-#[allow(dead_code)]
-pub(crate) fn pinned_boundary_index(tabs: &[TabData]) -> usize {
-    tabs.iter().take_while(|tab| tab.pinned).count()
+/// True when `tab` is positioned in the pinned region of the tab list —
+/// either because its own `pinned` flag is set (ungrouped pinned tab) or
+/// because it belongs to a pinned group.
+pub(crate) fn is_tab_effectively_pinned(
+    tab: &TabData,
+    tab_groups: &HashMap<TabGroupId, TabGroup>,
+) -> bool {
+    tab.pinned
+        || tab
+            .group_id
+            .is_some_and(|gid| tab_groups.get(&gid).is_some_and(|g| g.pinned))
+}
+
+/// Index where the unpinned region begins: the count of leading tabs that
+/// belong to the pinned region.
+pub(crate) fn pinned_boundary_index(
+    tabs: &[TabData],
+    tab_groups: &HashMap<TabGroupId, TabGroup>,
+) -> usize {
+    tabs.iter()
+        .take_while(|tab| is_tab_effectively_pinned(tab, tab_groups))
+        .count()
 }
