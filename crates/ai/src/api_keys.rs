@@ -345,6 +345,8 @@ impl ApiKeyManager {
                 // GCP Vertex/Gemini Enterprise credentials are not yet supported
                 // on the client.
                 google_cloud_credentials: None,
+                // Grok OAuth is not yet supported on the client.
+                grok_oauth_access_token: String::new(),
             })
         }
     }
