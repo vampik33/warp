@@ -5224,37 +5224,31 @@ impl TerminalView {
         let result =
             GitRepoModels::handle(ctx).update(ctx, |model, ctx| model.subscribe(&repo, ctx));
         match result {
-            Ok(handle) => self.wire_git_repo_status_handle(handle, ctx),
+            Ok(handle) => {
+                // Wire the freshly-obtained per-repo `GitRepoStatusModel` handle
+                // (local or remote) into this view: subscribe for events, feed
+                // the prompt, store the handle, and sync the PR-info consumer slot.
+                ctx.subscribe_to_model(&handle, |me, _, _, ctx| {
+                    me.handle_git_repo_status_event(ctx);
+                });
+                let weak_for_prompt = handle.downgrade();
+                self.git_repo_status = Some(handle);
+                self.current_prompt.update(ctx, |prompt_type, ctx| {
+                    if let PromptType::Dynamic { prompt } = prompt_type {
+                        prompt.update(ctx, |current_prompt, ctx| {
+                            current_prompt.set_git_repo_status(Some(weak_for_prompt), ctx);
+                        });
+                    }
+                });
+                // Acquire a GitHub-info handle if the terminal's prompt/footer
+                // chips or agent context need PR or repository info. The AI
+                // context model reads PR / repository info from that GitHub-info
+                // handle, so it is wired up by `sync_pr_info_subscription` rather
+                // than here.
+                self.sync_pr_info_subscription(ctx);
+            }
             Err(err) => log::warn!("GitRepoModels subscribe failed: {err}"),
         }
-    }
-
-    /// Wires a freshly-obtained per-repo `GitRepoStatusModel` handle (local or
-    /// remote) into this view: subscribes for events, feeds the prompt and AI
-    /// context models, stores the handle, and syncs the PR-info consumer slot.
-    #[cfg(feature = "local_fs")]
-    fn wire_git_repo_status_handle(
-        &mut self,
-        handle: ModelHandle<GitRepoStatusModel>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        ctx.subscribe_to_model(&handle, |me, _, _, ctx| {
-            me.handle_git_repo_status_event(ctx);
-        });
-        let weak_for_prompt = handle.downgrade();
-        self.git_repo_status = Some(handle);
-        self.current_prompt.update(ctx, |prompt_type, ctx| {
-            if let PromptType::Dynamic { prompt } = prompt_type {
-                prompt.update(ctx, |current_prompt, ctx| {
-                    current_prompt.set_git_repo_status(Some(weak_for_prompt), ctx);
-                });
-            }
-        });
-        // Acquire a GitHub-info handle if the terminal's prompt/footer chips or
-        // agent context need PR or repository info. The AI context model reads
-        // PR / repository info from that GitHub-info handle, so it is wired up
-        // by `sync_pr_info_subscription` rather than here.
-        self.sync_pr_info_subscription(ctx);
     }
 
     fn handle_ai_controller_event(

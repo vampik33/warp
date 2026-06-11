@@ -32,7 +32,7 @@ fn test_model(app: &mut App) -> ServerModel {
         git_status_models: HashMap::new(),
         github_repo_models: HashMap::new(),
         git_status_subscribers: HashMap::new(),
-        conn_current_repo: HashMap::new(),
+        git_status_repo_by_conn: HashMap::new(),
     }
 }
 
@@ -197,15 +197,15 @@ fn diff_states_starts_empty() {
 // ── Git status / GitHub: navigation-driven model cleanup ────────────
 
 #[test]
-fn subscribe_connection_records_subscriber_and_current_repo() {
+fn subscribe_git_status_records_subscriber_and_current_repo() {
     App::test((), |mut app| async move {
         let mut model = test_model(&mut app);
         let conn = uuid::Uuid::new_v4();
         let repo = StandardizedPath::try_new("/repo").unwrap();
 
-        model.subscribe_connection(conn, &repo);
+        model.subscribe_git_status(conn, &repo);
 
-        assert_eq!(model.conn_current_repo.get(&conn), Some(&repo));
+        assert_eq!(model.git_status_repo_by_conn.get(&conn), Some(&repo));
         assert!(model.git_status_subscribers[&repo].contains(&conn));
     });
 }
@@ -218,13 +218,13 @@ fn navigating_between_repos_moves_the_subscription() {
         let repo_a = StandardizedPath::try_new("/repo-a").unwrap();
         let repo_b = StandardizedPath::try_new("/repo-b").unwrap();
 
-        model.subscribe_connection(conn, &repo_a);
-        model.subscribe_connection(conn, &repo_b);
+        model.subscribe_git_status(conn, &repo_a);
+        model.subscribe_git_status(conn, &repo_b);
 
         // Moved off A (now empty) and onto B.
         assert!(!model.git_status_subscribers.contains_key(&repo_a));
         assert!(model.git_status_subscribers[&repo_b].contains(&conn));
-        assert_eq!(model.conn_current_repo.get(&conn), Some(&repo_b));
+        assert_eq!(model.git_status_repo_by_conn.get(&conn), Some(&repo_b));
     });
 }
 
@@ -235,15 +235,15 @@ fn last_subscriber_leaving_evicts_the_repo() {
         let conn = uuid::Uuid::new_v4();
         let repo = StandardizedPath::try_new("/repo").unwrap();
 
-        model.subscribe_connection(conn, &repo);
+        model.subscribe_git_status(conn, &repo);
         assert!(model.git_status_subscribers.contains_key(&repo));
 
-        model.unsubscribe_connection(conn);
+        model.unsubscribe_git_status(conn);
 
         // Subscriber set, current-repo mapping, and the per-repo model maps are
         // all cleared once no connection remains in the repo.
         assert!(!model.git_status_subscribers.contains_key(&repo));
-        assert!(!model.conn_current_repo.contains_key(&conn));
+        assert!(!model.git_status_repo_by_conn.contains_key(&conn));
         assert!(!model.git_status_models.contains_key(&repo));
         assert!(!model.github_repo_models.contains_key(&repo));
     });
@@ -257,15 +257,15 @@ fn sibling_connection_keeps_the_repo_alive() {
         let conn_b = uuid::Uuid::new_v4();
         let repo = StandardizedPath::try_new("/repo").unwrap();
 
-        model.subscribe_connection(conn_a, &repo);
-        model.subscribe_connection(conn_b, &repo);
+        model.subscribe_git_status(conn_a, &repo);
+        model.subscribe_git_status(conn_b, &repo);
 
         // First connection leaves: the repo stays for the sibling.
-        model.unsubscribe_connection(conn_a);
+        model.unsubscribe_git_status(conn_a);
         assert!(model.git_status_subscribers[&repo].contains(&conn_b));
 
         // Second connection leaves: now evicted.
-        model.unsubscribe_connection(conn_b);
+        model.unsubscribe_git_status(conn_b);
         assert!(!model.git_status_subscribers.contains_key(&repo));
     });
 }
@@ -274,9 +274,9 @@ fn sibling_connection_keeps_the_repo_alive() {
 fn unsubscribe_unknown_connection_is_a_noop() {
     App::test((), |mut app| async move {
         let mut model = test_model(&mut app);
-        model.unsubscribe_connection(uuid::Uuid::new_v4());
+        model.unsubscribe_git_status(uuid::Uuid::new_v4());
         assert!(model.git_status_subscribers.is_empty());
-        assert!(model.conn_current_repo.is_empty());
+        assert!(model.git_status_repo_by_conn.is_empty());
     });
 }
 

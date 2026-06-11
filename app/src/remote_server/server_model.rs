@@ -268,7 +268,7 @@ pub struct ServerModel {
     /// Each connection's current git repo (a connection is in at most one repo
     /// at a time), so a navigation can move its subscription and a disconnect
     /// can drop it.
-    conn_current_repo: HashMap<ConnectionId, StandardizedPath>,
+    git_status_repo_by_conn: HashMap<ConnectionId, StandardizedPath>,
 }
 
 impl Entity for ServerModel {
@@ -300,7 +300,7 @@ impl ServerModel {
             git_status_models: HashMap::new(),
             github_repo_models: HashMap::new(),
             git_status_subscribers: HashMap::new(),
-            conn_current_repo: HashMap::new(),
+            git_status_repo_by_conn: HashMap::new(),
         };
         // Subscribe to FileModel and RepoMetadataModel events
         // file operation results and repo metadata pushes are forwarded to all
@@ -700,7 +700,7 @@ impl ServerModel {
 
         // Drop this connection's git-status / GitHub-info subscription. The
         // per-repo models are evicted once no connection remains in the repo.
-        self.unsubscribe_connection(conn_id);
+        self.unsubscribe_git_status(conn_id);
 
         let remaining = self.connection_senders.len();
         log::info!("Daemon: connection {conn_id} deregistered — {remaining} active remaining");
@@ -1932,7 +1932,7 @@ impl ServerModel {
                         // per-repo git-status model exists, and opportunistically
                         // push its current value before relying on watcher ticks
                         // or explicit get-status notifications.
-                        me.subscribe_connection(conn_id_for_response, &root_path);
+                        me.subscribe_git_status(conn_id_for_response, &root_path);
                         me.subscribe_to_git_status_updates(&root_path, ctx);
                         me.push_git_status(&root_path, ctx);
                         let already_sent = me
@@ -1950,7 +1950,7 @@ impl ServerModel {
                         // Navigated out of any git repo: drop this connection's
                         // subscription so the previously-current repo's models
                         // are evicted once no connection remains in it.
-                        me.unsubscribe_connection(conn_id_for_response);
+                        me.unsubscribe_git_status(conn_id_for_response);
                     }
 
                     let id = RepositoryIdentifier::local(root_path.clone());
@@ -3246,7 +3246,7 @@ impl ServerModel {
         if self.git_status_models.contains_key(repo_path) {
             return;
         }
-        let repo = LocalOrRemotePath::Local(PathBuf::from(repo_path.as_str()));
+        let repo = LocalOrRemotePath::Local(repo_path.to_local_path_lossy());
         let handle = match GitRepoModels::handle(ctx)
             .update(ctx, |factory, ctx| factory.subscribe(&repo, ctx))
         {
@@ -3284,8 +3284,8 @@ impl ServerModel {
     /// Subscribe `conn` to `repo`'s git status (navigation in), moving it off
     /// any repo it was previously in. Pure bookkeeping — the caller ensures the
     /// per-repo git-status model exists via `subscribe_to_git_status_updates`.
-    fn subscribe_connection(&mut self, conn: ConnectionId, repo: &StandardizedPath) {
-        match self.conn_current_repo.get(&conn) {
+    fn subscribe_git_status(&mut self, conn: ConnectionId, repo: &StandardizedPath) {
+        match self.git_status_repo_by_conn.get(&conn) {
             Some(prev) if prev == repo => return,
             Some(prev) => {
                 let prev = prev.clone();
@@ -3293,7 +3293,7 @@ impl ServerModel {
             }
             None => {}
         }
-        self.conn_current_repo.insert(conn, repo.clone());
+        self.git_status_repo_by_conn.insert(conn, repo.clone());
         self.git_status_subscribers
             .entry(repo.clone())
             .or_default()
@@ -3303,8 +3303,8 @@ impl ServerModel {
     /// Unsubscribe `conn` from its current repo (navigation out of git, or
     /// disconnect). A connection is in at most one repo, so this single method
     /// also serves as the disconnect sweep.
-    fn unsubscribe_connection(&mut self, conn: ConnectionId) {
-        if let Some(repo) = self.conn_current_repo.remove(&conn) {
+    fn unsubscribe_git_status(&mut self, conn: ConnectionId) {
+        if let Some(repo) = self.git_status_repo_by_conn.remove(&conn) {
             self.drop_subscription(&repo, conn);
         }
     }
@@ -3341,7 +3341,7 @@ impl ServerModel {
             }
         };
 
-        self.subscribe_connection(conn_id, &std_path);
+        self.subscribe_git_status(conn_id, &std_path);
         self.subscribe_to_git_status_updates(&std_path, ctx);
         self.push_git_status(&std_path, ctx);
     }
@@ -3527,7 +3527,7 @@ impl ServerModel {
         if self.github_repo_models.contains_key(repo_path) {
             return;
         }
-        let repo = LocalOrRemotePath::Local(PathBuf::from(repo_path.as_str()));
+        let repo = LocalOrRemotePath::Local(repo_path.to_local_path_lossy());
         let handle = match GitRepoModels::handle(ctx).update(ctx, |factory, ctx| {
             factory.subscribe_github_repo(&repo, ctx)
         }) {
