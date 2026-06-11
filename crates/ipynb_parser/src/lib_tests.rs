@@ -213,30 +213,29 @@ fn test_png_output_renders_as_data_uri_image() {
 }
 
 #[test]
-fn test_invalid_base64_image_shows_message() {
-    // A payload that is not valid base64 (and contains a Markdown-breaking
-    // char) must not be embedded; the user sees a clear message instead, and no
-    // payload content leaks into the rendered output.
+fn test_image_payload_is_not_validated_by_parser() {
+    // The parser no longer size-checks or validates base64 payloads: it emits
+    // the `data:` URI verbatim and defers decoding and size limits to the shared
+    // asset layer (mirroring how Markdown `data:` images are handled). An
+    // undecodable payload is still emitted as an image here and simply fails to
+    // load at render time (silent omission).
     let json = r#"{
         "nbformat": 4,
         "cells": [
             {"cell_type": "code", "source": "plot()", "outputs": [
-                {"output_type": "display_data", "data": {"image/png": "AAA)evil"}, "metadata": {}}
+                {"output_type": "display_data", "data": {"image/png": "not-valid-base64"}, "metadata": {}}
             ]}
         ]
     }"#;
 
     let ft = convert(json);
-    assert!(images(&ft).is_empty(), "invalid image must not be embedded");
-    let raw = ft.raw_text();
-    assert!(
-        raw.contains("[output image omitted: invalid base64 data]"),
-        "expected invalid-image message, got: {raw:?}"
+    let images = images(&ft);
+    assert_eq!(
+        images.len(),
+        1,
+        "payload should be emitted without parser-side validation"
     );
-    assert!(
-        !raw.contains("evil"),
-        "invalid payload must not leak into the rendered output: {raw:?}"
-    );
+    assert_eq!(images[0].source, "data:image/png;base64,not-valid-base64");
 }
 
 #[test]
@@ -400,27 +399,6 @@ fn test_oversized_text_output_is_truncated() {
         output.chars().count() <= MAX_TEXT_OUTPUT_CHARS + 200,
         "output should be truncated near the limit, got {} chars",
         output.chars().count()
-    );
-}
-
-#[test]
-fn test_oversized_image_is_omitted_with_placeholder() {
-    // An embedded image larger than the cap is replaced with a visible
-    // placeholder rather than embedded.
-    let big = "A".repeat(MAX_IMAGE_DATA_CHARS + 1);
-    let json = format!(
-        r#"{{"nbformat": 4, "cells": [{{"cell_type": "code", "source": "plot()", "outputs": [{{"output_type": "display_data", "data": {{"image/png": "{big}"}}, "metadata": {{}}}}]}}]}}"#
-    );
-
-    let ft = convert(&json);
-    assert!(
-        images(&ft).is_empty(),
-        "oversized image should not be embedded"
-    );
-    assert!(
-        ft.raw_text()
-            .contains("[output image omitted: exceeds size limit]"),
-        "expected placeholder for oversized image"
     );
 }
 

@@ -6924,7 +6924,6 @@ checksum = "469fb0b9cefa57e3ef31275ee7cacb78f2fdca44e4765491884a2b119d4eb130"
 name = "ipynb_parser"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
  "markdown_parser",
  "serde",
  "serde_json",

@@ -11,8 +11,6 @@
 
 use std::collections::BTreeMap;
 
-use base64::Engine as _;
-use base64::prelude::BASE64_STANDARD;
 use markdown_parser::{
     CodeBlockText, FormattedImage, FormattedText, FormattedTextFragment, FormattedTextLine,
     parse_markdown, parse_markdown_with_gfm_tables,
@@ -25,11 +23,6 @@ const SUPPORTED_NBFORMAT: i64 = 4;
 /// Maximum number of characters rendered for a single text output before it is
 /// truncated. Prevents a single pathological output from bloating the buffer.
 const MAX_TEXT_OUTPUT_CHARS: usize = 100_000;
-
-/// Maximum size (in base64 characters) of an embedded image we will render.
-/// Larger images are replaced with a placeholder so the rest of the notebook
-/// still renders without freezing the UI.
-const MAX_IMAGE_DATA_CHARS: usize = 8 * 1024 * 1024;
 
 /// Maximum length of a code-block language tag we will emit. Real language
 /// names are short; a longer value is treated as untrusted junk and dropped so
@@ -208,14 +201,6 @@ fn push_image(lines: &mut Vec<FormattedTextLine>, mime: &str, value: &serde_json
         .filter(|c| !c.is_whitespace())
         .collect();
     if base64.is_empty() {
-        return;
-    }
-    if base64.len() > MAX_IMAGE_DATA_CHARS {
-        push_text_output(lines, "[output image omitted: exceeds size limit]");
-        return;
-    }
-    if BASE64_STANDARD.decode(base64.as_bytes()).is_err() {
-        push_text_output(lines, "[output image omitted: invalid base64 data]");
         return;
     }
     lines.push(FormattedTextLine::Image(FormattedImage {
