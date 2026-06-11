@@ -7,7 +7,7 @@ use warpui::{App, SingletonEntity};
 use crate::ai::agent::task::TaskId;
 use crate::ai::agent::{
     api, AIAgentAttachment, AIAgentContext, AIAgentInput, ImageContext, PassiveSuggestionTrigger,
-    UserQueryMode,
+    ReceivedMessageInput, UserQueryMode,
 };
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::{
@@ -50,18 +50,28 @@ fn normal_user_query_input() -> AIAgentInput {
 }
 
 #[test]
-fn request_params_snapshots_pending_handoff_only_for_normal_user_queries() {
+fn request_params_snapshots_pending_handoff_for_user_inputs_requests() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
 
         app.update(|ctx| {
-            let eligible_request = request_input_for_test(normal_user_query_input());
-            let ineligible_request = request_input_for_test(AIAgentInput::SummarizeConversation {
+            let user_query_request = request_input_for_test(normal_user_query_input());
+            let inter_agent_message_request =
+                request_input_for_test(AIAgentInput::MessagesReceivedFromAgents {
+                    messages: vec![ReceivedMessageInput {
+                        message_id: "message-id".to_owned(),
+                        sender_agent_id: "agent-id".to_owned(),
+                        addresses: vec!["recipient-id".to_owned()],
+                        subject: "subject".to_owned(),
+                        message_body: "body".to_owned(),
+                    }],
+                });
+            let top_level_request = request_input_for_test(AIAgentInput::SummarizeConversation {
                 prompt: None,
                 context: vec![].into(),
             });
             let conversation = api::ConversationData {
-                id: eligible_request.conversation_id,
+                id: user_query_request.conversation_id,
                 tasks: vec![],
                 server_conversation_token: None,
                 forked_from_conversation_token: None,
@@ -70,28 +80,40 @@ fn request_params_snapshots_pending_handoff_only_for_normal_user_queries() {
                 existing_suggestions: None,
             };
 
-            let eligible_params = api::RequestParams::new(
+            let user_query_params = api::RequestParams::new(
                 None,
                 SessionContext::new_for_test(),
-                &eligible_request,
+                &user_query_request,
                 conversation.clone(),
                 None,
                 ctx,
             );
             assert_eq!(
-                eligible_params.pending_conversation_handoff,
+                user_query_params.pending_conversation_handoff,
                 Some(PendingConversationHandoff::CloudToLocal),
             );
 
-            let ineligible_params = api::RequestParams::new(
+            let inter_agent_message_params = api::RequestParams::new(
                 None,
                 SessionContext::new_for_test(),
-                &ineligible_request,
+                &inter_agent_message_request,
+                conversation.clone(),
+                None,
+                ctx,
+            );
+            assert_eq!(
+                inter_agent_message_params.pending_conversation_handoff,
+                Some(PendingConversationHandoff::CloudToLocal),
+            );
+            let top_level_params = api::RequestParams::new(
+                None,
+                SessionContext::new_for_test(),
+                &top_level_request,
                 conversation,
                 None,
                 ctx,
             );
-            assert_eq!(ineligible_params.pending_conversation_handoff, None);
+            assert_eq!(top_level_params.pending_conversation_handoff, None);
         });
     });
 }

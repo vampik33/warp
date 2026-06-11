@@ -311,7 +311,7 @@ impl RequestParams {
             conversation_token: conversation.server_conversation_token,
             forked_from_conversation_token: conversation.forked_from_conversation_token,
             pending_conversation_handoff: request_input
-                .carries_pending_conversation_handoff()
+                .can_carry_conversation_handoff_marker()
                 .then_some(conversation.pending_conversation_handoff)
                 .flatten(),
             ambient_agent_task_id: conversation.ambient_agent_task_id,

@@ -684,6 +684,7 @@ fn test_initialize_historical_conversations_uses_root_task_description_title() {
                     conversation_usage_metadata: None,
                     reverted_action_ids: None,
                     forked_from_server_conversation_token: None,
+                    pending_conversation_handoff: None,
                     artifacts_json: None,
                     parent_agent_id: None,
                     agent_name: None,

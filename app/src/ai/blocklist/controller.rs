@@ -207,17 +207,17 @@ pub struct RequestInput {
 }
 
 impl RequestInput {
-    pub fn carries_pending_conversation_handoff(&self) -> bool {
-        self.all_inputs().any(|input| {
-            matches!(
-                input,
-                AIAgentInput::UserQuery {
-                    static_query_type: None,
-                    user_query_mode: UserQueryMode::Normal,
-                    ..
-                }
-            )
-        })
+    pub fn can_carry_conversation_handoff_marker(&self) -> bool {
+        let mut inputs = self.all_inputs();
+        let Some(first_input) = inputs.next() else {
+            return false;
+        };
+
+        if inputs.next().is_none() {
+            first_input.converts_to_user_input()
+        } else {
+            self.all_inputs().any(AIAgentInput::converts_to_user_input)
+        }
     }
     fn for_task(
         inputs: Vec<AIAgentInput>,

@@ -2629,6 +2629,8 @@ pub enum AIAgentInput {
         config: OrchestrationConfig,
         status: OrchestrationConfigStatus,
     },
+
+    ConversationHandoff,
 }
 
 /// Data for a single message received by an agent from another agent.
@@ -2723,6 +2725,7 @@ impl Display for AIAgentInput {
             }
             Self::PassiveSuggestionResult { .. } => write!(f, "PassiveSuggestionResult"),
             Self::OrchestrationConfigUpdate { .. } => write!(f, "OrchestrationConfigUpdate"),
+            Self::ConversationHandoff => write!(f, "ConversationHandoff"),
         }
     }
 }
@@ -2781,7 +2784,8 @@ impl AIAgentInput {
             | Self::MessagesReceivedFromAgents { .. }
             | Self::EventsFromAgents { .. }
             | Self::PassiveSuggestionResult { .. }
-            | Self::OrchestrationConfigUpdate { .. } => None,
+            | Self::OrchestrationConfigUpdate { .. }
+            | Self::ConversationHandoff => None,
         }
     }
 
@@ -2841,6 +2845,21 @@ impl AIAgentInput {
         matches!(self, AIAgentInput::UserQuery { .. })
     }
 
+    pub fn converts_to_user_input(&self) -> bool {
+        matches!(
+            self,
+            Self::UserQuery {
+                static_query_type: None,
+                ..
+            } | Self::ActionResult { .. }
+                | Self::MessagesReceivedFromAgents { .. }
+                | Self::EventsFromAgents { .. }
+                | Self::PassiveSuggestionResult { .. }
+                | Self::OrchestrationConfigUpdate { .. }
+                | Self::ConversationHandoff
+        )
+    }
+
     pub fn prompt_suggestion_result(&self) -> Option<&String> {
         if let Some(AIAgentActionResult {
             result: AIAgentActionResultType::SuggestPrompt(SuggestPromptResult::Accepted { query }),
@@ -2879,7 +2898,8 @@ impl AIAgentInput {
             Self::SummarizeConversation { context, .. } => Some(context),
             Self::MessagesReceivedFromAgents { .. }
             | Self::EventsFromAgents { .. }
-            | Self::OrchestrationConfigUpdate { .. } => None,
+            | Self::OrchestrationConfigUpdate { .. }
+            | Self::ConversationHandoff => None,
         }
     }
 
@@ -2911,7 +2931,8 @@ impl AIAgentInput {
             | Self::MessagesReceivedFromAgents { .. }
             | Self::EventsFromAgents { .. }
             | Self::PassiveSuggestionResult { .. }
-            | Self::OrchestrationConfigUpdate { .. } => None,
+            | Self::OrchestrationConfigUpdate { .. }
+            | Self::ConversationHandoff => None,
         }
     }
 

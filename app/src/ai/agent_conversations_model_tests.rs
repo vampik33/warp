@@ -226,6 +226,7 @@ fn test_title_update_refreshes_shadowing_task_title() {
                 conversation_usage_metadata: None,
                 reverted_action_ids: None,
                 forked_from_server_conversation_token: None,
+                pending_conversation_handoff: None,
                 artifacts_json: None,
                 parent_agent_id: None,
                 agent_name: None,

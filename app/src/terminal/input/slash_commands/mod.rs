@@ -1141,10 +1141,9 @@ impl Input {
                     ctx
                 );
 
-                ctx.dispatch_typed_action(&WorkspaceAction::ForkAIConversation {
+                ctx.dispatch_typed_action(&WorkspaceAction::ContinueConversationLocally {
                     conversation_id,
                     initial_prompt: argument.cloned(),
-                    initial_attachments,
                     destination,
                 });
             }
