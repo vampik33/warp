@@ -45,6 +45,7 @@ use crate::editor::{
 };
 use crate::send_telemetry_from_ctx;
 use crate::server::telemetry::TelemetryEvent;
+use crate::terminal::cli_agent_sessions::{CLIAgentSessionsModel, CLIAgentSessionsModelEvent};
 use crate::terminal::input::suggestions_mode_model::InputSuggestionsModeModel;
 use crate::ui_components::icons::Icon as TerminalIcon;
 use crate::util::truncation::truncate_from_end;
@@ -58,9 +59,6 @@ const SEND_NOW_DURING_CLOUD_SETUP_TOOLTIP: &str =
     "Prompts cannot be sent until environment setup is complete.";
 const SEND_NOW_TO_FULL_TERMINAL_USE_AGENT_TOOLTIP: &str = "Send to full terminal use agent";
 const SEND_NOW_AS_READ_ONLY_VIEWER_TOOLTIP: &str = "Read-only viewers cannot send prompts.";
-/// Text of the header hint advertising that Enter on an empty input sends the top queued row;
-/// rendered after an enter keycap chip.
-const ENTER_TO_SEND_HINT_TEXT: &str = "to send";
 
 /// Returns the position-cache id used to look up a row's bounding rect during a drag.
 /// Indexed by the row's current visual index so swaps maintain stable lookups.
@@ -168,12 +166,12 @@ pub struct QueuedPromptsPanelView {
     /// because no other view reads this. Reset whenever the active conversation changes or the
     /// queue is cleared.
     collapsed: bool,
-    /// Host-pushed flag: whether the pane can send prompts at all (false for read-only
-    /// shared-session viewers). Gates every row's send-now button.
-    pane_can_send: bool,
-    /// Host-pushed flag: whether an Enter press right now would send the top queued row
-    /// (pane can send + empty input + CLI-agent rich input closed). Gates the header hint.
-    enter_can_send: bool,
+    /// Host-pushed: whether this terminal can send prompts at all (false for read-only
+    /// shared-session viewers). Gates the send-now buttons, empty-Enter sends, and the hint.
+    can_send_prompt: bool,
+    /// Host-pushed: whether the host input's buffer is empty. An empty input is what makes
+    /// Enter send the top queued row, so this gates empty-Enter sends and the hint.
+    input_is_empty: bool,
     header_mouse_state: MouseStateHandle,
     row_states: HashMap<QueuedQueryId, QueuedPromptRowState>,
     dragging_query_id: Option<QueuedQueryId>,
@@ -228,6 +226,12 @@ impl QueuedPromptsPanelView {
             me.handle_edit_editor_event(event, ctx);
         });
 
+        // The header hint hides while the CLI-agent rich input is open (Enter submits to the
+        // CLI agent there), so re-render when it opens or closes.
+        ctx.subscribe_to_model(&CLIAgentSessionsModel::handle(ctx), |me, _, event, ctx| {
+            me.handle_cli_agent_sessions_event(event, ctx);
+        });
+
         let history_handle = BlocklistAIHistoryModel::handle(ctx);
         let active_conversation_id = history_handle
             .as_ref(ctx)
@@ -254,8 +258,8 @@ impl QueuedPromptsPanelView {
             edit_editor_is_single_logical_line: true,
             edit_editor_scroll_state: Default::default(),
             collapsed: false,
-            pane_can_send: true,
-            enter_can_send: true,
+            can_send_prompt: true,
+            input_is_empty: true,
             header_mouse_state: MouseStateHandle::default(),
             row_states: HashMap::new(),
             dragging_query_id: None,
@@ -273,38 +277,68 @@ impl QueuedPromptsPanelView {
         self.drag_start_index = None;
     }
 
-    /// Updates the host-pushed send-availability flags (specs/APP-4717). `pane_can_send` gates
-    /// every row's send-now button; `enter_can_send` additionally gates the header's
-    /// "⏎ to send" hint.
-    pub fn set_send_availability(
-        &mut self,
-        pane_can_send: bool,
-        enter_can_send: bool,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if self.pane_can_send == pane_can_send && self.enter_can_send == enter_can_send {
+    /// Updates whether this terminal can send prompts (false for read-only shared-session
+    /// viewers). Pushed by the host on construction and when the shared-session role changes.
+    pub fn set_can_send_prompt(&mut self, can_send_prompt: bool, ctx: &mut ViewContext<Self>) {
+        if self.can_send_prompt == can_send_prompt {
             return;
         }
-        self.pane_can_send = pane_can_send;
-        self.enter_can_send = enter_can_send;
+        self.can_send_prompt = can_send_prompt;
         self.update_send_now_availability(ctx);
         ctx.notify();
     }
 
-    /// Whether the header shows the "⏎ to send" hint: the host says Enter would send, no row
-    /// is in inline edit mode, and the head row is sendable (not the locked initial cloud-mode
-    /// prompt). Mirrors the host's empty-buffer Enter conditions exactly.
+    /// Updates whether the host input's buffer is empty. Pushed by the host on emptiness
+    /// transitions.
+    pub fn set_input_is_empty(&mut self, input_is_empty: bool, ctx: &mut ViewContext<Self>) {
+        if self.input_is_empty == input_is_empty {
+            return;
+        }
+        self.input_is_empty = input_is_empty;
+        ctx.notify();
+    }
+
+    /// True when pressing Enter in the host input should send the top queued row instead of
+    /// performing its usual action: the panel is showing, prompts can be sent, the input is
+    /// empty, and the CLI-agent rich input is closed (Enter submits to the CLI agent there).
+    pub fn enter_sends_queued_prompt(&self, ctx: &AppContext) -> bool {
+        self.should_render(ctx)
+            && self.can_send_prompt
+            && self.input_is_empty
+            && !CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id)
+    }
+
+    /// Whether the header shows the "⏎ to send" hint: Enter would send, no row is in inline
+    /// edit mode, and the head row is sendable (not the locked initial cloud-mode prompt).
     fn should_show_enter_hint(&self, ctx: &AppContext) -> bool {
         let Some(conv_id) = self.active_conversation_id else {
             return false;
         };
         let queue_model = QueuedQueryModel::as_ref(ctx);
-        self.enter_can_send
+        self.enter_sends_queued_prompt(ctx)
             && queue_model.editing_row(conv_id).is_none()
             && queue_model
                 .queue(conv_id)
                 .first()
                 .is_some_and(|row| !row.is_locked())
+    }
+
+    /// Re-renders the header hint when the CLI-agent rich input opens or closes for this
+    /// terminal.
+    fn handle_cli_agent_sessions_event(
+        &mut self,
+        event: &CLIAgentSessionsModelEvent,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let CLIAgentSessionsModelEvent::InputSessionChanged {
+            terminal_view_id, ..
+        } = event
+        else {
+            return;
+        };
+        if *terminal_view_id == self.terminal_view_id {
+            ctx.notify();
+        }
     }
 
     /// Reseed `row_states` for `conv_id`'s queue, dropping any state for rows not in that queue.
@@ -357,10 +391,10 @@ impl QueuedPromptsPanelView {
             };
             let disabled_for_cloud_setup =
                 *origin == QueuedQueryOrigin::InitialCloudMode || cloud_setup_in_progress;
-            let disabled = disabled_for_cloud_setup || !self.pane_can_send;
+            let disabled = disabled_for_cloud_setup || !self.can_send_prompt;
             let tooltip = if disabled_for_cloud_setup {
                 SEND_NOW_DURING_CLOUD_SETUP_TOOLTIP
-            } else if !self.pane_can_send {
+            } else if !self.can_send_prompt {
                 SEND_NOW_AS_READ_ONLY_VIEWER_TOOLTIP
             } else if lrc_subagent_in_progress {
                 SEND_NOW_TO_FULL_TERMINAL_USE_AGENT_TOOLTIP
@@ -967,7 +1001,7 @@ fn render_header(
             );
             row.add_child(Container::new(keycap).with_margin_left(4.).finish());
             row.add_child(
-                Text::new(ENTER_TO_SEND_HINT_TEXT, ui_font_family, ui_font_size)
+                Text::new("to send", ui_font_family, ui_font_size)
                     .with_style(Properties {
                         style: Style::Normal,
                         weight: Weight::Normal,

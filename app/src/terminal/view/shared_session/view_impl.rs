@@ -1512,8 +1512,12 @@ impl TerminalView {
                 editor.set_interaction_state(role.into(), ctx);
             });
             // Role gates whether prompts can be sent, so the queued prompts panel's
-            // send-now buttons and "⏎ to send" hint must re-sync.
-            input.refresh_queued_panel_send_availability(ctx);
+            // send-now buttons and enter hint must re-sync.
+            if let Some(panel) = input.queued_prompts_panel().cloned() {
+                panel.update(ctx, |panel, ctx| {
+                    panel.set_can_send_prompt(role.can_execute(), ctx);
+                });
+            }
         });
     }
 

@@ -1441,8 +1441,8 @@ fn seed_active_conversation(app: &mut App, terminal_view_id: EntityId) -> AIConv
     })
 }
 
-/// PRODUCT §1/§3 (specs/APP-4717): Enter on an empty buffer sends the top queued prompt; a
-/// second Enter sends the next row. The buffer stays empty throughout.
+/// Enter on an empty buffer sends the top queued prompt; a second Enter sends the next row.
+/// The buffer stays empty throughout.
 #[test]
 fn empty_buffer_enter_sends_top_queued_prompt_then_next_on_repeat() {
     App::test((), |mut app| async move {
@@ -1496,8 +1496,8 @@ fn empty_buffer_enter_sends_top_queued_prompt_then_next_on_repeat() {
     });
 }
 
-/// PRODUCT §1/§2 (specs/APP-4717): with the input in (default) shell mode and an empty buffer,
-/// Enter executes the top queued command row instead of submitting an empty shell command.
+/// With the input in (default) shell mode and an empty buffer, Enter executes the top queued
+/// command row instead of submitting an empty shell command.
 #[test]
 fn empty_buffer_enter_executes_top_queued_command() {
     App::test((), |mut app| async move {
@@ -1546,8 +1546,7 @@ fn empty_buffer_enter_executes_top_queued_command() {
     });
 }
 
-/// PRODUCT §6 (specs/APP-4717): a non-empty buffer keeps Enter's existing behavior; the queued
-/// row is left in place.
+/// A non-empty buffer keeps Enter's existing behavior; the queued row is left in place.
 #[test]
 fn enter_with_nonempty_buffer_does_not_send_queued_row() {
     App::test((), |mut app| async move {
@@ -1578,8 +1577,8 @@ fn enter_with_nonempty_buffer_does_not_send_queued_row() {
     });
 }
 
-/// PRODUCT §5 (specs/APP-4717): the locked initial cloud-mode head row never fires on Enter,
-/// and the locked head blocks the rows behind it (only the head row is Enter-sendable).
+/// The locked initial cloud-mode head row never fires on Enter, and the locked head blocks the
+/// rows behind it (only the head row is Enter-sendable).
 #[test]
 fn empty_buffer_enter_skips_locked_initial_cloud_mode_head() {
     App::test((), |mut app| async move {

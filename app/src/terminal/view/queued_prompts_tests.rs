@@ -1170,30 +1170,7 @@ fn send_now_action_emits_row_kind_and_leaves_rows_for_host_to_fire() {
 
         // The panel keys its queue lookups on the history model's active conversation for its
         // terminal view, so seed one and build the panel as a child of that terminal view.
-        let terminal = add_window_with_terminal(&mut app, None);
-        let terminal_view_id = terminal.read(&app, |view, _| view.view_id);
-        let conversation_id =
-            BlocklistAIHistoryModel::handle(&app).update(&mut app, |history, ctx| {
-                let id = history.start_new_conversation(terminal_view_id, false, false, false, ctx);
-                history.set_active_conversation_id(id, terminal_view_id, ctx);
-                id
-            });
-        let suggestions_mode_model = {
-            let input = terminal.read(&app, |view, _| view.input.clone());
-            input.read(&app, |input, _| input.suggestions_mode_model().clone())
-        };
-        let cli_subagent_controller =
-            terminal.read(&app, |view, _| view.cli_subagent_controller.clone());
-        let panel = terminal.update(&mut app, |_, ctx| {
-            ctx.add_view(move |ctx| {
-                QueuedPromptsPanelView::new(
-                    terminal_view_id,
-                    suggestions_mode_model,
-                    cli_subagent_controller,
-                    ctx,
-                )
-            })
-        });
+        let (panel, conversation_id) = build_panel_with_active_conversation(&mut app);
 
         let (prompt_id, command_id) =
             QueuedQueryModel::handle(&app).update(&mut app, |model, ctx| {
@@ -1256,30 +1233,7 @@ fn send_now_disabled_for_all_rows_while_initial_cloud_mode_row_is_present() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
 
-        let terminal = add_window_with_terminal(&mut app, None);
-        let terminal_view_id = terminal.read(&app, |view, _| view.view_id);
-        let conversation_id =
-            BlocklistAIHistoryModel::handle(&app).update(&mut app, |history, ctx| {
-                let id = history.start_new_conversation(terminal_view_id, false, false, false, ctx);
-                history.set_active_conversation_id(id, terminal_view_id, ctx);
-                id
-            });
-        let suggestions_mode_model = {
-            let input = terminal.read(&app, |view, _| view.input.clone());
-            input.read(&app, |input, _| input.suggestions_mode_model().clone())
-        };
-        let cli_subagent_controller =
-            terminal.read(&app, |view, _| view.cli_subagent_controller.clone());
-        let panel = terminal.update(&mut app, |_, ctx| {
-            ctx.add_view(move |ctx| {
-                QueuedPromptsPanelView::new(
-                    terminal_view_id,
-                    suggestions_mode_model,
-                    cli_subagent_controller,
-                    ctx,
-                )
-            })
-        });
+        let (panel, conversation_id) = build_panel_with_active_conversation(&mut app);
 
         // The locked initial cloud-mode prompt, plus a follow-up queued during setup.
         let (initial_id, followup_id) =
@@ -1352,11 +1306,12 @@ fn build_panel_with_active_conversation(
 }
 
 #[test]
-fn pane_send_unavailability_disables_send_now_buttons_but_enter_only_conditions_do_not() {
-    // PRODUCT §5 (specs/APP-4717): pane-level send unavailability (read-only viewer) disables
-    // every row's send-now button; Enter-only conditions (non-empty buffer / CLI rich input
-    // open) hide the hint but leave the buttons alone.
+fn can_send_prompt_gates_buttons_and_hint_while_input_is_empty_gates_only_the_hint() {
+    // When the host reports prompts cannot be sent (read-only shared-session viewer), every
+    // row's send-now button is disabled and the enter hint hides. A non-empty input hides the
+    // hint but leaves the buttons alone.
     App::test((), |mut app| async move {
+        let _queue_flag = FeatureFlag::QueueSlashCommand.override_enabled(true);
         initialize_app_for_terminal_view(&mut app);
 
         let (panel, conversation_id) = build_panel_with_active_conversation(&mut app);
@@ -1373,9 +1328,9 @@ fn pane_send_unavailability_disables_send_now_buttons_but_enter_only_conditions_
             assert!(panel.enter_hint_shown_for_test(ctx));
         });
 
-        // Pane cannot send: button disabled and hint hidden.
+        // Sending unavailable: button disabled and hint hidden.
         panel.update(&mut app, |panel, ctx| {
-            panel.set_send_availability(false, false, ctx);
+            panel.set_can_send_prompt(false, ctx);
         });
         panel.read(&app, |panel, ctx| {
             assert_eq!(
@@ -1385,9 +1340,21 @@ fn pane_send_unavailability_disables_send_now_buttons_but_enter_only_conditions_
             assert!(!panel.enter_hint_shown_for_test(ctx));
         });
 
-        // Enter-only condition (e.g. non-empty buffer): hint hidden, button stays enabled.
+        // Sending available again: button re-enabled and hint restored.
         panel.update(&mut app, |panel, ctx| {
-            panel.set_send_availability(true, false, ctx);
+            panel.set_can_send_prompt(true, ctx);
+        });
+        panel.read(&app, |panel, ctx| {
+            assert_eq!(
+                panel.send_now_button_disabled_for_test(row_id, ctx),
+                Some(false)
+            );
+            assert!(panel.enter_hint_shown_for_test(ctx));
+        });
+
+        // Non-empty input: hint hidden, button stays enabled.
+        panel.update(&mut app, |panel, ctx| {
+            panel.set_input_is_empty(false, ctx);
         });
         panel.read(&app, |panel, ctx| {
             assert_eq!(
@@ -1401,9 +1368,10 @@ fn pane_send_unavailability_disables_send_now_buttons_but_enter_only_conditions_
 
 #[test]
 fn enter_hint_hidden_during_inline_edit_and_for_locked_head() {
-    // PRODUCT §5/§9 (specs/APP-4717): the "⏎ to send" hint hides while a row is in inline edit
-    // mode and while the locked initial cloud-mode prompt sits at the head of the queue.
+    // The enter hint hides while a row is in inline edit mode and while the locked initial
+    // cloud-mode prompt sits at the head of the queue.
     App::test((), |mut app| async move {
+        let _queue_flag = FeatureFlag::QueueSlashCommand.override_enabled(true);
         initialize_app_for_terminal_view(&mut app);
 
         let (panel, conversation_id) = build_panel_with_active_conversation(&mut app);

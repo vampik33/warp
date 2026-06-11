@@ -2674,9 +2674,6 @@ impl Input {
             // Re-sync enter_settings whenever the rich input opens or closes.
             me.update_cli_agent_enter_settings(ctx);
             me.set_zero_state_hint_text(ctx);
-            // While rich input is open, Enter submits to the CLI agent, so the
-            // queued panel's "⏎ to send" hint must hide.
-            me.refresh_queued_panel_send_availability(ctx);
             ctx.notify();
         });
 
@@ -3597,6 +3594,15 @@ impl Input {
             ctx.subscribe_to_view(&panel, |me, _, event, ctx| {
                 me.handle_queued_prompts_panel_event(event, ctx);
             });
+            // Seed the host-pushed send state; later changes flow through the
+            // emptiness-transition push in `handle_editor_event` and the shared-session
+            // role-change push in `TerminalView::on_self_role_updated`.
+            let can_send_prompt = !model.lock().shared_session_status().is_reader();
+            let input_is_empty = editor.as_ref(ctx).is_empty(ctx);
+            panel.update(ctx, |panel, ctx| {
+                panel.set_can_send_prompt(can_send_prompt, ctx);
+                panel.set_input_is_empty(input_is_empty, ctx);
+            });
             panel
         });
 
@@ -3719,7 +3725,6 @@ impl Input {
         input.update_voice_transcription_options(ctx);
         input.update_image_context_options(ctx);
         input.update_ai_context_menu(ctx);
-        input.refresh_queued_panel_send_availability(ctx);
         input
     }
 
@@ -3775,7 +3780,7 @@ impl Input {
                 text,
                 is_command,
             } => {
-                self.send_queued_row_now(
+                self.send_queued_row_immediately(
                     *conversation_id,
                     *query_id,
                     text.clone(),
@@ -3795,8 +3800,8 @@ impl Input {
 
     /// Dispatches a queued row immediately: commands execute in the terminal, prompts submit to
     /// the conversation's current target. On dispatch, removes the fired row and refocuses the
-    /// input. Shared by the row's send-now button and empty-buffer Enter (specs/APP-4717).
-    fn send_queued_row_now(
+    /// input. Shared by the row's send-now button and empty-buffer Enter.
+    fn send_queued_row_immediately(
         &mut self,
         conversation_id: AIConversationId,
         query_id: QueuedQueryId,
@@ -3835,70 +3840,9 @@ impl Input {
         self.focus_input_box(ctx);
     }
 
-    /// Whether this pane can send prompts at all: read-only (non-executor) shared-session
-    /// viewers cannot. Gates the queue panel's send-now buttons as well as empty-buffer Enter
-    /// sends (specs/APP-4717 PRODUCT §5).
-    fn pane_can_send_prompt(&self) -> bool {
-        let status = self.model.lock().shared_session_status().clone();
-        !status.is_viewer() || status.is_executor()
-    }
-
-    /// Whether an Enter press with the current input state would send the top queued row:
-    /// pane-level sending must be available, the buffer empty, and the CLI-agent rich input
-    /// closed (where Enter submits to the CLI agent instead).
-    fn can_enter_send_queued_prompt(&self, ctx: &AppContext) -> bool {
-        self.pane_can_send_prompt()
-            && self.editor.as_ref(ctx).is_empty(ctx)
-            && !CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id)
-    }
-
-    /// Sends the top queued row on an empty-buffer Enter, mirroring the head row's send-now
-    /// button (specs/APP-4717). Returns true when a row was dispatched.
-    fn maybe_send_top_queued_row_on_enter(&mut self, ctx: &mut ViewContext<Self>) -> bool {
-        let panel_should_render = self
-            .queued_prompts_panel
-            .as_ref()
-            .is_some_and(|panel| panel.as_ref(ctx).should_render(ctx));
-        if !panel_should_render || !self.can_enter_send_queued_prompt(ctx) {
-            return false;
-        }
-        let Some(conversation_id) =
-            BlocklistAIHistoryModel::as_ref(ctx).active_conversation_id(self.terminal_view_id)
-        else {
-            return false;
-        };
-        // Only the head row fires, and never the locked initial cloud-mode prompt (send-now is
-        // disabled for the whole queue while cloud setup is in progress).
-        let Some((query_id, text, is_command)) = QueuedQueryModel::as_ref(ctx)
-            .queue(conversation_id)
-            .first()
-            .filter(|row| !row.is_locked())
-            .map(|row| (row.id(), row.text().to_owned(), row.is_command()))
-        else {
-            return false;
-        };
-        self.send_queued_row_now(
-            conversation_id,
-            query_id,
-            text,
-            is_command,
-            QueuedPromptSendNowTrigger::EnterOnEmptyInput,
-            ctx,
-        );
-        true
-    }
-
-    /// Pushes the current send-availability flags into the queued prompts panel so the
-    /// "⏎ to send" hint and the send-now buttons stay in sync with the input state.
-    pub(crate) fn refresh_queued_panel_send_availability(&self, ctx: &mut ViewContext<Self>) {
-        let Some(panel) = self.queued_prompts_panel.clone() else {
-            return;
-        };
-        let pane_can_send = self.pane_can_send_prompt();
-        let enter_can_send = self.can_enter_send_queued_prompt(ctx);
-        panel.update(ctx, |panel, ctx| {
-            panel.set_send_availability(pane_can_send, enter_can_send, ctx);
-        });
+    /// The queued prompts panel, when [`FeatureFlag::QueueSlashCommand`] is enabled.
+    pub(crate) fn queued_prompts_panel(&self) -> Option<&ViewHandle<QueuedPromptsPanelView>> {
+        self.queued_prompts_panel.as_ref()
     }
 
     pub fn agent_input_footer(&self) -> &ViewHandle<AgentInputFooter> {
@@ -9870,7 +9814,11 @@ impl Input {
                         is_empty: is_editor_empty,
                         reason: InputEmptyStateChangeReason::Edited,
                     });
-                    self.refresh_queued_panel_send_availability(ctx);
+                    if let Some(panel) = self.queued_prompts_panel.clone() {
+                        panel.update(ctx, |panel, ctx| {
+                            panel.set_input_is_empty(is_editor_empty, ctx);
+                        });
+                    }
                 }
 
                 let is_ai_input_enabled = self.ai_input_model.as_ref(ctx).is_ai_input_enabled();
@@ -10440,8 +10388,13 @@ impl Input {
             }
             EditorEvent::BufferReplaced => {
                 // Buffer replacement can change emptiness without an `Edited` event
-                // (e.g. clearing or restoring drafts), so re-sync the queue panel.
-                self.refresh_queued_panel_send_availability(ctx);
+                // (e.g. clearing or restoring drafts).
+                if let Some(panel) = self.queued_prompts_panel.clone() {
+                    let input_is_empty = self.editor.as_ref(ctx).is_empty(ctx);
+                    panel.update(ctx, |panel, ctx| {
+                        panel.set_input_is_empty(input_is_empty, ctx);
+                    });
+                }
 
                 let ai_input_model = self.ai_input_model.as_ref(ctx);
                 if FeatureFlag::AgentMode.is_enabled()
@@ -13096,8 +13049,37 @@ impl Input {
                 });
             }
             return;
-        } else if self.maybe_send_top_queued_row_on_enter(ctx)
-            || self.maybe_launch_cloud_handoff_request(ctx)
+        } else if self
+            .queued_prompts_panel
+            .as_ref()
+            .is_some_and(|panel| panel.as_ref(ctx).enter_sends_queued_prompt(ctx))
+        {
+            // An empty-buffer Enter sends the top queued row, mirroring its send-now button.
+            // The locked initial cloud-mode head row is not sendable, so Enter does nothing
+            // while it sits at the head of the queue.
+            let conversation_id =
+                BlocklistAIHistoryModel::as_ref(ctx).active_conversation_id(self.terminal_view_id);
+            let top_row = conversation_id.and_then(|conversation_id| {
+                QueuedQueryModel::as_ref(ctx)
+                    .queue(conversation_id)
+                    .first()
+                    .filter(|row| !row.is_locked())
+                    .map(|row| (row.id(), row.text().to_owned(), row.is_command()))
+            });
+            if let (Some(conversation_id), Some((query_id, text, is_command))) =
+                (conversation_id, top_row)
+            {
+                self.send_queued_row_immediately(
+                    conversation_id,
+                    query_id,
+                    text,
+                    is_command,
+                    QueuedPromptSendNowTrigger::EnterOnEmptyInput,
+                    ctx,
+                );
+            }
+            return;
+        } else if self.maybe_launch_cloud_handoff_request(ctx)
             || self.maybe_queue_input_for_in_progress_conversation(ctx)
             || self.maybe_queue_input_during_cloud_setup(ctx)
             || self.maybe_handle_enter_for_slash_command(ctx)
