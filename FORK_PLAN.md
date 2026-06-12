@@ -164,6 +164,23 @@ watches, no network). Revisit only if daily use shows otherwise.
 Outstanding: manual UX smoke test by the user (tabs/panes/completions work,
 agent UI absent).
 
+### Release build (recorded 2026-06-12, `release-lto`, terminal_only)
+
+| Metric | Value |
+|---|---|
+| Build time | 7m 47s |
+| Binary (with debuginfo / stripped) | 639 MB / 312 MB |
+| Idle RSS @ T+18s | **~205 MB** |
+| Idle CPU (5s sample) | 0 ticks |
+| Outbound network | none |
+| App-log errors | 0 |
+
+Daily-driver build command:
+```bash
+cargo build --bin warp-oss --no-default-features --features terminal_only --profile release-lto
+# binary: target/release-lto/warp-oss
+```
+
 ## Phase 3 — Leaf pruning (DEFERRED — only if Phase 2 numbers justify)
 
 Candidates (low conflict risk): `crates/voice_input` (already off without `gui`),
