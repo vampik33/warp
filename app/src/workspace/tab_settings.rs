@@ -220,11 +220,17 @@ impl DirectoryTabColors {
     /// Returns a new value with the given directory's color updated.
     pub fn with_color(&self, path: &Path, color: DirectoryTabColor) -> Self {
         let mut map = self.0.clone();
-
-        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        map.insert(canonical.to_string_lossy().to_string(), color);
+        map.insert(canonical_directory_key(path), color);
         Self(map)
     }
+}
+
+/// Canonicalizes `path` into the string key used in [`DirectoryTabColors`].
+pub fn canonical_directory_key(path: &Path) -> String {
+    dunce::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .to_string()
 }
 
 #[derive(
