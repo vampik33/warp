@@ -73,8 +73,12 @@ skips login. Remaining gap: hardcoded production endpoints.
 
 Edits:
 1. `crates/warp_core/src/channel/config.rs` — add `WarpServerConfig::offline()`
-   (empty `server_root_url`, `rtc_server_url`, `session_sharing_server_url`,
-   empty `firebase_auth_api_key`) and `OzConfig::offline()`.
+   and `OzConfig::offline()`. NOTE (verified 2026-06-12): URLs must be parseable —
+   empty strings panic at startup (`warp_server_client/src/auth/session.rs:200`,
+   "Server root URL must be valid: RelativeUrlWithoutBase"). Use
+   `http://127.0.0.1:1` / `ws://127.0.0.1:1`: parses fine, connection-refused
+   instantly, zero packets leave the machine. `session_sharing_server_url: None`,
+   `firebase_auth_api_key: ""`.
    Replaces: `https://app.warp.dev`, `wss://rtc.app.warp.dev/graphql/v2`,
    `wss://sessions.app.warp.dev`, Firebase key (config.rs:57-66), `https://oz.warp.dev` (config.rs:82).
 2. `app/src/bin/oss.rs` — use the offline configs.

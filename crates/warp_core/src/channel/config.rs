@@ -156,3 +156,28 @@ pub struct McpOAuthProviderConfig {
     /// The OAuth client secret registered for this channel.
     pub client_secret: Cow<'static, str>,
 }
+
+// Fork-only (see FORK_PLAN.md): fully-offline configs. URLs must parse (the
+// server root is parsed eagerly at startup), so point them at a local port
+// that can never be open: any stray request fails instantly with
+// connection-refused and no packet ever leaves the machine.
+impl WarpServerConfig {
+    pub fn offline() -> Self {
+        Self {
+            server_root_url: "http://127.0.0.1:1".into(),
+            rtc_server_url: "ws://127.0.0.1:1".into(),
+            session_sharing_server_url: None,
+            firebase_auth_api_key: "".into(),
+            iap_config: None,
+        }
+    }
+}
+
+impl OzConfig {
+    pub fn offline() -> Self {
+        Self {
+            oz_root_url: "http://127.0.0.1:1".into(),
+            workload_audience_url: None,
+        }
+    }
+}

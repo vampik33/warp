@@ -15,11 +15,8 @@ consult during weekly upstream merges (`git merge upstream/master`) to triage co
 
 | File | Phase | What/why |
 |---|---|---|
-| _(none yet — Phase 1 pending)_ | | |
-
-Planned Phase 1 modifications:
-- `crates/warp_core/src/channel/config.rs` — add `WarpServerConfig::offline()` + `OzConfig::offline()` (additive impl methods; conflict only if upstream rewrites these impls).
-- `app/src/bin/oss.rs` — use offline configs instead of `production()` (2 lines).
+| `crates/warp_core/src/channel/config.rs` | 1 | `WarpServerConfig::offline()` + `OzConfig::offline()` appended at end of file (additive impl blocks; conflict only if upstream also appends at EOF). |
+| `app/src/bin/oss.rs` | 1 | `production()` → `offline()` for `server_config` and `oz_config` (2 lines + comment). |
 
 Planned Phase 2 modifications:
 - `app/Cargo.toml` — append `terminal_only` feature alias (additive block at end of `[features]`).
