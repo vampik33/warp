@@ -20289,6 +20289,7 @@ impl Workspace {
 
         if self.auth_state.is_anonymous_or_logged_out()
             && !FeatureFlag::OpenWarpNewSettingsModes.is_enabled()
+            && FeatureFlag::AgentMode.is_enabled()
         {
             if is_web_anonymous_user {
                 target.add_child(

@@ -17,7 +17,10 @@ consult during weekly upstream merges (`git merge upstream/master`) to triage co
 |---|---|---|
 | `crates/warp_core/src/channel/config.rs` | 1 | `WarpServerConfig::offline()` + `OzConfig::offline()` appended at end of file (additive impl blocks; conflict only if upstream also appends at EOF). |
 | `app/src/bin/oss.rs` | 1 | `production()` → `offline()` for `server_config` and `oz_config` (2 lines + comment). |
-| `app/Cargo.toml` | 2 | `terminal_only` feature alias appended at end of `[features]` (26 features; conflict only if upstream appends at section end). |
+| `app/Cargo.toml` | 2 | `terminal_only` feature alias appended at end of `[features]` (27 features incl. `skip_firebase_anonymous_user` — without it the app falls through to the login screen; conflict only if upstream appends at section end). |
+| `app/src/terminal/universal_developer_input.rs` | 2 | Footer gates on `FeatureFlag::AgentMode`: mode toggle (`>_`/`A`), `@`-context + file-attach buttons, model selector (its setting defaults to `true`, so flags alone don't hide it). |
+| `app/src/terminal/view.rs` | 2 | "Login for AI" inline banner additionally gated on `AgentMode` (1 line). |
+| `app/src/workspace/view.rs` | 2 | Header "Sign up" button additionally gated on `AgentMode` (1 line). |
 
 Phase 2b (lib.rs background-service gates): **not needed** per measurements —
 services are dormant with the lean feature set (see FORK_PLAN.md Phase 2a results).

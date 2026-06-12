@@ -13613,6 +13613,7 @@ impl TerminalView {
 
         if self.auth_state.is_anonymous_or_logged_out()
             && !FeatureFlag::OpenWarpNewSettingsModes.is_enabled()
+            && FeatureFlag::AgentMode.is_enabled()
         {
             self.insert_anonymous_user_ai_sign_up_banner(ctx);
         }

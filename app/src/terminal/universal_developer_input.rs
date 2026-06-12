@@ -817,13 +817,18 @@ impl View for UniversalDeveloperInputButtonBar {
             let mut buttons = Flex::row()
                 .with_main_axis_size(MainAxisSize::Max)
                 .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_main_axis_alignment(MainAxisAlignment::Start)
-                .with_child(
+                .with_main_axis_alignment(MainAxisAlignment::Start);
+
+            // The mode toggle switches between terminal and agent input;
+            // without agent mode there is nothing to toggle.
+            if FeatureFlag::AgentMode.is_enabled() {
+                buttons = buttons.with_child(
                     Container::new(ChildView::new(&self.segmented_control).finish())
                         .with_padding_right(4.0)
                         .finish(),
                 );
-            buttons = buttons.with_child(create_divider());
+                buttons = buttons.with_child(create_divider());
+            }
 
             buttons = buttons.with_child(ChildView::new(&self.slash_command_button).finish());
 
@@ -832,20 +837,24 @@ impl View for UniversalDeveloperInputButtonBar {
                 buttons = buttons.with_child(ChildView::new(&self.mic_button).finish());
             }
 
-            buttons = buttons.with_child(ChildView::new(&self.at_button).finish());
+            // The @-context and file-attachment buttons feed agent context.
+            if FeatureFlag::AgentMode.is_enabled() {
+                buttons = buttons.with_child(ChildView::new(&self.at_button).finish());
 
-            // Viewers cannot attach files in shared sessions at this point.
-            if !self
-                .terminal_model
-                .lock()
-                .shared_session_status()
-                .is_viewer()
-            {
-                buttons = buttons.with_child(ChildView::new(&self.file_button).finish());
+                // Viewers cannot attach files in shared sessions at this point.
+                if !self
+                    .terminal_model
+                    .lock()
+                    .shared_session_status()
+                    .is_viewer()
+                {
+                    buttons = buttons.with_child(ChildView::new(&self.file_button).finish());
+                }
             }
 
-            let show_model_selector = FeatureFlag::ProfilesDesignRevamp.is_enabled()
-                || *SessionSettings::as_ref(app).show_model_selectors_in_prompt;
+            let show_model_selector = FeatureFlag::AgentMode.is_enabled()
+                && (FeatureFlag::ProfilesDesignRevamp.is_enabled()
+                    || *SessionSettings::as_ref(app).show_model_selectors_in_prompt);
             if show_model_selector {
                 buttons = buttons
                     .with_child(create_divider())

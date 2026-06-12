@@ -1013,6 +1013,10 @@ git_credential_refresh = []
 # `default`. Build: cargo build --bin warp-oss --no-default-features --features terminal_only
 # (local_tty/local_fs/iterm_images are auto-added by build.rs.)
 terminal_only = [
+    # behavioral: start logged-out, no login screen, never create an
+    # anonymous Firebase user (root_view.rs falls through to the login
+    # screen without this)
+    "skip_firebase_anonymous_user",
     # terminal/UX
     "ligatures",
     "rect_selection",
