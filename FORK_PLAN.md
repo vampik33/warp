@@ -145,6 +145,25 @@ keep each gate to 1–3 lines and list every one in PATCHES.md.
 processes, no AI-related FS watchers, RSS and startup measurably ≤ baseline;
 agent UI absent (no agent panes/palette entries/settings pages).
 
+### Phase 2a results (recorded 2026-06-12, commit fbc334b5 + terminal_only, dev profile)
+
+| Metric | Baseline (default features) | Lean (`terminal_only`) |
+|---|---|---|
+| Idle RSS @ T+18s | ~1,007 MB | **~319 MB (−68%)** |
+| Idle CPU (5s sample) | 21–24 ticks (~4% of a core) | **0 ticks** |
+| Outbound network | 1 TLS conn → app.warp.dev | **none** (Phase 1 + lean) |
+| inotify watches | (not sampled) | 3 |
+| Child processes | 2 standard helpers | 2 standard helpers (no MCP/indexer) |
+| App-log errors | 0 | 0 |
+
+Build: compiled cleanly first try, 2m14s incremental.
+
+**Phase 2b verdict:** NOT needed for now. With the lean feature set the suspect
+services are measurably dormant (zero idle CPU, no MCP children, 3 inotify
+watches, no network). Revisit only if daily use shows otherwise.
+Outstanding: manual UX smoke test by the user (tabs/panes/completions work,
+agent UI absent).
+
 ## Phase 3 — Leaf pruning (DEFERRED — only if Phase 2 numbers justify)
 
 Candidates (low conflict risk): `crates/voice_input` (already off without `gui`),

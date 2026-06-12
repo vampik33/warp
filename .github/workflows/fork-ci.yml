@@ -34,9 +34,8 @@ jobs:
       # rustup picks the toolchain from rust-toolchain.toml automatically.
       - uses: Swatinem/rust-cache@v2
 
-      # TODO(Phase 2): switch to --features terminal_only once the alias exists.
       - name: Check lean build
-        run: cargo check -p warp --bin warp-oss --no-default-features
+        run: cargo check -p warp --bin warp-oss --no-default-features --features terminal_only
 
       - name: Core crate tests
         run: |
