@@ -5434,18 +5434,20 @@ impl Workspace {
     /// If the CWD is within a directory that has a configured color, applies it.
     /// If the CWD moves outside all configured directories, the directory color is cleared.
     fn sync_codebase_tab_color(tab: &mut TabData, ctx: &mut ViewContext<Self>) {
-        let color = tab
+        let Some(cwd) = tab
             .pane_group
             .as_ref(ctx)
             .active_session_view(ctx)
             .and_then(|tv| tv.as_ref(ctx).canonical_session_pwd_if_local(ctx))
-            .and_then(|cwd| {
-                TabSettings::as_ref(ctx)
-                    .directory_tab_colors
-                    .value()
-                    .color_for_directory(cwd.as_path())
-                    .and_then(|c| c.ansi_color())
-            });
+        else {
+            return;
+        };
+
+        let color = TabSettings::as_ref(ctx)
+            .directory_tab_colors
+            .value()
+            .color_for_directory(cwd.as_path())
+            .and_then(|c| c.ansi_color());
 
         tab.default_directory_color = color;
         ctx.notify();
