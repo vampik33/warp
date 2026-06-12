@@ -1,0 +1,43 @@
+# Fork-only CI: verifies the lean (terminal-only) build configuration compiles.
+# Upstream has no CI for non-default feature sets, so upstream changes can
+# silently break this fork's build — this catches that on every push and weekly.
+name: fork-ci
+
+on:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC, pairs with the weekly upstream merge
+  workflow_dispatch:
+
+jobs:
+  lean-check:
+    # Never run on upstream or other forks.
+    if: github.repository == 'vampik33/warp'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config \
+            libssl-dev libfreetype-dev libexpat1-dev libgit2-dev \
+            libfontconfig1-dev libasound2-dev libclang-dev jq brotli
+          PROTOC_VERSION="25.1"
+          curl -fsSL -o /tmp/protoc.zip \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          sudo unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*'
+
+      # rustup picks the toolchain from rust-toolchain.toml automatically.
+      - uses: Swatinem/rust-cache@v2
+
+      # TODO(Phase 2): switch to --features terminal_only once the alias exists.
+      - name: Check lean build
+        run: cargo check -p warp --bin warp-oss --no-default-features
+
+      - name: Core crate tests
+        run: |
+          cargo test -p warp_terminal -p warp_completer -p fuzzy_match
